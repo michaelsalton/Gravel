@@ -30,7 +30,7 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 - [x] 1.2 GLFW Window Creation (1-2h)
 - [x] 1.3 Vulkan Instance and Surface (2-3h)
 - [x] 1.4 Physical and Logical Device (2-3h)
-- [ ] 1.5 Swap Chain (2-3h)
+- [x] 1.5 Swap Chain (2-3h)
 - [ ] 1.6 Depth Buffer and Render Pass (2h)
 - [ ] 1.7 Command Buffers and Synchronization (2-3h)
 - [ ] 1.8 Basic Render Loop (2h)
@@ -177,9 +177,9 @@ If stuck on a feature:
 ## Progress Tracking
 
 ### Current Epic: Epic 1 - Vulkan Infrastructure
-### Current Feature: 1.5 Swap Chain
-### Features Completed: 4 / 48
-### Overall Progress: 8%
+### Current Feature: 1.6 Depth Buffer and Render Pass
+### Features Completed: 5 / 48
+### Overall Progress: 10%
 
 ---
 

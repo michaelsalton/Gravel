@@ -4,8 +4,15 @@
 #include <vector>
 #include <string>
 #include <optional>
+#include <limits>
 
 class Window;
+
+struct SwapChainSupportDetails {
+    VkSurfaceCapabilitiesKHR capabilities;
+    std::vector<VkSurfaceFormatKHR> formats;
+    std::vector<VkPresentModeKHR> presentModes;
+};
 
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily;
@@ -31,6 +38,16 @@ private:
     void pickPhysicalDevice();
     void createLogicalDevice();
     void createCommandPool();
+    void createSwapChain();
+    void createImageViews();
+    void cleanupSwapChain();
+
+    SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
+    VkSurfaceFormatKHR chooseSwapSurfaceFormat(
+        const std::vector<VkSurfaceFormatKHR>& availableFormats);
+    VkPresentModeKHR chooseSwapPresentMode(
+        const std::vector<VkPresentModeKHR>& availablePresentModes);
+    VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
 
     bool checkValidationLayerSupport();
     std::vector<const char*> getRequiredExtensions();
@@ -62,6 +79,13 @@ private:
 
     // Command pool
     VkCommandPool commandPool = VK_NULL_HANDLE;
+
+    // Swap chain
+    VkSwapchainKHR swapChain = VK_NULL_HANDLE;
+    VkFormat swapChainImageFormat;
+    VkExtent2D swapChainExtent;
+    std::vector<VkImage> swapChainImages;
+    std::vector<VkImageView> swapChainImageViews;
 
 #ifdef NDEBUG
     const bool enableValidationLayers = false;
