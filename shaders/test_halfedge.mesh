@@ -1,0 +1,61 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "shaderInterface.h"
+
+layout(local_size_x = 1) in;
+layout(triangles, max_vertices = 8, max_primitives = 6) out;
+
+layout(location = 0) out vec4 vColor[];
+
+struct TaskPayload {
+    uint meshletIndex;
+};
+
+taskPayloadSharedEXT TaskPayload payload;
+
+layout(push_constant) uniform PushConstants {
+    mat4 model;
+} push;
+
+layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
+    mat4 view;
+    mat4 projection;
+    vec4 cameraPosition;
+    float nearPlane;
+    float farPlane;
+} viewUBO;
+
+void main() {
+    // Render first face of uploaded mesh as a triangle fan
+    uint faceId = 0;
+    int faceEdge = getFaceEdge(faceId);
+    int vertCount = getFaceVertCount(faceId);
+
+    uint numVerts = uint(vertCount);
+    uint numTris = numVerts - 2;
+
+    SetMeshOutputsEXT(numVerts, numTris);
+
+    mat4 mvp = viewUBO.projection * viewUBO.view * push.model;
+
+    // Emit vertices by walking the half-edge loop
+    int currentEdge = faceEdge;
+    for (uint i = 0; i < numVerts; ++i) {
+        int vertId = getHalfEdgeVertex(uint(currentEdge));
+        vec3 pos = getVertexPosition(uint(vertId));
+
+        gl_MeshVerticesEXT[i].gl_Position = mvp * vec4(pos, 1.0);
+
+        // Color by face normal (remap -1..1 to 0..1)
+        vColor[i] = vec4(getFaceNormal(faceId) * 0.5 + 0.5, 1.0);
+
+        currentEdge = getHalfEdgeNext(uint(currentEdge));
+    }
+
+    // Emit triangle fan
+    for (uint i = 0; i < numTris; ++i) {
+        gl_PrimitiveTriangleIndicesEXT[i] = uvec3(0, i + 1, i + 2);
+    }
+}

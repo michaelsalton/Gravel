@@ -13,7 +13,7 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 | Epic | Features | Est. Time | Status |
 |------|----------|-----------|--------|
 | [Epic 1: Vulkan Infrastructure](#epic-1-vulkan-infrastructure) | 11 | 22-30h | Complete |
-| [Epic 2: Mesh Loading](#epic-2-mesh-loading-and-gpu-upload) | 4 | 9-12h | In Progress |
+| [Epic 2: Mesh Loading](#epic-2-mesh-loading-and-gpu-upload) | 4 | 9-12h | Complete |
 | [Epic 3: Core Resurfacing](#epic-3-core-resurfacing-pipeline) | 7 | 14-17h | Not Started |
 | [Epic 4: Amplification & LOD](#epic-4-amplification-and-lod) | 6 | 11-15h | Not Started |
 | [Epic 5: B-Spline Cages](#epic-5-b-spline-control-cages) | 6 | 11-15h | Not Started |
@@ -48,7 +48,7 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 - [x] 2.1 OBJ Parser with N-gon Support (2-3h)
 - [x] 2.2 Half-Edge Data Structure (3-4h)
 - [x] 2.3 GPU Buffer Upload (SSBOs) (2-3h)
-- [ ] 2.4 Shared Shader Interface (2h)
+- [x] 2.4 Shared Shader Interface (2h)
 
 **Milestone**: Icosphere loaded, half-edge data on GPU, test shader reads mesh data
 
@@ -176,10 +176,10 @@ If stuck on a feature:
 
 ## Progress Tracking
 
-### Current Epic: Epic 2 - Mesh Loading and GPU Upload
-### Current Feature: 2.4 Shared Shader Interface
-### Features Completed: 14 / 48
-### Overall Progress: 29%
+### Current Epic: Epic 3 - Core Resurfacing Pipeline
+### Current Feature: 3.1 Task Shader Mapping Function (F)
+### Features Completed: 15 / 48
+### Overall Progress: 31%
 
 ---
 
