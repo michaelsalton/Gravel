@@ -32,7 +32,7 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 - [x] 1.4 Physical and Logical Device (2-3h)
 - [x] 1.5 Swap Chain (2-3h)
 - [x] 1.6 Depth Buffer and Render Pass (2h)
-- [ ] 1.7 Command Buffers and Synchronization (2-3h)
+- [x] 1.7 Command Buffers and Synchronization (2-3h)
 - [ ] 1.8 Basic Render Loop (2h)
 - [ ] 1.9 Descriptor Set Layouts (2-3h)
 - [ ] 1.10 Test Mesh Shader Pipeline (3-4h)

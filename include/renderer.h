@@ -44,6 +44,8 @@ private:
     void createDepthResources();
     void createRenderPass();
     void createFramebuffers();
+    void createCommandBuffers();
+    void createSyncObjects();
     void cleanupSwapChain();
 
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
@@ -87,8 +89,16 @@ private:
     VkQueue presentQueue = VK_NULL_HANDLE;
     QueueFamilyIndices queueFamilyIndices;
 
-    // Command pool
+    // Command pool and buffers
     VkCommandPool commandPool = VK_NULL_HANDLE;
+    std::vector<VkCommandBuffer> commandBuffers;
+
+    // Synchronization
+    static const int MAX_FRAMES_IN_FLIGHT = 2;
+    std::vector<VkSemaphore> imageAvailableSemaphores;
+    std::vector<VkSemaphore> renderFinishedSemaphores;
+    std::vector<VkFence> inFlightFences;
+    uint32_t currentFrame = 0;
 
     // Depth buffer
     VkImage depthImage = VK_NULL_HANDLE;
