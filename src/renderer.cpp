@@ -651,7 +651,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                         VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT,
                         0, sizeof(glm::mat4), &model);
 
-    pfnCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
+    pfnCmdDrawMeshTasksEXT(cmd, heMeshUploaded ? heNbFaces : 1, 1, 1);
 
     // Draw ImGui on top
     renderImGui(cmd);
@@ -1168,11 +1168,18 @@ void Renderer::createUniformBuffers() {
         vkMapMemory(device, shadingUBOMemory[i], 0, shadingSize, 0, &shadingUBOMapped[i]);
     }
 
-    // Initialize with default values
+    // Initialize with proper camera
+    float aspect = static_cast<float>(swapChainExtent.width) /
+                   static_cast<float>(swapChainExtent.height);
+
     ViewUBO viewData{};
-    viewData.view = glm::mat4(1.0f);
-    viewData.projection = glm::mat4(1.0f);
-    viewData.cameraPosition = glm::vec4(0.0f, 0.0f, 2.0f, 1.0f);
+    viewData.view = glm::lookAt(
+        glm::vec3(0.0f, 2.0f, 4.0f),   // eye
+        glm::vec3(0.0f, 0.0f, 0.0f),   // center
+        glm::vec3(0.0f, 1.0f, 0.0f));  // up
+    viewData.projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
+    viewData.projection[1][1] *= -1;  // Flip Y for Vulkan
+    viewData.cameraPosition = glm::vec4(0.0f, 2.0f, 4.0f, 1.0f);
     viewData.nearPlane = 0.1f;
     viewData.farPlane = 100.0f;
 
@@ -1319,8 +1326,8 @@ void Renderer::loadMeshShaderFunctions() {
 
 void Renderer::createGraphicsPipeline() {
     auto taskCode = readFile(std::string(SHADER_DIR) + "test.task.spv");
-    auto meshCode = readFile(std::string(SHADER_DIR) + "test.mesh.spv");
-    auto fragCode = readFile(std::string(SHADER_DIR) + "test.frag.spv");
+    auto meshCode = readFile(std::string(SHADER_DIR) + "test_halfedge.mesh.spv");
+    auto fragCode = readFile(std::string(SHADER_DIR) + "test_halfedge.frag.spv");
 
     VkShaderModule taskModule = createShaderModule(taskCode);
     VkShaderModule meshModule = createShaderModule(meshCode);
@@ -1502,6 +1509,7 @@ void Renderer::uploadHalfEdgeMesh(const HalfEdgeMesh& mesh) {
     updateHEDescriptorSet();
 
     heMeshUploaded = true;
+    heNbFaces = mesh.nbFaces;
 
     size_t vram = calculateVRAM();
     std::cout << "Half-edge mesh uploaded to GPU" << std::endl;

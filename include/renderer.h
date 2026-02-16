@@ -216,6 +216,7 @@ private:
     VkDeviceMemory meshInfoMemory = VK_NULL_HANDLE;
 
     bool heMeshUploaded = false;
+    uint32_t heNbFaces = 0;
 
 #ifdef NDEBUG
     const bool enableValidationLayers = false;

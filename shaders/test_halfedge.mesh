@@ -28,8 +28,8 @@ layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
 } viewUBO;
 
 void main() {
-    // Render first face of uploaded mesh as a triangle fan
-    uint faceId = 0;
+    // Each workgroup renders one face (faceId from task shader payload)
+    uint faceId = payload.meshletIndex;
     int faceEdge = getFaceEdge(faceId);
     int vertCount = getFaceVertCount(faceId);
 
