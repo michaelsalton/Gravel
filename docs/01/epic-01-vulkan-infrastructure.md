@@ -1,6 +1,7 @@
 # Epic 1: Vulkan Infrastructure
 
 **Duration**: Weeks 1-2
+**Estimated Total Time**: 22-30 hours
 **Status**: Not Started
 **Dependencies**: None
 
@@ -20,6 +21,9 @@ Establish the foundational Vulkan rendering infrastructure required for GPU mesh
 ## Tasks
 
 ### Task 1.1: Project Scaffold
+**Time Estimate**: 4-7 hours
+**Feature Specs**: [CMake & Vulkan SDK](feature-01-cmake-vulkan-setup.md) | [GLFW Window](feature-02-glfw-window.md) | [Vulkan Instance & Surface](feature-03-vulkan-instance.md)
+
 - [ ] Configure CMakeLists.txt with Vulkan, GLFW, GLM, Dear ImGui dependencies
 - [ ] Add shader compilation rules (glslangValidator with `-I` include directive support)
 - [ ] Create window with GLFW
@@ -31,6 +35,7 @@ Establish the foundational Vulkan rendering infrastructure required for GPU mesh
 ---
 
 ### Task 1.2: Device Setup
+**Time Estimate**: 2-3 hours
 - [ ] Enumerate physical devices and select GPU with `VK_EXT_mesh_shader` support
 - [ ] Create logical device with mesh shader features enabled via `pNext` chain:
   ```cpp
@@ -51,6 +56,7 @@ Establish the foundational Vulkan rendering infrastructure required for GPU mesh
 ---
 
 ### Task 1.3: Swap Chain and Rendering
+**Time Estimate**: 8-10 hours
 - [ ] Create swap chain with preferred format and present mode
 - [ ] Create depth buffer (VK_FORMAT_D32_SFLOAT)
 - [ ] Set up dynamic rendering (`VK_KHR_dynamic_rendering`) or traditional render pass
@@ -62,6 +68,8 @@ Establish the foundational Vulkan rendering infrastructure required for GPU mesh
 ---
 
 ### Task 1.4: Descriptor Infrastructure
+**Time Estimate**: 2-3 hours
+
 Create three descriptor set layouts matching the pipeline requirements:
 
 **Set 0 (SceneSet)** — per-frame global data:
@@ -90,6 +98,7 @@ Create three descriptor set layouts matching the pipeline requirements:
 ---
 
 ### Task 1.5: Mesh Shader Pipeline Object
+**Time Estimate**: 3-4 hours
 - [ ] Write minimal test shaders:
   - `test.task` - emits 1 mesh shader workgroup
   - `test.mesh` - outputs hardcoded triangle with 3 vertices
@@ -113,6 +122,7 @@ Create three descriptor set layouts matching the pipeline requirements:
 ---
 
 ### Task 1.6: ImGui Integration
+**Time Estimate**: 2-3 hours
 - [ ] Add ImGui source files to CMakeLists.txt:
   - `imgui.cpp`, `imgui_draw.cpp`, `imgui_tables.cpp`, `imgui_widgets.cpp`
   - `imgui_impl_glfw.cpp`, `imgui_impl_vulkan.cpp`
@@ -126,6 +136,14 @@ Create three descriptor set layouts matching the pipeline requirements:
 **Acceptance Criteria**: ImGui UI displays and is interactive, showing real-time FPS.
 
 ---
+
+## Testing Checklist
+
+After implementing each task, verify:
+1. Code compiles without warnings
+2. Application runs without crashes
+3. No Vulkan validation errors
+4. Task-specific acceptance criteria met
 
 ## Technical Notes
 

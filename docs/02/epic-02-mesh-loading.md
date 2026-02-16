@@ -1,5 +1,6 @@
 # Epic 2: Mesh Loading and GPU Upload
 
+**Estimated Total Time**: 9-12 hours
 **Status**: Not Started
 **Dependencies**: Epic 1 (Vulkan Infrastructure)
 
@@ -19,6 +20,8 @@ Implement the mesh data pipeline that loads OBJ files with n-gon face support, c
 ## Tasks
 
 ### Task 2.1: OBJ Loader with N-gon Support
+**Time Estimate**: 2-3 hours
+**Feature Spec**: [OBJ Parser](feature-01-obj-parser.md)
 
 - [ ] Implement OBJ parser that handles:
   - Vertex positions (`v`)
@@ -54,6 +57,8 @@ Implement the mesh data pipeline that loads OBJ files with n-gon face support, c
 ---
 
 ### Task 2.2: Half-Edge Construction
+**Time Estimate**: 3-4 hours
+**Feature Spec**: [Half-Edge Conversion](feature-02-halfedge-conversion.md)
 
 Implement conversion from n-gon mesh to half-edge topology:
 
@@ -107,6 +112,8 @@ Implement conversion from n-gon mesh to half-edge topology:
 ---
 
 ### Task 2.3: GPU Buffer Upload
+**Time Estimate**: 2-3 hours
+**Feature Spec**: [GPU Buffers](feature-03-gpu-buffers.md)
 
 - [ ] Create SSBO helper class:
   ```cpp
@@ -157,6 +164,8 @@ Implement conversion from n-gon mesh to half-edge topology:
 ---
 
 ### Task 2.4: Shared Shader Interface
+**Time Estimate**: 2 hours
+**Feature Spec**: [Shader Interface](feature-04-shader-interface.md)
 
 Create `shaders/shaderInterface.h` shared between C++ and GLSL:
 
@@ -247,7 +256,31 @@ Create `shaders/shaderInterface.h` shared between C++ and GLSL:
 
 ---
 
+## Testing Checkpoints
+
+After implementing each task, verify:
+1. Code compiles without warnings
+2. Application runs without crashes
+3. No Vulkan validation errors
+4. Task-specific acceptance criteria met
+
+**After Task 2.1**: Load `assets/icosphere.obj`, print vertex/face count, verify face normals point outward, check face areas are reasonable.
+
+**After Task 2.2**: Print half-edge statistics, validate all twins are symmetric, check all face loops close, ensure vertex outgoing edges are valid.
+
+**After Task 2.3**: Verify all buffers uploaded without errors, check buffer sizes match data, descriptor sets bind successfully.
+
+**After Task 2.4**: Shaders compile with `#include` directive, test mesh shader reads vertex positions correctly.
+
 ## Technical Notes
+
+### Common Pitfalls
+
+1. **OBJ Face Indices**: OBJ uses 1-based indexing, convert to 0-based
+2. **N-gon Ordering**: Ensure CCW winding order is preserved
+3. **Twin Map**: Use ordered pair (min, max) or ensure bidirectional lookup
+4. **SSBO Alignment**: Use layout(std430) for tightly packed data
+5. **Include Paths**: glslangValidator needs -I./shaders flag
 
 ### Half-Edge Twin Construction Algorithm
 

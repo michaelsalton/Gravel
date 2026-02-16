@@ -1,5 +1,6 @@
 # Epic 3: Core Resurfacing Pipeline
 
+**Estimated Total Time**: 14-17 hours
 **Status**: Not Started
 **Dependencies**: Epic 1 (Vulkan Infrastructure), Epic 2 (Mesh Loading and GPU Upload)
 
@@ -20,6 +21,8 @@ Implement the core procedural resurfacing framework using the mesh shader pipeli
 ## Tasks
 
 ### Task 3.1: Task Shader — Mapping Function F
+**Time Estimate**: 2 hours
+**Feature Spec**: [Task Shader Mapping](feature-01-task-shader-mapping.md)
 
 Create `shaders/parametric/parametric.task`:
 
@@ -86,6 +89,8 @@ Create `shaders/parametric/parametric.task`:
 ---
 
 ### Task 3.2: Mesh Shader — Hardcoded Geometry
+**Time Estimate**: 2-3 hours
+**Feature Spec**: [Mesh Shader Quad](feature-02-mesh-shader-quad.md)
 
 Create `shaders/parametric/parametric.mesh` with placeholder geometry:
 
@@ -167,6 +172,8 @@ Create `shaders/parametric/parametric.mesh` with placeholder geometry:
 ---
 
 ### Task 3.3: Parametric Surface Evaluation
+**Time Estimate**: 2 hours
+**Feature Spec**: [Parametric Torus](feature-03-parametric-torus.md)
 
 Create `shaders/parametric/parametricSurfaces.glsl`:
 
@@ -254,6 +261,8 @@ Create `shaders/parametric/parametricSurfaces.glsl`:
 ---
 
 ### Task 3.4: Multiple Parametric Types
+**Time Estimate**: 2-3 hours
+**Feature Spec**: [Multiple Surfaces](feature-04-multiple-surfaces.md)
 
 - [ ] Add ImGui controls:
   ```cpp
@@ -278,6 +287,8 @@ Create `shaders/parametric/parametricSurfaces.glsl`:
 ---
 
 ### Task 3.5: Proper UV Grid Emission
+**Time Estimate**: 2 hours
+**Feature Specs**: [Transform Pipeline](feature-05-transform-pipeline.md) | [UV Grid Generation](feature-06-uv-grid-generation.md)
 
 Update mesh shader to use configurable MN resolution:
 
@@ -345,6 +356,8 @@ Update mesh shader to use configurable MN resolution:
 ---
 
 ### Task 3.6: Fragment Shader
+**Time Estimate**: 2 hours
+**Feature Spec**: [Fragment Shading](feature-07-fragment-shading.md)
 
 Create `shaders/parametric/parametric.frag`:
 
@@ -392,7 +405,38 @@ Create `shaders/parametric/parametric.frag`:
 
 ---
 
+## Milestone Checkpoints
+
+After implementing each task, verify code compiles without warnings, runs without crashes, and has no Vulkan validation errors.
+
+**After Task 3.1**: Task shader compiles and emits mesh invocations. One invocation per face+vertex (count = nbFaces + nbVertices). Payload transfers position/normal correctly.
+
+**After Task 3.2**: Small quads render at every element position. Quads oriented randomly (not aligned yet). Mesh appears "fuzzy" with many quads.
+
+**After Task 3.3**: Tori render at each element with correct topology (donut shape). May still be incorrectly oriented.
+
+**After Task 3.4**: Can switch between torus, sphere, cone, cylinder via ImGui. All surface types render without artifacts.
+
+**After Task 3.5**: Surfaces align with face/vertex normals. Surfaces scale proportionally to face area. Higher resolution surfaces (16x16, 32x32) render smoothly with no gaps. Base mesh appearance: "chain mail" or "scales".
+
+**After Task 3.6**: Proper lighting with highlights and shadows. Can adjust light position and see changes. Per-element color variation for debugging.
+
 ## Technical Notes
+
+### Common Pitfalls
+
+1. **Task Payload Size**: Keep under ~16KB (current design is safe)
+2. **Mesh Shader Limits**: 81 vertices max for 8x8 grid (9x9)
+3. **UV Indexing**: Off-by-one errors in grid generation
+4. **Normal Direction**: Ensure normals point outward
+5. **Rotation Matrix**: Verify right-handed coordinate system
+
+### Visual Debugging
+
+- **Wrong orientation**: Color by normals `rgb = normal * 0.5 + 0.5`
+- **Missing geometry**: Check SetMeshOutputsEXT counts
+- **Black screen**: Verify light position and camera are set
+- **Validation errors**: Check vertex/primitive counts <= limits
 
 ### Rotation Alignment Mathematics
 
