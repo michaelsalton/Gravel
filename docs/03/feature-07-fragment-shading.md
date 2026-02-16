@@ -254,7 +254,7 @@ void main() {
 
 ### Step 3: Create GlobalShadingUBO in C++
 
-Create `src/ShadingConfig.h`:
+Create `include/ShadingConfig.h`:
 
 ```cpp
 #pragma once

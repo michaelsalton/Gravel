@@ -218,7 +218,7 @@ ls build/shaders/parametric/
 
 ### Step 4: Create C++ Pipeline (Basic Setup)
 
-Create `src/ParametricPipeline.h`:
+Create `include/ParametricPipeline.h`:
 
 ```cpp
 #pragma once

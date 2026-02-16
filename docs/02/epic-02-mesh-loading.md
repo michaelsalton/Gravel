@@ -351,8 +351,8 @@ Or use `GL_GOOGLE_include_directive` in shader:
 
 ### Source Files
 - `src/loaders/ObjLoader.h/.cpp` - OBJ file parser
-- `src/HalfEdge.h/.cpp` - Half-edge conversion and data structure
-- `src/vkHelper.h` - Updated with StorageBuffer class
+- `include/HalfEdge.h/.cpp` - Half-edge conversion and data structure
+- `include/vkHelper.h` - Updated with StorageBuffer class
 
 ### Shader Files
 - `shaders/shaderInterface.h` - Shared CPU/GPU definitions

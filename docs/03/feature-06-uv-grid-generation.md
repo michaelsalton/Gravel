@@ -176,7 +176,7 @@ void main() {
 
 ### Step 2: Create UBO in C++
 
-Create `src/UniformBuffers.h`:
+Create `include/UniformBuffers.h`:
 
 ```cpp
 #pragma once

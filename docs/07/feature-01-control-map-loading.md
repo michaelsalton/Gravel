@@ -34,7 +34,7 @@ Download `stb_image.h` to `libs/stb/` folder.
 
 ### Step 2: Create Texture Class
 
-Create `src/Texture.h`:
+Create `include/Texture.h`:
 
 ```cpp
 #pragma once

@@ -18,7 +18,7 @@ Create a Vulkan instance with validation layers (debug mode) and create a window
 ## Files to Create/Modify
 
 ### Create
-- `src/renderer.h`
+- `include/renderer.h`
 - `src/renderer.cpp`
 
 ### Modify
@@ -26,7 +26,7 @@ Create a Vulkan instance with validation layers (debug mode) and create a window
 
 ## Implementation Steps
 
-### Step 1: Create src/renderer.h
+### Step 1: Create include/renderer.h
 
 ```cpp
 #pragma once

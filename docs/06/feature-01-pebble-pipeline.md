@@ -19,7 +19,7 @@ Create a separate graphics pipeline for pebble rendering with its own UBO struct
 ## Files to Create/Modify
 
 ### Create
-- `src/PebbleConfig.h`
+- `include/PebbleConfig.h`
 
 ### Modify
 - `src/renderer.cpp` (add pebble pipeline)
@@ -49,7 +49,7 @@ struct PebbleUBO {
 };
 ```
 
-Create `src/PebbleConfig.h`:
+Create `include/PebbleConfig.h`:
 
 ```cpp
 #pragma once

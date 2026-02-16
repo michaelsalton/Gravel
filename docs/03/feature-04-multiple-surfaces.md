@@ -254,7 +254,7 @@ for (uint i = localId; i < numVerts; i += 32) {
 
 ### Step 3: Create UBO in C++
 
-Create `src/ResurfacingConfig.h`:
+Create `include/ResurfacingConfig.h`:
 
 ```cpp
 #pragma once

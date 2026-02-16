@@ -18,7 +18,7 @@ Convert the n-gon mesh to a half-edge topology representation using Structure of
 ## Files to Create/Modify
 
 ### Create
-- `src/HalfEdge.h`
+- `include/HalfEdge.h`
 - `src/HalfEdge.cpp`
 
 ### Modify
@@ -26,7 +26,7 @@ Convert the n-gon mesh to a half-edge topology representation using Structure of
 
 ## Implementation Steps
 
-### Step 1: Create src/HalfEdge.h
+### Step 1: Create include/HalfEdge.h
 
 ```cpp
 #pragma once
