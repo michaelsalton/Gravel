@@ -59,6 +59,7 @@ set(SOURCES
     src/main.cpp
     src/window.cpp
     src/renderer.cpp
+    src/loaders/ObjLoader.cpp
     ${IMGUI_SOURCES}
     # src/vkHelper.cpp
     # src/HalfEdge.cpp
@@ -71,6 +72,7 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 # Include directories
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src
     ${Vulkan_INCLUDE_DIRS}
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
@@ -102,6 +104,7 @@ endif()
 # Shader directory (absolute path so binary works from any CWD)
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     SHADER_DIR="${CMAKE_BINARY_DIR}/shaders/"
+    ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets/"
 )
 
 # Compiler warnings

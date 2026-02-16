@@ -25,7 +25,7 @@ target_link_libraries(Gravel PRIVATE tinygltf)
 ### Step 2: Load GLTF with Animation
 
 ```cpp
-// src/loaders/GLTFLoader.h
+// include/loaders/GLTFLoader.h
 class GLTFLoader {
 public:
     struct AnimatedMesh {

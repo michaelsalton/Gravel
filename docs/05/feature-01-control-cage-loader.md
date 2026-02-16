@@ -20,14 +20,14 @@ Create a specialized OBJ loader for control cage meshes that reads quad grid fil
 ## Files to Create/Modify
 
 ### Create
-- `src/loaders/LUTLoader.h`
+- `include/loaders/LUTLoader.h`
 - `src/loaders/LUTLoader.cpp`
 
 ## Implementation Steps
 
 ### Step 1: Create LutData Structure
 
-Create `src/loaders/LUTLoader.h`:
+Create `include/loaders/LUTLoader.h`:
 
 ```cpp
 #pragma once

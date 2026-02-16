@@ -13,7 +13,7 @@ Create an automated benchmarking system that reproduces the paper's Table 1 perf
 
 ### Step 1: Define Benchmark Configuration Structure
 
-Create `src/profiling/Benchmark.h`:
+Create `include/profiling/Benchmark.h`:
 
 ```cpp
 #pragma once

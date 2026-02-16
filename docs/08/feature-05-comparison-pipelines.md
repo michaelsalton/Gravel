@@ -17,7 +17,7 @@ The vertex pipeline precomputes all geometry on the CPU and stores it in traditi
 
 #### 1.1 Precompute Geometry on CPU
 
-Create `src/baselines/VertexPipeline.h`:
+Create `include/baselines/VertexPipeline.h`:
 
 ```cpp
 #pragma once
@@ -303,7 +303,7 @@ public:
 
 #### 3.1 Comparison Framework
 
-Create `src/baselines/PipelineComparison.h`:
+Create `include/baselines/PipelineComparison.h`:
 
 ```cpp
 #pragma once

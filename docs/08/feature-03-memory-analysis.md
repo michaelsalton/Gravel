@@ -13,7 +13,7 @@ Implement VRAM usage tracking to validate the paper's claim that mesh shaders ma
 
 ### Step 1: Create Memory Tracking System
 
-Create `src/profiling/MemoryAnalysis.h`:
+Create `include/profiling/MemoryAnalysis.h`:
 
 ```cpp
 #pragma once
@@ -244,7 +244,7 @@ public:
 
 ### Step 4: Mesh Shader vs Vertex Buffer Comparison
 
-Create `src/profiling/MemoryComparison.h`:
+Create `include/profiling/MemoryComparison.h`:
 
 ```cpp
 #pragma once

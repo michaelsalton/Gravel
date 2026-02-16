@@ -18,7 +18,7 @@ Implement a robust OBJ file parser that supports arbitrary polygon faces (n-gons
 ## Files to Create/Modify
 
 ### Create
-- `src/loaders/ObjLoader.h`
+- `include/loaders/ObjLoader.h`
 - `src/loaders/ObjLoader.cpp`
 
 ### Create Test Asset
@@ -26,7 +26,7 @@ Implement a robust OBJ file parser that supports arbitrary polygon faces (n-gons
 
 ## Implementation Steps
 
-### Step 1: Create src/loaders/ObjLoader.h
+### Step 1: Create include/loaders/ObjLoader.h
 
 ```cpp
 #pragma once

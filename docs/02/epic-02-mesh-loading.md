@@ -350,7 +350,7 @@ Or use `GL_GOOGLE_include_directive` in shader:
 ## Deliverables
 
 ### Source Files
-- `src/loaders/ObjLoader.h/.cpp` - OBJ file parser
+- `include/loaders/ObjLoader.h` / `src/loaders/ObjLoader.cpp` - OBJ file parser
 - `include/HalfEdge.h/.cpp` - Half-edge conversion and data structure
 - `include/vkHelper.h` - Updated with StorageBuffer class
 
