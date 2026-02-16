@@ -82,6 +82,10 @@ private:
     void loadMeshShaderFunctions();
     void cleanupSwapChain();
 
+    void initImGui();
+    void cleanupImGui();
+    void renderImGui(VkCommandBuffer cmd);
+
     VkShaderModule createShaderModule(const std::vector<char>& code);
     static std::vector<char> readFile(const std::string& filename);
 
@@ -153,6 +157,9 @@ private:
 
     // Mesh shader function pointer
     PFN_vkCmdDrawMeshTasksEXT pfnCmdDrawMeshTasksEXT = nullptr;
+
+    // ImGui
+    VkDescriptorPool imguiDescriptorPool = VK_NULL_HANDLE;
 
     // Descriptor pool and sets
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;

@@ -1,5 +1,8 @@
 #include "renderer.h"
 #include "window.h"
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_vulkan.h"
 #include <stdexcept>
 #include <iostream>
 #include <cstring>
@@ -30,9 +33,11 @@ Renderer::Renderer(Window& window) : window(window) {
     createDescriptorPool();
     createDescriptorSets();
     createGraphicsPipeline();
+    initImGui();
 }
 
 Renderer::~Renderer() {
+    cleanupImGui();
     vkDestroyPipeline(device, graphicsPipeline, nullptr);
 
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -628,6 +633,9 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                         0, sizeof(glm::mat4), &model);
 
     pfnCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
+
+    // Draw ImGui on top
+    renderImGui(cmd);
 
     vkCmdEndRenderPass(cmd);
 
@@ -1365,6 +1373,117 @@ void Renderer::createGraphicsPipeline() {
     vkDestroyShaderModule(device, taskModule, nullptr);
 
     std::cout << "Graphics pipeline created (task + mesh + fragment)" << std::endl;
+}
+
+void Renderer::initImGui() {
+    // Create dedicated descriptor pool for ImGui
+    VkDescriptorPoolSize poolSizes[] = {
+        {VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
+        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
+        {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000}
+    };
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    poolInfo.maxSets = 1000;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(std::size(poolSizes));
+    poolInfo.pPoolSizes = poolSizes;
+
+    if (vkCreateDescriptorPool(device, &poolInfo, nullptr,
+                                &imguiDescriptorPool) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create ImGui descriptor pool!");
+    }
+
+    // Initialize ImGui
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+    ImGui::StyleColorsDark();
+
+    // Initialize GLFW backend
+    ImGui_ImplGlfw_InitForVulkan(window.getHandle(), true);
+
+    // Initialize Vulkan backend
+    ImGui_ImplVulkan_InitInfo initInfo{};
+    initInfo.Instance = instance;
+    initInfo.PhysicalDevice = physicalDevice;
+    initInfo.Device = device;
+    initInfo.QueueFamily = queueFamilyIndices.graphicsFamily.value();
+    initInfo.Queue = graphicsQueue;
+    initInfo.DescriptorPool = imguiDescriptorPool;
+    initInfo.MinImageCount = 2;
+    initInfo.ImageCount = static_cast<uint32_t>(swapChainImages.size());
+    initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    initInfo.RenderPass = renderPass;
+    initInfo.Subpass = 0;
+
+    ImGui_ImplVulkan_Init(&initInfo);
+
+    std::cout << "ImGui initialized" << std::endl;
+}
+
+void Renderer::cleanupImGui() {
+    ImGui_ImplVulkan_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+
+    vkDestroyDescriptorPool(device, imguiDescriptorPool, nullptr);
+}
+
+void Renderer::renderImGui(VkCommandBuffer cmd) {
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    ImGui::Begin("Gravel Controls");
+
+    // FPS Counter
+    ImGui::Text("FPS: %.1f (%.3f ms/frame)",
+                ImGui::GetIO().Framerate,
+                1000.0f / ImGui::GetIO().Framerate);
+    ImGui::Separator();
+
+    // Camera controls (placeholder values)
+    if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
+        static float cameraPos[3] = {0.0f, 0.0f, 3.0f};
+        static float cameraRot[2] = {0.0f, 0.0f};
+        ImGui::DragFloat3("Position", cameraPos, 0.1f);
+        ImGui::DragFloat2("Rotation", cameraRot, 1.0f);
+    }
+
+    // Resurfacing controls (placeholder)
+    if (ImGui::CollapsingHeader("Resurfacing")) {
+        ImGui::Text("(Available after Epic 3)");
+        static int gridResolution = 8;
+        ImGui::SliderInt("Grid Resolution", &gridResolution, 2, 32);
+        static int surfaceType = 0;
+        const char* surfaceTypes[] = {"Torus", "Sphere", "B-Spline"};
+        ImGui::Combo("Surface Type", &surfaceType, surfaceTypes, 3);
+    }
+
+    // Rendering controls (placeholder)
+    if (ImGui::CollapsingHeader("Rendering")) {
+        static bool wireframe = false;
+        ImGui::Checkbox("Wireframe", &wireframe);
+        static bool showNormals = false;
+        ImGui::Checkbox("Show Normals", &showNormals);
+    }
+
+    ImGui::End();
+
+    ImGui::Render();
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
 }
 
 bool Renderer::checkValidationLayerSupport() {

@@ -59,6 +59,7 @@ set(SOURCES
     src/main.cpp
     src/window.cpp
     src/renderer.cpp
+    ${IMGUI_SOURCES}
     # src/vkHelper.cpp
     # src/HalfEdge.cpp
     # src/AppResources.cpp
@@ -71,6 +72,8 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/include
     ${Vulkan_INCLUDE_DIRS}
+    ${IMGUI_DIR}
+    ${IMGUI_DIR}/backends
 )
 
 # Link libraries
