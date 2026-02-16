@@ -78,7 +78,12 @@ private:
     void createUniformBuffers();
     void createDescriptorPool();
     void createDescriptorSets();
+    void createGraphicsPipeline();
+    void loadMeshShaderFunctions();
     void cleanupSwapChain();
+
+    VkShaderModule createShaderModule(const std::vector<char>& code);
+    static std::vector<char> readFile(const std::string& filename);
 
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
     VkSurfaceFormatKHR chooseSwapSurfaceFormat(
@@ -142,8 +147,12 @@ private:
     VkDescriptorSetLayout halfEdgeSetLayout = VK_NULL_HANDLE;
     VkDescriptorSetLayout perObjectSetLayout = VK_NULL_HANDLE;
 
-    // Pipeline layout
+    // Pipeline layout and graphics pipeline
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+    VkPipeline graphicsPipeline = VK_NULL_HANDLE;
+
+    // Mesh shader function pointer
+    PFN_vkCmdDrawMeshTasksEXT pfnCmdDrawMeshTasksEXT = nullptr;
 
     // Descriptor pool and sets
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;

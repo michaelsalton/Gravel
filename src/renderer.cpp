@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <limits>
 #include <array>
+#include <fstream>
 
 Renderer::Renderer(Window& window) : window(window) {
     createInstance();
@@ -14,6 +15,7 @@ Renderer::Renderer(Window& window) : window(window) {
     createSurface();
     pickPhysicalDevice();
     createLogicalDevice();
+    loadMeshShaderFunctions();
     createCommandPool();
     createSwapChain();
     createImageViews();
@@ -27,9 +29,12 @@ Renderer::Renderer(Window& window) : window(window) {
     createUniformBuffers();
     createDescriptorPool();
     createDescriptorSets();
+    createGraphicsPipeline();
 }
 
 Renderer::~Renderer() {
+    vkDestroyPipeline(device, graphicsPipeline, nullptr);
+
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroyBuffer(device, viewUBOBuffers[i], nullptr);
         vkFreeMemory(device, viewUBOMemory[i], nullptr);
@@ -336,9 +341,15 @@ void Renderer::createLogicalDevice() {
         queueCreateInfos.push_back(queueCreateInfo);
     }
 
+    // Enable maintenance4 (required for LocalSizeId in mesh shaders)
+    VkPhysicalDeviceMaintenance4Features maintenance4Features{};
+    maintenance4Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES;
+    maintenance4Features.maintenance4 = VK_TRUE;
+
     // Enable mesh shader features via pNext chain
     VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures{};
     meshShaderFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
+    meshShaderFeatures.pNext = &maintenance4Features;
     meshShaderFeatures.taskShader = VK_TRUE;
     meshShaderFeatures.meshShader = VK_TRUE;
 
@@ -604,7 +615,19 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     scissor.extent = swapChainExtent;
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    // TODO: Bind pipeline and draw here (Feature 1.10)
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                             pipelineLayout, 0, 1,
+                             &sceneDescriptorSets[currentFrame],
+                             0, nullptr);
+
+    glm::mat4 model = glm::mat4(1.0f);
+    vkCmdPushConstants(cmd, pipelineLayout,
+                        VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT,
+                        0, sizeof(glm::mat4), &model);
+
+    pfnCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
 
     vkCmdEndRenderPass(cmd);
 
@@ -1098,6 +1121,25 @@ void Renderer::createUniformBuffers() {
         vkMapMemory(device, shadingUBOMemory[i], 0, shadingSize, 0, &shadingUBOMapped[i]);
     }
 
+    // Initialize with default values
+    ViewUBO viewData{};
+    viewData.view = glm::mat4(1.0f);
+    viewData.projection = glm::mat4(1.0f);
+    viewData.cameraPosition = glm::vec4(0.0f, 0.0f, 2.0f, 1.0f);
+    viewData.nearPlane = 0.1f;
+    viewData.farPlane = 100.0f;
+
+    GlobalShadingUBO shadingData{};
+    shadingData.lightPosition = glm::vec4(2.0f, 2.0f, 2.0f, 1.0f);
+    shadingData.ambientColor = glm::vec4(0.1f, 0.1f, 0.1f, 1.0f);
+    shadingData.ambientStrength = 0.1f;
+    shadingData.specularStrength = 0.5f;
+
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        memcpy(viewUBOMapped[i], &viewData, sizeof(ViewUBO));
+        memcpy(shadingUBOMapped[i], &shadingData, sizeof(GlobalShadingUBO));
+    }
+
     std::cout << "Uniform buffers created and mapped" << std::endl;
 }
 
@@ -1173,6 +1215,156 @@ void Renderer::createDescriptorSets() {
     }
 
     std::cout << "Descriptor sets allocated and written" << std::endl;
+}
+
+std::vector<char> Renderer::readFile(const std::string& filename) {
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open file: " + filename);
+    }
+
+    size_t fileSize = static_cast<size_t>(file.tellg());
+    std::vector<char> buffer(fileSize);
+    file.seekg(0);
+    file.read(buffer.data(), fileSize);
+    file.close();
+
+    return buffer;
+}
+
+VkShaderModule Renderer::createShaderModule(const std::vector<char>& code) {
+    VkShaderModuleCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    createInfo.codeSize = code.size();
+    createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+    VkShaderModule shaderModule;
+    if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create shader module!");
+    }
+
+    return shaderModule;
+}
+
+void Renderer::loadMeshShaderFunctions() {
+    pfnCmdDrawMeshTasksEXT = (PFN_vkCmdDrawMeshTasksEXT)
+        vkGetDeviceProcAddr(device, "vkCmdDrawMeshTasksEXT");
+
+    if (pfnCmdDrawMeshTasksEXT == nullptr) {
+        throw std::runtime_error("Failed to load vkCmdDrawMeshTasksEXT!");
+    }
+
+    std::cout << "Mesh shader draw function loaded" << std::endl;
+}
+
+void Renderer::createGraphicsPipeline() {
+    auto taskCode = readFile("shaders/test.task.spv");
+    auto meshCode = readFile("shaders/test.mesh.spv");
+    auto fragCode = readFile("shaders/test.frag.spv");
+
+    VkShaderModule taskModule = createShaderModule(taskCode);
+    VkShaderModule meshModule = createShaderModule(meshCode);
+    VkShaderModule fragModule = createShaderModule(fragCode);
+
+    VkPipelineShaderStageCreateInfo taskStageInfo{};
+    taskStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    taskStageInfo.stage = VK_SHADER_STAGE_TASK_BIT_EXT;
+    taskStageInfo.module = taskModule;
+    taskStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo meshStageInfo{};
+    meshStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    meshStageInfo.stage = VK_SHADER_STAGE_MESH_BIT_EXT;
+    meshStageInfo.module = meshModule;
+    meshStageInfo.pName = "main";
+
+    VkPipelineShaderStageCreateInfo fragStageInfo{};
+    fragStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragStageInfo.module = fragModule;
+    fragStageInfo.pName = "main";
+
+    std::array<VkPipelineShaderStageCreateInfo, 3> shaderStages = {
+        taskStageInfo, meshStageInfo, fragStageInfo
+    };
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizer.depthClampEnable = VK_FALSE;
+    rasterizer.rasterizerDiscardEnable = VK_FALSE;
+    rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizer.lineWidth = 1.0f;
+    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizer.depthBiasEnable = VK_FALSE;
+
+    VkPipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampling.sampleShadingEnable = VK_FALSE;
+    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.depthTestEnable = VK_TRUE;
+    depthStencil.depthWriteEnable = VK_TRUE;
+    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+    depthStencil.depthBoundsTestEnable = VK_FALSE;
+    depthStencil.stencilTestEnable = VK_FALSE;
+
+    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+    colorBlendAttachment.colorWriteMask =
+        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    colorBlendAttachment.blendEnable = VK_FALSE;
+
+    VkPipelineColorBlendStateCreateInfo colorBlending{};
+    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlending.logicOpEnable = VK_FALSE;
+    colorBlending.attachmentCount = 1;
+    colorBlending.pAttachments = &colorBlendAttachment;
+
+    std::array<VkDynamicState, 2> dynamicStates = {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR
+    };
+
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+    dynamicState.pDynamicStates = dynamicStates.data();
+
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineInfo.stageCount = static_cast<uint32_t>(shaderStages.size());
+    pipelineInfo.pStages = shaderStages.data();
+    pipelineInfo.pVertexInputState = nullptr;
+    pipelineInfo.pInputAssemblyState = nullptr;
+    pipelineInfo.pViewportState = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState = &multisampling;
+    pipelineInfo.pDepthStencilState = &depthStencil;
+    pipelineInfo.pColorBlendState = &colorBlending;
+    pipelineInfo.pDynamicState = &dynamicState;
+    pipelineInfo.layout = pipelineLayout;
+    pipelineInfo.renderPass = renderPass;
+    pipelineInfo.subpass = 0;
+
+    if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo,
+                                   nullptr, &graphicsPipeline) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create graphics pipeline!");
+    }
+
+    vkDestroyShaderModule(device, fragModule, nullptr);
+    vkDestroyShaderModule(device, meshModule, nullptr);
+    vkDestroyShaderModule(device, taskModule, nullptr);
+
+    std::cout << "Graphics pipeline created (task + mesh + fragment)" << std::endl;
 }
 
 bool Renderer::checkValidationLayerSupport() {

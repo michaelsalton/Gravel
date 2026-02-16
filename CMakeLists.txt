@@ -128,20 +128,20 @@ function(compile_shader TARGET_NAME SHADER_SOURCE)
     set(SHADER_OUTPUTS ${SHADER_OUTPUTS} PARENT_SCOPE)
 endfunction()
 
-# Shader compilation targets will be added here
-# file(GLOB_RECURSE SHADER_SOURCES
-#     ${CMAKE_SOURCE_DIR}/shaders/*.vert
-#     ${CMAKE_SOURCE_DIR}/shaders/*.frag
-#     ${CMAKE_SOURCE_DIR}/shaders/*.task
-#     ${CMAKE_SOURCE_DIR}/shaders/*.mesh
-# )
-#
-# foreach(SHADER ${SHADER_SOURCES})
-#     compile_shader(${PROJECT_NAME} ${SHADER})
-# endforeach()
-#
-# add_custom_target(shaders ALL DEPENDS ${SHADER_OUTPUTS})
-# add_dependencies(${PROJECT_NAME} shaders)
+# Shader compilation targets
+file(GLOB_RECURSE SHADER_SOURCES
+    ${CMAKE_SOURCE_DIR}/shaders/*.vert
+    ${CMAKE_SOURCE_DIR}/shaders/*.frag
+    ${CMAKE_SOURCE_DIR}/shaders/*.task
+    ${CMAKE_SOURCE_DIR}/shaders/*.mesh
+)
+
+foreach(SHADER ${SHADER_SOURCES})
+    compile_shader(${PROJECT_NAME} ${SHADER})
+endforeach()
+
+add_custom_target(shaders ALL DEPENDS ${SHADER_OUTPUTS})
+add_dependencies(${PROJECT_NAME} shaders)
 
 message(STATUS "Gravel configuration:")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
