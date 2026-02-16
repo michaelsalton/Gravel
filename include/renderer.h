@@ -5,6 +5,7 @@
 #include <string>
 #include <optional>
 #include <limits>
+#include <array>
 
 class Window;
 
@@ -40,6 +41,9 @@ private:
     void createCommandPool();
     void createSwapChain();
     void createImageViews();
+    void createDepthResources();
+    void createRenderPass();
+    void createFramebuffers();
     void cleanupSwapChain();
 
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
@@ -48,6 +52,12 @@ private:
     VkPresentModeKHR chooseSwapPresentMode(
         const std::vector<VkPresentModeKHR>& availablePresentModes);
     VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
+
+    VkFormat findDepthFormat();
+    VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
+                                 VkImageTiling tiling,
+                                 VkFormatFeatureFlags features);
+    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
     bool checkValidationLayerSupport();
     std::vector<const char*> getRequiredExtensions();
@@ -79,6 +89,15 @@ private:
 
     // Command pool
     VkCommandPool commandPool = VK_NULL_HANDLE;
+
+    // Depth buffer
+    VkImage depthImage = VK_NULL_HANDLE;
+    VkDeviceMemory depthImageMemory = VK_NULL_HANDLE;
+    VkImageView depthImageView = VK_NULL_HANDLE;
+
+    // Render pass and framebuffers
+    VkRenderPass renderPass = VK_NULL_HANDLE;
+    std::vector<VkFramebuffer> swapChainFramebuffers;
 
     // Swap chain
     VkSwapchainKHR swapChain = VK_NULL_HANDLE;
