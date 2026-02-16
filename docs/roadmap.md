@@ -26,7 +26,7 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 ## Epic 1: Vulkan Infrastructure
 **Details**: [epic-01/features/README.md](epic-01/features/README.md)
 
-- [ ] 1.1 CMake and Vulkan SDK Setup (1-2h)
+- [x] 1.1 CMake and Vulkan SDK Setup (1-2h)
 - [ ] 1.2 GLFW Window Creation (1-2h)
 - [ ] 1.3 Vulkan Instance and Surface (2-3h)
 - [ ] 1.4 Physical and Logical Device (2-3h)
@@ -176,10 +176,10 @@ If stuck on a feature:
 
 ## Progress Tracking
 
-### Current Epic: Not Started
-### Current Feature: None
-### Features Completed: 0 / 48
-### Overall Progress: 0%
+### Current Epic: Epic 1 - Vulkan Infrastructure
+### Current Feature: 1.2 GLFW Window Creation
+### Features Completed: 1 / 48
+### Overall Progress: 2%
 
 ---
 

@@ -6,37 +6,22 @@ Complete documentation for the Gravel GPU mesh shader procedural resurfacing pro
 
 ```
 docs/
-├── README.md                          # This file - documentation guide
-├── gravel_overview.pdf                # Comprehensive technical specification
-├── FEATURES.md                        # Master feature roadmap (48 features)
+├── procedure.md                       # This file - documentation guide
+├── roadmap.md                         # Master feature roadmap (48 features)
 │
-├── epic-01-vulkan-infrastructure.md   # Epic 1 overview
-├── epic-01/features/
-│   ├── README.md                      # Epic 1 feature list
+├── 01/                                # Epic 1: Vulkan Infrastructure
+│   ├── epic-01-vulkan-infrastructure.md
 │   ├── feature-01-cmake-vulkan-setup.md
 │   ├── feature-02-glfw-window.md
 │   └── feature-03-vulkan-instance.md
 │
-├── epic-02-mesh-loading.md            # Epic 2 overview
-├── epic-02/features/README.md         # Epic 2 feature list
+├── 02/                                # Epic 2: Mesh Loading
+│   ├── epic-02-mesh-loading.md
+│   └── feature-*.md
 │
-├── epic-03-core-resurfacing.md        # Epic 3 overview
-├── epic-03/features/README.md         # Epic 3 feature list
+├── 03/ ... 08/                        # Epics 3-8 (same structure)
 │
-├── epic-04-amplification-lod.md       # Epic 4 overview
-├── epic-04/features/README.md         # Epic 4 feature list
-│
-├── epic-05-bspline-cages.md           # Epic 5 overview
-├── epic-05/features/README.md         # Epic 5 feature list
-│
-├── epic-06-pebble-generation.md       # Epic 6 overview
-├── epic-06/features/README.md         # Epic 6 feature list
-│
-├── epic-07-control-maps.md            # Epic 7 overview
-├── epic-07/features/README.md         # Epic 7 feature list
-│
-├── epic-08-performance-analysis.md    # Epic 8 overview
-└── epic-08/features/README.md         # Epic 8 feature list
+└── extra/                             # Additional resources
 ```
 
 ## Quick Navigation
@@ -46,10 +31,10 @@ docs/
 1. **First Time?** Start here:
    - Read [../README.md](../README.md) for project overview and build instructions
    - Review [gravel_overview.pdf](gravel_overview.pdf) for technical background
-   - Check [FEATURES.md](FEATURES.md) for the complete feature roadmap
+   - Check [roadmap.md](roadmap.md) for the complete feature roadmap
 
 2. **Ready to Code?**
-   - Go to [FEATURES.md](FEATURES.md)
+   - Go to [roadmap.md](roadmap.md)
    - Start with Epic 1, Feature 1.1
    - Follow features sequentially
 
@@ -75,19 +60,8 @@ docs/
 
 **Use When**: Starting a new epic or understanding the big picture of a development phase
 
-#### Feature READMEs (`epic-XX/features/README.md`)
-- Complete list of features for that epic
-- Feature descriptions (1-3 hours each)
-- Time estimates
-- Prerequisites
-- Implementation order
-- Testing checkpoints
-- Common pitfalls
-
-**Use When**: Planning your work or checking off completed features
-
-#### Individual Feature Documents (`feature-XX-*.md`)
-- Detailed implementation guide (for Epic 1 only)
+#### Individual Feature Documents (`XX/feature-*.md`)
+- Detailed implementation guides
 - Step-by-step code examples
 - Files to create/modify
 - Acceptance criteria
@@ -96,7 +70,7 @@ docs/
 
 **Use When**: Actively implementing that specific feature
 
-#### Master Roadmap (`FEATURES.md`)
+#### Master Roadmap (`roadmap.md`)
 - All 48 features listed
 - Progress tracking checkboxes
 - Epic summaries
@@ -132,7 +106,7 @@ docs/
    - Ensure no validation errors
 
 5. **Update Progress**
-   - Check off feature in FEATURES.md
+   - Check off feature in roadmap.md
    - Commit code with feature number
    - Move to next feature
 
@@ -140,9 +114,8 @@ docs/
 
 ```bash
 # 1. Read the documents
-docs/epic-01-vulkan-infrastructure.md     # Epic context
-docs/epic-01/features/README.md           # Feature list
-docs/epic-01/features/feature-01-cmake-vulkan-setup.md  # Detailed guide
+docs/01/epic-01-vulkan-infrastructure.md        # Epic context
+docs/01/feature-01-cmake-vulkan-setup.md        # Detailed guide
 
 # 2. Implement
 # Follow step-by-step guide in feature-01-cmake-vulkan-setup.md
@@ -153,12 +126,12 @@ cd build && cmake .. && cmake --build . && ./Gravel
 # 4. Verify output matches expected output in doc
 
 # 5. Update progress
-# Check off in FEATURES.md
+# Check off in roadmap.md
 ```
 
 ## Epic Summaries
 
-### [Epic 1: Vulkan Infrastructure](epic-01-vulkan-infrastructure.md)
+### [Epic 1: Vulkan Infrastructure](01/epic-01-vulkan-infrastructure.md)
 **Duration**: Weeks 1-2 | **Features**: 11 | **Time**: 22-30h
 
 Set up Vulkan 1.3 with mesh shader support, windowing, swap chain, and basic render loop.
@@ -167,7 +140,7 @@ Set up Vulkan 1.3 with mesh shader support, windowing, swap chain, and basic ren
 
 ---
 
-### [Epic 2: Mesh Loading and GPU Upload](epic-02-mesh-loading.md)
+### [Epic 2: Mesh Loading and GPU Upload](02/epic-02-mesh-loading.md)
 **Duration**: Weeks 2-3 | **Features**: 4 | **Time**: 9-12h
 
 Load OBJ meshes with n-gon support, convert to half-edge topology, upload to GPU.
@@ -176,7 +149,7 @@ Load OBJ meshes with n-gon support, convert to half-edge topology, upload to GPU
 
 ---
 
-### [Epic 3: Core Resurfacing Pipeline](epic-03-core-resurfacing.md)
+### [Epic 3: Core Resurfacing Pipeline](03/epic-03-core-resurfacing.md)
 **Duration**: Weeks 3-4 | **Features**: 7 | **Time**: 14-17h
 
 Implement task→mesh shader pipeline with parametric surface evaluation (torus, sphere, etc.).
@@ -185,7 +158,7 @@ Implement task→mesh shader pipeline with parametric surface evaluation (torus,
 
 ---
 
-### [Epic 4: Amplification and LOD](epic-04-amplification-lod.md)
+### [Epic 4: Amplification and LOD](04/epic-04-amplification-lod.md)
 **Duration**: Weeks 4-5 | **Features**: 6 | **Time**: 11-15h
 
 Add mesh shader amplification for high-res grids, frustum/backface culling, screen-space LOD.
@@ -194,7 +167,7 @@ Add mesh shader amplification for high-res grids, frustum/backface culling, scre
 
 ---
 
-### [Epic 5: B-Spline Control Cages](epic-05-bspline-cages.md)
+### [Epic 5: B-Spline Control Cages](05/epic-05-bspline-cages.md)
 **Duration**: Weeks 5-7 | **Features**: 6 | **Time**: 11-15h
 
 Load control cage meshes, evaluate bicubic B-spline and Bézier surfaces.
@@ -203,7 +176,7 @@ Load control cage meshes, evaluate bicubic B-spline and Bézier surfaces.
 
 ---
 
-### [Epic 6: Pebble Generation](epic-06-pebble-generation.md)
+### [Epic 6: Pebble Generation](06/epic-06-pebble-generation.md)
 **Duration**: Weeks 7-9 | **Features**: 6 | **Time**: 13-17h
 
 Generate procedural pebble surfaces with on-the-fly control cage construction and noise.
@@ -212,7 +185,7 @@ Generate procedural pebble surfaces with on-the-fly control cage construction an
 
 ---
 
-### [Epic 7: Control Maps and Polish](epic-07-control-maps.md)
+### [Epic 7: Control Maps and Polish](07/epic-07-control-maps.md)
 **Duration**: Weeks 9-10 | **Features**: 5+1 | **Time**: 11-15h (+4-5h optional)
 
 Per-face element type selection via textures, base mesh rendering, UI polish, optional animation.
@@ -221,7 +194,7 @@ Per-face element type selection via textures, base mesh rendering, UI polish, op
 
 ---
 
-### [Epic 8: Performance Analysis](epic-08-performance-analysis.md)
+### [Epic 8: Performance Analysis](08/epic-08-performance-analysis.md)
 **Duration**: Weeks 10-12 | **Features**: 6+1 | **Time**: 14-18h (+4-5h optional)
 
 GPU profiling, automated benchmarks, memory analysis, performance report.
@@ -254,7 +227,7 @@ https://github.com/andarael/resurfacing
 
 ### How to Track Progress
 
-1. **Use FEATURES.md**
+1. **Use roadmap.md**
    - Check off features as you complete them
    - Update "Current Epic" and "Current Feature"
    - Track percentage complete
@@ -298,7 +271,7 @@ If you're stuck:
 ### Common Questions
 
 **Q: Where do I start?**
-A: [FEATURES.md](FEATURES.md) → Epic 1 → Feature 1.1
+A: [roadmap.md](roadmap.md) → Epic 1 → Feature 1.1
 
 **Q: How long will this take?**
 A: 100-130 hours total, ~12-15 hours per epic
@@ -307,7 +280,7 @@ A: 100-130 hours total, ~12-15 hours per epic
 A: No, features build on each other sequentially
 
 **Q: Which document should I read first?**
-A: Start with [FEATURES.md](FEATURES.md) for the roadmap, then read epic overviews as you reach them
+A: Start with [roadmap.md](roadmap.md) for the roadmap, then read epic overviews as you reach them
 
 **Q: Do I need to read the PDF?**
 A: Eventually, yes - but you can start coding and refer to it as needed for algorithms
@@ -328,4 +301,4 @@ Project is complete when:
 
 Happy coding! 🎉
 
-Start your journey: **[FEATURES.md](FEATURES.md)**
+Start your journey: **[roadmap.md](roadmap.md)**

@@ -22,8 +22,8 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # Find Vulkan SDK
 find_package(Vulkan REQUIRED)
 
-# Find GLFW
-find_package(glfw3 REQUIRED)
+# Find GLFW (REQUIRED once windowing is implemented in Feature 1.2)
+find_package(glfw3 QUIET)
 
 # GLM (header-only, may need to adjust path)
 # Option 1: If GLM is installed system-wide
@@ -56,7 +56,7 @@ endif()
 
 # Source files (will be populated during implementation)
 set(SOURCES
-    # src/main.cpp
+    src/main.cpp
     # src/renderer.cpp
     # src/vkHelper.cpp
     # src/HalfEdge.cpp
@@ -64,24 +64,18 @@ set(SOURCES
 )
 
 # Create executable
-# Uncomment when source files are added
-# add_executable(${PROJECT_NAME} ${SOURCES} ${IMGUI_SOURCES})
+add_executable(${PROJECT_NAME} ${SOURCES})
 
 # Include directories
-# target_include_directories(${PROJECT_NAME} PRIVATE
-#     ${CMAKE_SOURCE_DIR}/src
-#     ${CMAKE_SOURCE_DIR}/shaders
-#     ${Vulkan_INCLUDE_DIRS}
-#     ${IMGUI_DIR}
-#     ${IMGUI_DIR}/backends
-# )
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${Vulkan_INCLUDE_DIRS}
+)
 
 # Link libraries
-# target_link_libraries(${PROJECT_NAME} PRIVATE
-#     Vulkan::Vulkan
-#     glfw
-#     glm::glm
-# )
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    Vulkan::Vulkan
+)
 
 # Platform-specific settings
 if(WIN32)
@@ -101,9 +95,9 @@ endif()
 
 # Compiler warnings
 if(MSVC)
-    # target_compile_options(${PROJECT_NAME} PRIVATE /W4)
+    target_compile_options(${PROJECT_NAME} PRIVATE /W4)
 else()
-    # target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 # Shader compilation
