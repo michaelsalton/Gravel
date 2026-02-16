@@ -62,7 +62,7 @@ Implement the mesh data pipeline that loads OBJ files with n-gon face support, c
 
 Implement conversion from n-gon mesh to half-edge topology:
 
-- [ ] Create `HalfEdge.hpp/.cpp` with data structure:
+- [ ] Create `HalfEdge.h/.cpp` with data structure:
   ```cpp
   struct HalfEdgeMesh {
       uint32_t nbVertices, nbFaces, nbHalfEdges;
@@ -176,7 +176,7 @@ Create `shaders/shaderInterface.h` shared between C++ and GLSL:
 
   #ifdef __cplusplus
   // C++ definitions
-  #include <glm/glm.hpp>
+  #include <glm/glm.h>
   using vec2 = glm::vec2;
   using vec3 = glm::vec3;
   using vec4 = glm::vec4;
@@ -350,9 +350,9 @@ Or use `GL_GOOGLE_include_directive` in shader:
 ## Deliverables
 
 ### Source Files
-- `src/loaders/ObjLoader.hpp/.cpp` - OBJ file parser
-- `src/HalfEdge.hpp/.cpp` - Half-edge conversion and data structure
-- `src/vkHelper.hpp` - Updated with StorageBuffer class
+- `src/loaders/ObjLoader.h/.cpp` - OBJ file parser
+- `src/HalfEdge.h/.cpp` - Half-edge conversion and data structure
+- `src/vkHelper.h` - Updated with StorageBuffer class
 
 ### Shader Files
 - `shaders/shaderInterface.h` - Shared CPU/GPU definitions

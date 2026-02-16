@@ -18,7 +18,7 @@ Implement a robust OBJ file parser that supports arbitrary polygon faces (n-gons
 ## Files to Create/Modify
 
 ### Create
-- `src/loaders/ObjLoader.hpp`
+- `src/loaders/ObjLoader.h`
 - `src/loaders/ObjLoader.cpp`
 
 ### Create Test Asset
@@ -26,12 +26,12 @@ Implement a robust OBJ file parser that supports arbitrary polygon faces (n-gons
 
 ## Implementation Steps
 
-### Step 1: Create src/loaders/ObjLoader.hpp
+### Step 1: Create src/loaders/ObjLoader.h
 
 ```cpp
 #pragma once
 
-#include <glm/glm.hpp>
+#include <glm/glm.h>
 #include <vector>
 #include <string>
 
@@ -85,7 +85,7 @@ private:
 ### Step 2: Create src/loaders/ObjLoader.cpp
 
 ```cpp
-#include "ObjLoader.hpp"
+#include "ObjLoader.h"
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -288,7 +288,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 Add this temporary test code to verify the loader works:
 
 ```cpp
-#include "loaders/ObjLoader.hpp"
+#include "loaders/ObjLoader.h"
 
 // In main(), after window creation:
 try {

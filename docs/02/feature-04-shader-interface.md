@@ -36,7 +36,7 @@ Create a shared header file that works in both C++ and GLSL, defining all UBO st
 // Cross-platform compatibility
 #ifdef __cplusplus
     // C++ definitions
-    #include <glm/glm.hpp>
+    #include <glm/glm.h>
     using vec2 = glm::vec2;
     using vec3 = glm::vec3;
     using vec4 = glm::vec4;

@@ -258,7 +258,7 @@ Create `src/ResurfacingConfig.h`:
 
 ```cpp
 #pragma once
-#include <glm/glm.hpp>
+#include <glm/glm.h>
 
 // Must match shaderInterface.h ResurfacingUBO
 struct ResurfacingUBO {

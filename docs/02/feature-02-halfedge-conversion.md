@@ -18,7 +18,7 @@ Convert the n-gon mesh to a half-edge topology representation using Structure of
 ## Files to Create/Modify
 
 ### Create
-- `src/HalfEdge.hpp`
+- `src/HalfEdge.h`
 - `src/HalfEdge.cpp`
 
 ### Modify
@@ -26,12 +26,12 @@ Convert the n-gon mesh to a half-edge topology representation using Structure of
 
 ## Implementation Steps
 
-### Step 1: Create src/HalfEdge.hpp
+### Step 1: Create src/HalfEdge.h
 
 ```cpp
 #pragma once
 
-#include <glm/glm.hpp>
+#include <glm/glm.h>
 #include <vector>
 #include <cstdint>
 
@@ -78,8 +78,8 @@ private:
 ### Step 2: Create src/HalfEdge.cpp
 
 ```cpp
-#include "HalfEdge.hpp"
-#include "loaders/ObjLoader.hpp"
+#include "HalfEdge.h"
+#include "loaders/ObjLoader.h"
 #include <map>
 #include <iostream>
 #include <stdexcept>
@@ -325,7 +325,7 @@ add_executable(${PROJECT_NAME}
 ### Step 4: Test in main.cpp
 
 ```cpp
-#include "HalfEdge.hpp"
+#include "HalfEdge.h"
 
 // After loading NGonMesh:
 NGonMesh ngonMesh = ObjLoader::load("assets/cube.obj");

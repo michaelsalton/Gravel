@@ -258,7 +258,7 @@ Create `src/ShadingConfig.h`:
 
 ```cpp
 #pragma once
-#include <glm/glm.hpp>
+#include <glm/glm.h>
 
 // Must match shaderInterface.h GlobalShadingUBO
 struct GlobalShadingUBO {

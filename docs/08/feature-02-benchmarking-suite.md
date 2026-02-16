@@ -13,13 +13,13 @@ Create an automated benchmarking system that reproduces the paper's Table 1 perf
 
 ### Step 1: Define Benchmark Configuration Structure
 
-Create `src/profiling/Benchmark.hpp`:
+Create `src/profiling/Benchmark.h`:
 
 ```cpp
 #pragma once
 #include <string>
 #include <vector>
-#include <glm/glm.hpp>
+#include <glm/glm.h>
 
 struct BenchmarkConfig {
     std::string name;
@@ -89,8 +89,8 @@ private:
 Create `src/profiling/Benchmark.cpp`:
 
 ```cpp
-#include "Benchmark.hpp"
-#include "../GravelApp.hpp"
+#include "Benchmark.h"
+#include "../GravelApp.h"
 #include <algorithm>
 #include <numeric>
 #include <cmath>
@@ -284,7 +284,7 @@ void BenchmarkSuite::printSummary() const {
 Create `src/profiling/PaperBenchmarks.cpp`:
 
 ```cpp
-#include "Benchmark.hpp"
+#include "Benchmark.h"
 
 std::vector<BenchmarkConfig> createPaperBenchmarks() {
     std::vector<BenchmarkConfig> configs;
@@ -400,9 +400,9 @@ std::vector<BenchmarkConfig> createPaperBenchmarks() {
 Modify `main.cpp`:
 
 ```cpp
-#include "GravelApp.hpp"
-#include "profiling/Benchmark.hpp"
-#include "profiling/PaperBenchmarks.hpp"
+#include "GravelApp.h"
+#include "profiling/Benchmark.h"
+#include "profiling/PaperBenchmarks.h"
 #include <iostream>
 #include <cstring>
 

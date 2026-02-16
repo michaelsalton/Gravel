@@ -504,7 +504,7 @@ Dragon model with control map:
 - Updated fragment shaders with debug modes
 
 ### Source Files
-- `src/loaders/GLTFLoader.hpp/.cpp` - GLTF/skeletal animation loader (optional)
+- `src/loaders/GLTFLoader.h/.cpp` - GLTF/skeletal animation loader (optional)
 - Updated `src/main.cpp` with organized UI and presets
 - Updated `src/renderer.cpp` with base mesh pipeline
 

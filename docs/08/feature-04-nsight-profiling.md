@@ -367,7 +367,7 @@ endif()
 **Add markers in code**:
 ```cpp
 #ifdef USE_NVTX
-#include <nvtx3/nvtx3.hpp>
+#include <nvtx3/nvtx3.h>
 #define NVTX_SCOPED_RANGE(name) nvtx3::scoped_range range(name)
 #else
 #define NVTX_SCOPED_RANGE(name)

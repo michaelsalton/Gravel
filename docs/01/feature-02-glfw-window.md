@@ -18,7 +18,7 @@ Create a window using GLFW and integrate it with the main application loop. The 
 ## Files to Create/Modify
 
 ### Create
-- `src/window.hpp`
+- `src/window.h`
 - `src/window.cpp`
 
 ### Modify
@@ -50,7 +50,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 ```
 
-### Step 2: Create src/window.hpp
+### Step 2: Create src/window.h
 
 ```cpp
 #pragma once
@@ -95,7 +95,7 @@ private:
 ### Step 3: Create src/window.cpp
 
 ```cpp
-#include "window.hpp"
+#include "window.h"
 #include <stdexcept>
 #include <iostream>
 
@@ -155,7 +155,7 @@ void Window::keyCallback(GLFWwindow* window, int key, int scancode, int action, 
 ### Step 4: Update src/main.cpp
 
 ```cpp
-#include "window.hpp"
+#include "window.h"
 #include <vulkan/vulkan.h>
 #include <iostream>
 #include <stdexcept>

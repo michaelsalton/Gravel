@@ -22,8 +22,8 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # Find Vulkan SDK
 find_package(Vulkan REQUIRED)
 
-# Find GLFW (REQUIRED once windowing is implemented in Feature 1.2)
-find_package(glfw3 QUIET)
+# Find GLFW
+find_package(glfw3 REQUIRED)
 
 # GLM (header-only, may need to adjust path)
 # Option 1: If GLM is installed system-wide
@@ -57,6 +57,7 @@ endif()
 # Source files (will be populated during implementation)
 set(SOURCES
     src/main.cpp
+    src/window.cpp
     # src/renderer.cpp
     # src/vkHelper.cpp
     # src/HalfEdge.cpp
@@ -68,13 +69,14 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 
 # Include directories
 target_include_directories(${PROJECT_NAME} PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/include
     ${Vulkan_INCLUDE_DIRS}
 )
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
     Vulkan::Vulkan
+    glfw
 )
 
 # Platform-specific settings

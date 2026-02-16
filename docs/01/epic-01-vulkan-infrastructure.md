@@ -200,9 +200,9 @@ vkGetPhysicalDeviceProperties2(physicalDevice, &props2);
 
 ### Source Files
 - `src/main.cpp` - Application entry point and main loop
-- `src/renderer.cpp/.hpp` - Vulkan renderer wrapper
-- `src/vkHelper.hpp` - Helper types for buffers, textures, pipelines
-- `src/camera.hpp` - Basic camera class
+- `src/renderer.cpp/.h` - Vulkan renderer wrapper
+- `src/vkHelper.h` - Helper types for buffers, textures, pipelines
+- `src/camera.h` - Basic camera class
 
 ### Shader Files
 - `shaders/test.task` - Test task shader

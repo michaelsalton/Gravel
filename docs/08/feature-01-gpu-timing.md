@@ -13,7 +13,7 @@ Implement Vulkan timestamp queries to accurately measure GPU execution time for 
 
 ### Step 1: Create GPUTimer Class
 
-Create `src/profiling/GPUTimer.hpp`:
+Create `src/profiling/GPUTimer.h`:
 
 ```cpp
 #pragma once
@@ -48,7 +48,7 @@ private:
 Create `src/profiling/GPUTimer.cpp`:
 
 ```cpp
-#include "GPUTimer.hpp"
+#include "GPUTimer.h"
 #include <stdexcept>
 #include <cstring>
 

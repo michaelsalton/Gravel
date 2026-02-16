@@ -17,12 +17,12 @@ The vertex pipeline precomputes all geometry on the CPU and stores it in traditi
 
 #### 1.1 Precompute Geometry on CPU
 
-Create `src/baselines/VertexPipeline.hpp`:
+Create `src/baselines/VertexPipeline.h`:
 
 ```cpp
 #pragma once
 #include <vulkan/vulkan.h>
-#include <glm/glm.hpp>
+#include <glm/glm.h>
 #include <vector>
 
 struct Vertex {
@@ -62,8 +62,8 @@ private:
 Create `src/baselines/VertexPipeline.cpp`:
 
 ```cpp
-#include "VertexPipeline.hpp"
-#include "../ParametricSurfaces.hpp"
+#include "VertexPipeline.h"
+#include "../ParametricSurfaces.h"
 
 void VertexPipeline::init(VkDevice device, VkPhysicalDevice physicalDevice,
                           VkCommandPool commandPool, VkQueue graphicsQueue) {
@@ -303,7 +303,7 @@ public:
 
 #### 3.1 Comparison Framework
 
-Create `src/baselines/PipelineComparison.hpp`:
+Create `src/baselines/PipelineComparison.h`:
 
 ```cpp
 #pragma once
@@ -344,8 +344,8 @@ private:
 Create `src/baselines/PipelineComparison.cpp`:
 
 ```cpp
-#include "PipelineComparison.hpp"
-#include "../GravelApp.hpp"
+#include "PipelineComparison.h"
+#include "../GravelApp.h"
 #include <iostream>
 #include <iomanip>
 #include <fstream>

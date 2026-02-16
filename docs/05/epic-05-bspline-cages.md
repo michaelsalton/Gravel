@@ -26,7 +26,7 @@ Extend the parametric resurfacing system with B-spline and Bézier surface evalu
 **Time Estimate**: 2-3 hours
 **Feature Specs**: [Control Cage Loader](feature-01-control-cage-loader.md) | [Control Cage Upload](feature-02-control-cage-upload.md)
 
-Create `src/loaders/LUTLoader.hpp/.cpp`:
+Create `src/loaders/LUTLoader.h/.cpp`:
 
 - [ ] Implement control cage OBJ loader:
   ```cpp
@@ -443,7 +443,7 @@ normal = normalize(cross(du, dv));
 ## Deliverables
 
 ### Source Files
-- `src/loaders/LUTLoader.hpp/.cpp` - Control cage loader
+- `src/loaders/LUTLoader.h/.cpp` - Control cage loader
 
 ### Shader Files
 - `shaders/parametric/parametricGrids.glsl` - B-spline and Bézier evaluation

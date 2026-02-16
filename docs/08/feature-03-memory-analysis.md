@@ -13,7 +13,7 @@ Implement VRAM usage tracking to validate the paper's claim that mesh shaders ma
 
 ### Step 1: Create Memory Tracking System
 
-Create `src/profiling/MemoryAnalysis.hpp`:
+Create `src/profiling/MemoryAnalysis.h`:
 
 ```cpp
 #pragma once
@@ -74,7 +74,7 @@ private:
 Create `src/profiling/MemoryAnalysis.cpp`:
 
 ```cpp
-#include "MemoryAnalysis.hpp"
+#include "MemoryAnalysis.h"
 #include <algorithm>
 #include <iostream>
 #include <iomanip>
@@ -244,7 +244,7 @@ public:
 
 ### Step 4: Mesh Shader vs Vertex Buffer Comparison
 
-Create `src/profiling/MemoryComparison.hpp`:
+Create `src/profiling/MemoryComparison.h`:
 
 ```cpp
 #pragma once
@@ -283,7 +283,7 @@ struct MemoryComparison {
 Create `src/profiling/MemoryComparison.cpp`:
 
 ```cpp
-#include "MemoryComparison.hpp"
+#include "MemoryComparison.h"
 #include <iostream>
 #include <iomanip>
 
@@ -322,8 +322,8 @@ void MemoryComparison::print() const {
 Create `src/profiling/MemoryInvarianceTest.cpp`:
 
 ```cpp
-#include "MemoryAnalysis.hpp"
-#include "../GravelApp.hpp"
+#include "MemoryAnalysis.h"
+#include "../GravelApp.h"
 #include <vector>
 #include <cmath>
 #include <iostream>

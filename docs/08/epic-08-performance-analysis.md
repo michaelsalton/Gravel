@@ -595,9 +595,9 @@ Example for 1000-element dragon with 8×8 resolution:
 ## Deliverables
 
 ### Source Files
-- `src/profiling/GPUTimer.hpp/.cpp` - Timestamp query wrapper
-- `src/profiling/Benchmark.hpp/.cpp` - Automated benchmarking suite
-- `src/profiling/MemoryAnalysis.hpp/.cpp` - VRAM usage tracking
+- `src/profiling/GPUTimer.h/.cpp` - Timestamp query wrapper
+- `src/profiling/Benchmark.h/.cpp` - Automated benchmarking suite
+- `src/profiling/MemoryAnalysis.h/.cpp` - VRAM usage tracking
 
 ### Documentation
 - `docs/profiling_guide.md` - Nsight profiling workflow

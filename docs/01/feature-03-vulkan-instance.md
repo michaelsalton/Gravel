@@ -18,7 +18,7 @@ Create a Vulkan instance with validation layers (debug mode) and create a window
 ## Files to Create/Modify
 
 ### Create
-- `src/renderer.hpp`
+- `src/renderer.h`
 - `src/renderer.cpp`
 
 ### Modify
@@ -26,7 +26,7 @@ Create a Vulkan instance with validation layers (debug mode) and create a window
 
 ## Implementation Steps
 
-### Step 1: Create src/renderer.hpp
+### Step 1: Create src/renderer.h
 
 ```cpp
 #pragma once
@@ -80,8 +80,8 @@ private:
 ### Step 2: Create src/renderer.cpp
 
 ```cpp
-#include "renderer.hpp"
-#include "window.hpp"
+#include "renderer.h"
+#include "window.h"
 #include <stdexcept>
 #include <iostream>
 #include <cstring>
@@ -235,8 +235,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL Renderer::debugCallback(
 ### Step 3: Update src/main.cpp
 
 ```cpp
-#include "window.hpp"
-#include "renderer.hpp"
+#include "window.h"
+#include "renderer.h"
 #include <iostream>
 #include <stdexcept>
 

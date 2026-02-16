@@ -18,16 +18,16 @@ Upload all half-edge Structure of Arrays (SoA) data to the GPU as Storage Buffer
 ## Files to Create/Modify
 
 ### Create/Modify
-- `src/vkHelper.hpp` (add StorageBuffer class)
+- `src/vkHelper.h` (add StorageBuffer class)
 
 ### Modify
-- `src/renderer.hpp`
+- `src/renderer.h`
 - `src/renderer.cpp`
 - `src/main.cpp`
 
 ## Implementation Steps
 
-### Step 1: Add StorageBuffer to src/vkHelper.hpp
+### Step 1: Add StorageBuffer to src/vkHelper.h
 
 ```cpp
 #pragma once
@@ -36,7 +36,7 @@ Upload all half-edge Structure of Arrays (SoA) data to the GPU as Storage Buffer
 #include <vector>
 #include <cstdint>
 
-// Add to existing vkHelper.hpp or create new file
+// Add to existing vkHelper.h or create new file
 
 class StorageBuffer {
 public:
@@ -73,7 +73,7 @@ private:
 ### Step 2: Implement StorageBuffer (add to renderer.cpp or separate file)
 
 ```cpp
-#include "vkHelper.hpp"
+#include "vkHelper.h"
 #include <stdexcept>
 #include <cstring>
 
@@ -155,7 +155,7 @@ uint32_t StorageBuffer::findMemoryType(VkPhysicalDevice physicalDevice,
 }
 ```
 
-### Step 3: Add to Renderer class (src/renderer.hpp)
+### Step 3: Add to Renderer class (src/renderer.h)
 
 ```cpp
 class Renderer {
