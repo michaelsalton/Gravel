@@ -99,6 +99,11 @@ else()
     # target_compile_definitions(${PROJECT_NAME} PRIVATE VK_USE_PLATFORM_XLIB_KHR)
 endif()
 
+# Shader directory (absolute path so binary works from any CWD)
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    SHADER_DIR="${CMAKE_BINARY_DIR}/shaders/"
+)
+
 # Compiler warnings
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /W4)

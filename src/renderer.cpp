@@ -1267,9 +1267,9 @@ void Renderer::loadMeshShaderFunctions() {
 }
 
 void Renderer::createGraphicsPipeline() {
-    auto taskCode = readFile("shaders/test.task.spv");
-    auto meshCode = readFile("shaders/test.mesh.spv");
-    auto fragCode = readFile("shaders/test.frag.spv");
+    auto taskCode = readFile(std::string(SHADER_DIR) + "test.task.spv");
+    auto meshCode = readFile(std::string(SHADER_DIR) + "test.mesh.spv");
+    auto fragCode = readFile(std::string(SHADER_DIR) + "test.frag.spv");
 
     VkShaderModule taskModule = createShaderModule(taskCode);
     VkShaderModule meshModule = createShaderModule(meshCode);
@@ -1308,7 +1308,7 @@ void Renderer::createGraphicsPipeline() {
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizer.lineWidth = 1.0f;
-    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizer.cullMode = VK_CULL_MODE_NONE;
     rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable = VK_FALSE;
 

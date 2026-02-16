@@ -12,7 +12,7 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 
 | Epic | Features | Est. Time | Status |
 |------|----------|-----------|--------|
-| [Epic 1: Vulkan Infrastructure](#epic-1-vulkan-infrastructure) | 11 | 22-30h | In Progress |
+| [Epic 1: Vulkan Infrastructure](#epic-1-vulkan-infrastructure) | 11 | 22-30h | Complete |
 | [Epic 2: Mesh Loading](#epic-2-mesh-loading-and-gpu-upload) | 4 | 9-12h | Not Started |
 | [Epic 3: Core Resurfacing](#epic-3-core-resurfacing-pipeline) | 7 | 14-17h | Not Started |
 | [Epic 4: Amplification & LOD](#epic-4-amplification-and-lod) | 6 | 11-15h | Not Started |
@@ -36,7 +36,7 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 - [x] 1.8 Basic Render Loop (2h)
 - [x] 1.9 Descriptor Set Layouts (2-3h)
 - [x] 1.10 Test Mesh Shader Pipeline (3-4h)
-- [ ] 1.11 ImGui Integration (2-3h)
+- [x] 1.11 ImGui Integration (2-3h)
 
 **Milestone**: Triangle renders via mesh shader, ImGui displays FPS
 
@@ -176,10 +176,10 @@ If stuck on a feature:
 
 ## Progress Tracking
 
-### Current Epic: Epic 1 - Vulkan Infrastructure
-### Current Feature: 1.11 ImGui Integration
-### Features Completed: 10 / 48
-### Overall Progress: 20%
+### Current Epic: Epic 2 - Mesh Loading and GPU Upload
+### Current Feature: 2.1 OBJ Parser with N-gon Support
+### Features Completed: 11 / 48
+### Overall Progress: 22%
 
 ---
 
