@@ -1,6 +1,7 @@
 # Epic 6: Pebble Generation
 
 **Duration**: Weeks 7-9
+**Estimated Total Time**: 13-17 hours
 **Status**: Not Started
 **Dependencies**: Epic 5 (B-Spline Control Cages)
 
@@ -21,6 +22,8 @@ Implement a completely separate procedural resurfacing pipeline for generating p
 ## Tasks
 
 ### Task 6.1: Pebble Pipeline
+**Time Estimate**: 2 hours
+**Feature Spec**: [Pebble Pipeline](feature-01-pebble-pipeline.md)
 
 Create separate Vulkan graphics pipeline for pebbles:
 
@@ -62,6 +65,8 @@ Create separate Vulkan graphics pipeline for pebbles:
 ---
 
 ### Task 6.2: Pebble Task Shader
+**Time Estimate**: 2-3 hours
+**Feature Spec**: [Pebble Task Shader](feature-02-pebble-task-shader.md)
 
 Create `shaders/pebbles/pebble.task`:
 
@@ -123,6 +128,8 @@ Create `shaders/pebbles/pebble.task`:
 ---
 
 ### Task 6.3: Pebble Control Cage Construction
+**Time Estimate**: 3-4 hours
+**Feature Spec**: [Control Cage Construction](feature-03-control-cage-construction.md)
 
 Create `shaders/pebbles/pebble.mesh`:
 
@@ -224,6 +231,8 @@ Create `shaders/pebbles/pebble.mesh`:
 ---
 
 ### Task 6.4: Pebble Surface Evaluation
+**Time Estimate**: 2-3 hours
+**Feature Spec**: [Pebble B-Spline](feature-04-pebble-bspline.md)
 
 - [ ] Evaluate bicubic B-spline from procedural cage:
   ```glsl
@@ -300,6 +309,8 @@ Create `shaders/pebbles/pebble.mesh`:
 ---
 
 ### Task 6.5: Pebble LOD
+**Time Estimate**: 2 hours
+**Feature Spec**: [LOD and Fragment](feature-06-lod-and-fragment.md)
 
 - [ ] Compute bounding box from extruded vertices:
   ```glsl
@@ -331,6 +342,8 @@ Create `shaders/pebbles/pebble.mesh`:
 ---
 
 ### Task 6.6: Procedural Noise
+**Time Estimate**: 2-3 hours
+**Feature Spec**: [Procedural Noise](feature-05-procedural-noise.md)
 
 Create `shaders/noise.glsl`:
 
@@ -372,6 +385,59 @@ Create `shaders/noise.glsl`:
 **Acceptance Criteria**: Noise adds surface detail to pebbles without distorting overall shape.
 
 ---
+
+## Milestone Checkpoints
+
+After implementing each task, verify code compiles without warnings, runs without crashes, and has no Vulkan validation errors.
+
+**After Task 6.1**: Separate pebble pipeline created. Can switch between parametric and pebble modes. Pebble pipeline doesn't crash (even if output is empty).
+
+**After Task 6.2**: Task shader emits correct number of mesh invocations. One task per face (not vertices). Face vertices fetched correctly.
+
+**After Task 6.3**: Control cages constructed in shared memory. Extruded vertices visible (if debug rendered). Roundness produces curved shapes. Random variation creates organic appearance.
+
+**After Task 6.4**: Pebbles render as smooth B-spline surfaces. Higher subdivision levels show more detail. No gaps or overlaps.
+
+**After Task 6.5**: LOD reduces subdivision for distant pebbles. FPS improves with LOD enabled. Shading matches parametric quality.
+
+**After Task 6.6**: Procedural noise adds surface bumps. Noise frequency/amplitude adjustable. Pebbles have rock-like texture.
+
+## Common Pitfalls
+
+1. **Shared Memory**: Can't access task shader shared memory from mesh shader
+2. **Control Cage Size**: 16 vec3 = 192 bytes (safe for shared memory)
+3. **Extrusion Direction**: Must use face normal, not vertex normal
+4. **Noise Scale**: Too high amplitude distorts shape; start small (0.05-0.1)
+5. **Subdivision Limit**: Level 8 (256x256) may exceed hardware limits with tiling
+
+## Visual Debugging
+
+- **Control cage**: Render as wireframe to verify construction
+- **Extrusion**: Color by extrusion distance
+- **Noise**: Disable temporarily to see base shape
+- **Subdivision**: Color by level (green=low, red=high)
+
+## Expected Appearance
+
+Pebbles should look like smooth, rounded rocks with slightly irregular surfaces (noise), organic variation (random extrusion), and a cobblestone or river rock appearance.
+
+## Performance Targets
+
+| Subdivision | Vertices/Pebble | Target FPS (1000 faces) |
+|-------------|-----------------|-------------------------|
+| Level 0 (1x1) | 4 | 300+ |
+| Level 1 (2x2) | 9 | 200+ |
+| Level 2 (4x4) | 25 | 150+ |
+| Level 3 (8x8) | 81 | 100+ |
+| Level 4 (16x16) | 289 | 50+ |
+
+## Preset Suggestions
+
+**Smooth Pebbles**: subdivisionLevel=3, extrusionAmount=0.15, roundness=2, doNoise=false
+
+**Rocky Pebbles**: subdivisionLevel=4, extrusionAmount=0.2, roundness=1, doNoise=true, noiseAmplitude=0.08, noiseFrequency=5.0
+
+**Cobblestone**: subdivisionLevel=2, extrusionAmount=0.1, roundness=2, doNoise=true, noiseAmplitude=0.05, noiseFrequency=8.0
 
 ## Technical Notes
 

@@ -1,6 +1,7 @@
 # Epic 7: Control Maps and Polish
 
 **Duration**: Weeks 9-10
+**Estimated Total Time**: 11-15 hours (+ 4-5 for optional animation)
 **Status**: Not Started
 **Dependencies**: Epic 6 (Pebble Generation)
 
@@ -21,6 +22,8 @@ Add advanced features for hybrid surfaces, base mesh visualization, and optional
 ## Tasks
 
 ### Task 7.1: Control Map Textures
+**Time Estimate**: 4-6 hours
+**Feature Specs**: [Control Map Loading](feature-01-control-map-loading.md) | [Control Map Sampling](feature-02-control-map-sampling.md)
 
 - [ ] Add control map texture to descriptor set:
   ```cpp
@@ -129,6 +132,8 @@ Add advanced features for hybrid surfaces, base mesh visualization, and optional
 ---
 
 ### Task 7.2: Base Mesh Rendering
+**Time Estimate**: 3-4 hours
+**Feature Spec**: [Base Mesh Rendering](feature-03-base-mesh-rendering.md)
 
 Create simple mesh shader pipeline to render the original base mesh:
 
@@ -215,6 +220,8 @@ Create simple mesh shader pipeline to render the original base mesh:
 ---
 
 ### Task 7.3: Skeletal Animation (Optional)
+**Time Estimate**: 4-5 hours
+**Feature Spec**: [Skeletal Animation](feature-06-skeletal-animation.md)
 
 Implement skeletal animation for animated characters with resurfacing:
 
@@ -294,6 +301,8 @@ Implement skeletal animation for animated characters with resurfacing:
 ---
 
 ### Task 7.4: UI Organization and Presets
+**Time Estimate**: 2-3 hours
+**Feature Spec**: [UI Organization](feature-04-ui-organization.md)
 
 - [ ] Organize ImGui into collapsible sections:
   ```cpp
@@ -360,6 +369,8 @@ Implement skeletal animation for animated characters with resurfacing:
 ---
 
 ### Task 7.5: Visual Debugging
+**Time Estimate**: 2 hours
+**Feature Spec**: [Debug Modes](feature-05-debug-modes.md)
 
 - [ ] Add debug visualization modes:
   ```glsl
@@ -394,6 +405,48 @@ Implement skeletal animation for animated characters with resurfacing:
 **Acceptance Criteria**: Debug modes help visualize normals, UVs, LOD levels, and culling.
 
 ---
+
+## Milestone Checkpoints
+
+After implementing each task, verify code compiles without warnings, runs without crashes, and has no Vulkan validation errors.
+
+**After Task 7.1**: Can load PNG/JPG textures. Different regions of mesh use different element types. Control map color-to-type mapping works. Green regions skip resurfacing.
+
+**After Task 7.2**: Base mesh renders in solid color mode. Wireframe mode shows mesh topology. Can toggle base mesh on/off independently. Base mesh + resurfacing visible simultaneously.
+
+**After Task 7.3 (Optional)**: Animated GLTF characters load successfully. Surfaces follow skeletal deformation. Animation plays smoothly.
+
+**After Task 7.4**: UI is clean and organized. Presets instantly configure appearance. Common workflows streamlined.
+
+**After Task 7.5**: Debug modes help troubleshoot issues. Can visualize normals, UVs, LOD levels. Bounding boxes show culling/LOD regions.
+
+## Common Pitfalls
+
+1. **Control Map Colors**: Exact RGB values matter; use threshold matching
+2. **UV Coordinates**: Ensure base mesh has valid UVs (0-1 range)
+3. **Base Mesh Winding**: Triangle fan may produce wrong winding for concave n-gons
+4. **Wireframe Mode**: Use pipeline topology or geometry shader for wireframe
+5. **Animation Performance**: Skinning adds overhead; profile carefully
+
+## Control Map Creation Workflow
+
+1. **UV Unwrap** base mesh in Blender (Smart UV Project or Unwrap)
+2. **Export UV Layout** as PNG template
+3. **Paint in GIMP/Photoshop** using designated colors per element type
+4. **Load in Gravel** via "Load Control Map" button with "Use Control Map" enabled
+
+## Visual Examples
+
+**Hybrid Surface (Control Map)**: Dragon body = Yellow (pebble scales), spines = Blue (cone spikes), belly = Purple (smooth spheres), wings = Green (base mesh only).
+
+**Debug Modes**: Normal Mode = smooth gradient rainbow, UV Mode = red-green gradient, Primitive ID = random per-surface color pattern, LOD Mode = green blobs (distant) / red blobs (close).
+
+## Performance Notes
+
+- **Control map sampling**: ~1-2% overhead (negligible)
+- **Base mesh rendering**: Very cheap (direct geometry)
+- **Skeletal animation**: Moderate cost (4 matrix multiplies per vertex)
+- **UI overhead**: ImGui renders in separate pass, ~0.5ms
 
 ## Technical Notes
 

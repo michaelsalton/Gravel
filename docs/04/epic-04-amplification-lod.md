@@ -1,6 +1,7 @@
 # Epic 4: Amplification and LOD
 
 **Duration**: Weeks 4-5
+**Estimated Total Time**: 11-15 hours
 **Status**: Not Started
 **Dependencies**: Epic 3 (Core Resurfacing Pipeline)
 
@@ -20,6 +21,8 @@ Enhance the resurfacing pipeline with mesh shader amplification to handle high-r
 ## Tasks
 
 ### Task 4.1: Amplification Function K
+**Time Estimate**: 2-3 hours
+**Feature Spec**: [Amplification](feature-01-amplification.md)
 
 Update `shaders/parametric/parametric.task`:
 
@@ -80,6 +83,8 @@ Update `shaders/parametric/parametric.task`:
 ---
 
 ### Task 4.2: Variable Resolution in Mesh Shader
+**Time Estimate**: 2-3 hours
+**Feature Spec**: [Variable Resolution](feature-02-variable-resolution.md)
 
 Update `shaders/parametric/parametric.mesh`:
 
@@ -143,7 +148,7 @@ Update `shaders/parametric/parametric.mesh`:
 
 ### Task 4.3: Pipeline Permutations (Optional)
 
-For optimal GPU utilization, compile multiple pipeline variants with fixed resolutions:
+For optimal GPU utilization, compile multiple pipeline variants with fixed resolutions (no time estimate — optional):
 
 - [ ] Create shader variants:
   - `parametric_4x4.mesh` — `#define MN_FIXED 4`
@@ -158,6 +163,8 @@ For optimal GPU utilization, compile multiple pipeline variants with fixed resol
 ---
 
 ### Task 4.4: Frustum Culling
+**Time Estimate**: 2 hours
+**Feature Spec**: [Frustum Culling](feature-03-frustum-culling.md)
 
 Update task shader to cull elements outside view frustum:
 
@@ -199,6 +206,8 @@ Update task shader to cull elements outside view frustum:
 ---
 
 ### Task 4.5: Back-Face Culling
+**Time Estimate**: 1-2 hours
+**Feature Spec**: [Back-Face Culling](feature-04-backface-culling.md)
 
 Update task shader to cull back-facing elements:
 
@@ -228,6 +237,8 @@ Update task shader to cull back-facing elements:
 ---
 
 ### Task 4.6: Screen-Space LOD
+**Time Estimate**: 4-5 hours
+**Feature Specs**: [LOD Bounding Box](feature-05-lod-bounding-box.md) | [LOD Resolution](feature-06-lod-resolution.md)
 
 Implement adaptive resolution based on element's screen-space size:
 
@@ -338,7 +349,36 @@ Implement adaptive resolution based on element's screen-space size:
 
 ---
 
+## Milestone Checkpoints
+
+After implementing each task, verify code compiles without warnings, runs without crashes, and has no Vulkan validation errors.
+
+**After Task 4.1**: Can render 16x16 grids by tiling 4x (2x2 grid of 8x8 tiles). Multiple mesh shader invocations per element. No seams or gaps between tiles.
+
+**After Task 4.2**: 32x32 and 64x64 resolutions work correctly. Edge tiles handle partial grids properly. ImGui slider for resolution works.
+
+**After Task 4.4**: Elements outside frustum disappear. FPS improves when looking at small portion of mesh. Rotating camera shows elements appearing/disappearing.
+
+**After Task 4.5**: Back-facing elements disappear. ~50% reduction for closed meshes. Threshold slider changes when culling occurs.
+
+**After Task 4.6**: Moving camera closer increases resolution, farther decreases it. LOD factor slider adjusts aggressiveness. Distant elements render at low res (4x4 or less), close elements at high res (32x32 or more).
+
 ## Technical Notes
+
+### Common Pitfalls
+
+1. **Tile Seams**: Ensure UV mapping is continuous across tiles
+2. **Edge Tile Miscalculation**: localDeltaUV must handle partial tiles
+3. **Culling Too Aggressive**: Use conservative bounding radius
+4. **LOD Popping**: May need hysteresis to avoid sudden changes
+5. **Culling Count**: EmitMeshTasksEXT with (0,0,0) if culled
+
+### Visual Debugging
+
+- **Tile seams**: Color each tile differently by gl_WorkGroupID
+- **Culling**: Color culled elements red, visible green
+- **LOD levels**: Color by resolution (green=low, red=high)
+- **Screen size**: Print to console for debugging
 
 ### Amplification Tile Calculation
 

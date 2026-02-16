@@ -1,6 +1,7 @@
 # Epic 8: Performance Analysis
 
 **Duration**: Weeks 10-12
+**Estimated Total Time**: 14-18 hours (+ 4-5 hours optional)
 **Status**: Not Started
 **Dependencies**: Epic 7 (Control Maps and Polish)
 
@@ -21,6 +22,9 @@ Implement comprehensive performance measurement, benchmarking, and analysis tool
 ## Tasks
 
 ### Task 8.1: GPU Timing
+
+**Time Estimate**: 3-5 hours
+**Feature Specs**: [GPU Timestamp Queries](feature-01-gpu-timing.md)
 
 - [ ] Implement Vulkan timestamp queries:
   ```cpp
@@ -140,6 +144,9 @@ Implement comprehensive performance measurement, benchmarking, and analysis tool
 
 ### Task 8.2: Benchmarking Suite
 
+**Time Estimate**: 3-4 hours
+**Feature Specs**: [Automated Benchmarking Suite](feature-02-benchmarking-suite.md)
+
 Create automated benchmarking to reproduce paper's Table 1:
 
 - [ ] Implement benchmark configuration:
@@ -252,6 +259,9 @@ Create automated benchmarking to reproduce paper's Table 1:
 
 ### Task 8.3: Memory Analysis
 
+**Time Estimate**: 2-3 hours
+**Feature Specs**: [Memory Analysis](feature-03-memory-analysis.md)
+
 - [ ] Implement VRAM usage query:
   ```cpp
   float queryVRAMUsage() {
@@ -320,6 +330,9 @@ Create automated benchmarking to reproduce paper's Table 1:
 
 ### Task 8.4: NVIDIA Nsight Graphics Profiling
 
+**Time Estimate**: 2 hours
+**Feature Specs**: [Nsight Profiling Guide](feature-04-nsight-profiling.md)
+
 - [ ] Document profiling workflow:
   ```markdown
   ## Profiling with NVIDIA Nsight Graphics
@@ -367,6 +380,9 @@ Create automated benchmarking to reproduce paper's Table 1:
 ---
 
 ### Task 8.5: Comparison Pipelines (Optional)
+
+**Time Estimate**: 4-5 hours
+**Feature Specs**: [Comparison Pipelines](feature-05-comparison-pipelines.md)
 
 Implement alternative rendering methods for comparison:
 
@@ -445,6 +461,77 @@ Implement alternative rendering methods for comparison:
 
 ---
 
+## Milestone Checkpoints
+
+### After Task 8.1 (GPU Timing):
+- GPU timestamps work correctly
+- Per-pipeline timing accurate (< 1% error)
+- No performance regression from profiling
+- All statistics tracked correctly
+- Culling efficiency shows expected values (~50% for back-face)
+- Vertex/primitive counts match expected (M×N per element)
+- Timing and stats displayed in real-time ImGui
+
+### After Task 8.2 (Benchmarking Suite):
+- Automated benchmarks run headless
+- CSV export contains all required data
+- Benchmark suite completes in < 5 minutes
+- Results reproducible (< 5% variance between runs)
+
+### After Task 8.3 (Memory Analysis):
+- VRAM usage accurately measured
+- Memory invariance validated (constant across resolutions)
+- Savings vs vertex buffer: 90-95%
+- Memory breakdown shows SSBO dominance
+
+### After Task 8.4 (Nsight Profiling):
+- Nsight profiling guide is comprehensive
+- Can capture and analyze frames successfully
+- Bottlenecks identified (typically mesh shader or fragment shader)
+- Optimization recommendations actionable
+
+### After Task 8.5 (Comparison Pipelines — Optional):
+- Vertex pipeline baseline implemented
+- Tessellation pipeline implemented
+- Mesh shader shows 1.5-3× speedup for dynamic geometry
+- Memory savings clearly demonstrated
+
+## Benchmark Suite Configuration
+
+Reproduce paper's Table 1:
+
+| Benchmark | Mesh | Type | Resolution | Culling | LOD | Expected FPS (RTX 3080) |
+|-----------|------|------|------------|---------|-----|-------------------------|
+| Torus 8×8 | Icosphere | 0 | 8×8 | Off | Off | ~200 |
+| Torus 16×16 | Icosphere | 0 | 16×16 | Off | Off | ~83 |
+| Sphere 8×8 | Cube | 1 | 8×8 | Off | Off | ~200 |
+| Pebble L3 | Bunny | Pebble | 8×8 | Off | Off | ~125 |
+| Dragon + Cull | Dragon | 0 | 8×8 | On | Off | ~66 |
+| Dragon + LOD | Dragon | 0 | 8×8 | Off | On | ~100 |
+
+## Common Profiling Findings
+
+Expected GPU time breakdown:
+1. **Mesh Shader**: 40-60% of frame time (geometry generation)
+2. **Fragment Shader**: 30-50% of frame time (shading)
+3. **Task Shader**: <5% of frame time (minimal work)
+4. **Memory Bandwidth**: <10% if SSBO reads are cached well
+
+Optimization opportunities:
+- Fragment shader: Reduce overdraw via early-Z
+- Mesh shader: Optimize parametric evaluation math
+- Memory: Ensure SoA layout cache-friendly
+- Culling: Increase threshold to cull more aggressively
+
+## Success Metrics
+
+Epic 8 is complete when:
+1. GPU profiling shows no obvious bottlenecks
+2. Performance within 20% of paper on similar hardware
+3. Memory footprint constant (validated)
+4. Automated benchmarks reproducible
+5. Documentation comprehensive
+
 ## Technical Notes
 
 ### Expected Performance Results
@@ -514,7 +601,7 @@ Example for 1000-element dragon with 8×8 resolution:
 
 ### Documentation
 - `docs/profiling_guide.md` - Nsight profiling workflow
-- `docs/performance_report.md` - Results and analysis
+- `docs/performance_report.md` - Results and analysis (see [Performance Report Generation](feature-06-performance-report.md))
 - `benchmark_results.csv` - Automated benchmark output
 - `performance_charts.png` - Visualizations
 

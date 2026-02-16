@@ -1,6 +1,7 @@
 # Epic 5: B-Spline Control Cages
 
 **Duration**: Weeks 5-7
+**Estimated Total Time**: 11-15 hours
 **Status**: Not Started
 **Dependencies**: Epic 4 (Amplification and LOD)
 
@@ -22,6 +23,8 @@ Extend the parametric resurfacing system with B-spline and Bézier surface evalu
 ## Tasks
 
 ### Task 5.1: LUT Loader
+**Time Estimate**: 2-3 hours
+**Feature Specs**: [Control Cage Loader](feature-01-control-cage-loader.md) | [Control Cage Upload](feature-02-control-cage-upload.md)
 
 Create `src/loaders/LUTLoader.hpp/.cpp`:
 
@@ -91,6 +94,8 @@ Create `src/loaders/LUTLoader.hpp/.cpp`:
 ---
 
 ### Task 5.2: B-Spline Evaluation
+**Time Estimate**: 4-6 hours
+**Feature Specs**: [B-Spline Basis](feature-03-bspline-basis.md) | [B-Spline Surface](feature-04-bspline-surface.md)
 
 Create `shaders/parametric/parametricGrids.glsl`:
 
@@ -185,6 +190,8 @@ Create `shaders/parametric/parametricGrids.glsl`:
 ---
 
 ### Task 5.3: Bézier Evaluation
+**Time Estimate**: 2 hours
+**Feature Spec**: [Bézier Surface](feature-05-bezier-surface.md)
 
 - [ ] Implement Bernstein basis (degree 1-3):
   ```glsl
@@ -246,6 +253,7 @@ Create `shaders/parametric/parametricGrids.glsl`:
 ---
 
 ### Task 5.4: Control Cage LOD
+**Time Estimate**: 1-2 hours
 
 Update `shaders/lods.glsl`:
 
@@ -279,6 +287,8 @@ Update `shaders/lods.glsl`:
 ---
 
 ### Task 5.5: Integration and UI
+**Time Estimate**: 2 hours
+**Feature Spec**: [Integration](feature-06-integration.md)
 
 - [ ] Add element types to `parametricPosition`:
   ```glsl
@@ -321,6 +331,42 @@ Update `shaders/lods.glsl`:
 **Acceptance Criteria**: User can load control cages, switch between B-spline/Bézier, and toggle boundary conditions.
 
 ---
+
+## Milestone Checkpoints
+
+After implementing each task, verify code compiles without warnings, runs without crashes, and has no Vulkan validation errors.
+
+**After Task 5.1**: Successfully loads quad grid OBJ. Prints grid dimensions (e.g., "4x4" or "8x8"). Vertices sorted correctly by UV. Bounding box computed. LUT buffer uploaded to GPU, descriptor set binds without errors.
+
+**After Task 5.2**: B-spline surfaces render smoothly. Subdivision appearance (smooth interpolation of control cage). Cyclic/non-cyclic boundaries work correctly. Normals point outward consistently.
+
+**After Task 5.3**: Bezier surfaces render (degree 1 = bilinear, 3 = bicubic). Different degrees show different smoothness. Bezier interpolates corner control points.
+
+**After Task 5.4**: LOD works for cage-based surfaces using precomputed bounding boxes.
+
+**After Task 5.5**: Can switch between analytical (torus, sphere) and cage-based (B-spline, Bezier). Cyclic surfaces seamless. No artifacts at patch boundaries.
+
+## Common Pitfalls
+
+1. **UV Sorting**: Ensure row-major order (V outer loop, U inner loop)
+2. **Cyclic Indexing**: Use modulo for cyclic, clamp for non-cyclic
+3. **Patch Centering**: B-spline uses (u-1, u, u+1, u+2), not (u, u+1, u+2, u+3)
+4. **Normal Computation**: Finite differences need small epsilon (0.01)
+5. **Basis Normalization**: Ensure weights sum to 1.0
+
+## Visual Debugging
+
+- **Control cage**: Render control points as debug spheres
+- **Patch boundaries**: Color alternate patches differently
+- **Basis weights**: Visualize as colors (should be smooth gradients)
+- **Normals**: Render as colored arrows or lines
+
+## Expected Appearance
+
+- **B-spline**: Smooth, rounded, does NOT pass through control points
+- **Bezier (cubic)**: Interpolates corners, smooth elsewhere
+- **Bezier (linear)**: Bilinear, faceted appearance
+- **Cyclic**: Seamless wrapping at domain boundaries
 
 ## Technical Notes
 
