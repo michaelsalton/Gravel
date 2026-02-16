@@ -12,7 +12,7 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 
 | Epic | Features | Est. Time | Status |
 |------|----------|-----------|--------|
-| [Epic 1: Vulkan Infrastructure](#epic-1-vulkan-infrastructure) | 11 | 22-30h | Not Started |
+| [Epic 1: Vulkan Infrastructure](#epic-1-vulkan-infrastructure) | 11 | 22-30h | In Progress |
 | [Epic 2: Mesh Loading](#epic-2-mesh-loading-and-gpu-upload) | 4 | 9-12h | Not Started |
 | [Epic 3: Core Resurfacing](#epic-3-core-resurfacing-pipeline) | 7 | 14-17h | Not Started |
 | [Epic 4: Amplification & LOD](#epic-4-amplification-and-lod) | 6 | 11-15h | Not Started |
@@ -27,7 +27,7 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 **Details**: [epic-01/features/README.md](epic-01/features/README.md)
 
 - [x] 1.1 CMake and Vulkan SDK Setup (1-2h)
-- [ ] 1.2 GLFW Window Creation (1-2h)
+- [x] 1.2 GLFW Window Creation (1-2h)
 - [ ] 1.3 Vulkan Instance and Surface (2-3h)
 - [ ] 1.4 Physical and Logical Device (2-3h)
 - [ ] 1.5 Swap Chain (2-3h)
@@ -177,9 +177,9 @@ If stuck on a feature:
 ## Progress Tracking
 
 ### Current Epic: Epic 1 - Vulkan Infrastructure
-### Current Feature: 1.2 GLFW Window Creation
-### Features Completed: 1 / 48
-### Overall Progress: 2%
+### Current Feature: 1.3 Vulkan Instance and Surface
+### Features Completed: 2 / 48
+### Overall Progress: 4%
 
 ---
 
