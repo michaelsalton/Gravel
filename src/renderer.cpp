@@ -1,4 +1,5 @@
 #include "renderer.h"
+#include "HalfEdge.h"
 #include "window.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -39,6 +40,17 @@ Renderer::Renderer(Window& window) : window(window) {
 Renderer::~Renderer() {
     cleanupImGui();
     vkDestroyPipeline(device, graphicsPipeline, nullptr);
+
+    // Cleanup half-edge SSBO buffers (StorageBuffer destructors handle their own cleanup)
+    heVec4Buffers.clear();
+    heVec2Buffers.clear();
+    heIntBuffers.clear();
+    heFloatBuffers.clear();
+
+    if (meshInfoBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, meshInfoBuffer, nullptr);
+        vkFreeMemory(device, meshInfoMemory, nullptr);
+    }
 
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroyBuffer(device, viewUBOBuffers[i], nullptr);
@@ -627,6 +639,13 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                              &sceneDescriptorSets[currentFrame],
                              0, nullptr);
 
+    if (heMeshUploaded) {
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 1, 1,
+                                 &heDescriptorSet,
+                                 0, nullptr);
+    }
+
     glm::mat4 model = glm::mat4(1.0f);
     vkCmdPushConstants(cmd, pipelineLayout,
                         VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT,
@@ -1028,14 +1047,34 @@ void Renderer::createDescriptorSetLayouts() {
     }
 
     // Set 1: HalfEdge (SSBOs for mesh data)
+    // Binding 0: vec4 buffers[5] (positions, colors, normals, faceNormals, faceCenters)
+    // Binding 1: vec2 buffers[1] (texCoords)
+    // Binding 2: int  buffers[10] (topology arrays)
+    // Binding 3: float buffers[1] (faceAreas)
     std::array<VkDescriptorSetLayoutBinding, 4> heBindings{};
-    for (uint32_t i = 0; i < 4; i++) {
-        heBindings[i].binding = i;
-        heBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        heBindings[i].descriptorCount = 1;
-        heBindings[i].stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
-                                    VK_SHADER_STAGE_MESH_BIT_EXT;
-    }
+    heBindings[0].binding = 0;
+    heBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    heBindings[0].descriptorCount = 5;
+    heBindings[0].stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
+                                VK_SHADER_STAGE_MESH_BIT_EXT;
+
+    heBindings[1].binding = 1;
+    heBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    heBindings[1].descriptorCount = 1;
+    heBindings[1].stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
+                                VK_SHADER_STAGE_MESH_BIT_EXT;
+
+    heBindings[2].binding = 2;
+    heBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    heBindings[2].descriptorCount = 10;
+    heBindings[2].stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
+                                VK_SHADER_STAGE_MESH_BIT_EXT;
+
+    heBindings[3].binding = 3;
+    heBindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    heBindings[3].descriptorCount = 1;
+    heBindings[3].stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
+                                VK_SHADER_STAGE_MESH_BIT_EXT;
 
     VkDescriptorSetLayoutCreateInfo heLayoutInfo{};
     heLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1158,13 +1197,13 @@ void Renderer::createDescriptorPool() {
     poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2);
 
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 4);
+    poolSizes[1].descriptorCount = 17;  // 5 vec4 + 1 vec2 + 10 int + 1 float
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 3);
+    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT + 1);  // scene sets + 1 HE set
 
     if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create descriptor pool!");
@@ -1220,6 +1259,18 @@ void Renderer::createDescriptorSets() {
         vkUpdateDescriptorSets(device,
             static_cast<uint32_t>(descriptorWrites.size()),
             descriptorWrites.data(), 0, nullptr);
+    }
+
+    // Allocate HE descriptor set
+    VkDescriptorSetAllocateInfo heAllocInfo{};
+    heAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    heAllocInfo.descriptorPool = descriptorPool;
+    heAllocInfo.descriptorSetCount = 1;
+    heAllocInfo.pSetLayouts = &halfEdgeSetLayout;
+
+    if (vkAllocateDescriptorSets(device, &heAllocInfo,
+                                  &heDescriptorSet) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate half-edge descriptor set!");
     }
 
     std::cout << "Descriptor sets allocated and written" << std::endl;
@@ -1373,6 +1424,173 @@ void Renderer::createGraphicsPipeline() {
     vkDestroyShaderModule(device, taskModule, nullptr);
 
     std::cout << "Graphics pipeline created (task + mesh + fragment)" << std::endl;
+}
+
+void Renderer::uploadHalfEdgeMesh(const HalfEdgeMesh& mesh) {
+    std::cout << "Uploading half-edge mesh to GPU..." << std::endl;
+
+    heVec4Buffers.resize(5);
+    heVec2Buffers.resize(1);
+    heIntBuffers.resize(10);
+    heFloatBuffers.resize(1);
+
+    // vec4 buffers: positions, colors, normals, faceNormals, faceCenters
+    heVec4Buffers[0].create(device, physicalDevice,
+        mesh.vertexPositions.size() * sizeof(glm::vec4),
+        mesh.vertexPositions.data());
+    heVec4Buffers[1].create(device, physicalDevice,
+        mesh.vertexColors.size() * sizeof(glm::vec4),
+        mesh.vertexColors.data());
+    heVec4Buffers[2].create(device, physicalDevice,
+        mesh.vertexNormals.size() * sizeof(glm::vec4),
+        mesh.vertexNormals.data());
+    heVec4Buffers[3].create(device, physicalDevice,
+        mesh.faceNormals.size() * sizeof(glm::vec4),
+        mesh.faceNormals.data());
+    heVec4Buffers[4].create(device, physicalDevice,
+        mesh.faceCenters.size() * sizeof(glm::vec4),
+        mesh.faceCenters.data());
+
+    // vec2 buffer: texCoords
+    heVec2Buffers[0].create(device, physicalDevice,
+        mesh.vertexTexCoords.size() * sizeof(glm::vec2),
+        mesh.vertexTexCoords.data());
+
+    // int buffers: vertexEdges, faceEdges, faceVertCounts, faceOffsets,
+    //              heVertex, heFace, heNext, hePrev, heTwin, vertexFaceIndices
+    heIntBuffers[0].create(device, physicalDevice,
+        mesh.vertexEdges.size() * sizeof(int), mesh.vertexEdges.data());
+    heIntBuffers[1].create(device, physicalDevice,
+        mesh.faceEdges.size() * sizeof(int), mesh.faceEdges.data());
+    heIntBuffers[2].create(device, physicalDevice,
+        mesh.faceVertCounts.size() * sizeof(int), mesh.faceVertCounts.data());
+    heIntBuffers[3].create(device, physicalDevice,
+        mesh.faceOffsets.size() * sizeof(int), mesh.faceOffsets.data());
+    heIntBuffers[4].create(device, physicalDevice,
+        mesh.heVertex.size() * sizeof(int), mesh.heVertex.data());
+    heIntBuffers[5].create(device, physicalDevice,
+        mesh.heFace.size() * sizeof(int), mesh.heFace.data());
+    heIntBuffers[6].create(device, physicalDevice,
+        mesh.heNext.size() * sizeof(int), mesh.heNext.data());
+    heIntBuffers[7].create(device, physicalDevice,
+        mesh.hePrev.size() * sizeof(int), mesh.hePrev.data());
+    heIntBuffers[8].create(device, physicalDevice,
+        mesh.heTwin.size() * sizeof(int), mesh.heTwin.data());
+    heIntBuffers[9].create(device, physicalDevice,
+        mesh.vertexFaceIndices.size() * sizeof(int), mesh.vertexFaceIndices.data());
+
+    // float buffer: faceAreas
+    heFloatBuffers[0].create(device, physicalDevice,
+        mesh.faceAreas.size() * sizeof(float), mesh.faceAreas.data());
+
+    // MeshInfo UBO
+    MeshInfoUBO meshInfo{};
+    meshInfo.nbVertices = mesh.nbVertices;
+    meshInfo.nbFaces = mesh.nbFaces;
+    meshInfo.nbHalfEdges = mesh.nbHalfEdges;
+    meshInfo.padding = 0;
+
+    createBuffer(sizeof(MeshInfoUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 meshInfoBuffer, meshInfoMemory);
+
+    void* data;
+    vkMapMemory(device, meshInfoMemory, 0, sizeof(MeshInfoUBO), 0, &data);
+    memcpy(data, &meshInfo, sizeof(MeshInfoUBO));
+    vkUnmapMemory(device, meshInfoMemory);
+
+    updateHEDescriptorSet();
+
+    heMeshUploaded = true;
+
+    size_t vram = calculateVRAM();
+    std::cout << "Half-edge mesh uploaded to GPU" << std::endl;
+    std::cout << "  Total VRAM: " << vram / 1024.0f << " KB" << std::endl;
+}
+
+void Renderer::updateHEDescriptorSet() {
+    std::vector<VkWriteDescriptorSet> writes;
+
+    // Binding 0: vec4 buffers[5]
+    std::vector<VkDescriptorBufferInfo> vec4BufferInfos(5);
+    for (int i = 0; i < 5; ++i) {
+        vec4BufferInfos[i].buffer = heVec4Buffers[i].getBuffer();
+        vec4BufferInfos[i].offset = 0;
+        vec4BufferInfos[i].range = heVec4Buffers[i].getSize();
+    }
+
+    VkWriteDescriptorSet vec4Write{};
+    vec4Write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    vec4Write.dstSet = heDescriptorSet;
+    vec4Write.dstBinding = 0;
+    vec4Write.dstArrayElement = 0;
+    vec4Write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    vec4Write.descriptorCount = 5;
+    vec4Write.pBufferInfo = vec4BufferInfos.data();
+    writes.push_back(vec4Write);
+
+    // Binding 1: vec2 buffers[1]
+    VkDescriptorBufferInfo vec2BufferInfo{};
+    vec2BufferInfo.buffer = heVec2Buffers[0].getBuffer();
+    vec2BufferInfo.offset = 0;
+    vec2BufferInfo.range = heVec2Buffers[0].getSize();
+
+    VkWriteDescriptorSet vec2Write{};
+    vec2Write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    vec2Write.dstSet = heDescriptorSet;
+    vec2Write.dstBinding = 1;
+    vec2Write.dstArrayElement = 0;
+    vec2Write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    vec2Write.descriptorCount = 1;
+    vec2Write.pBufferInfo = &vec2BufferInfo;
+    writes.push_back(vec2Write);
+
+    // Binding 2: int buffers[10]
+    std::vector<VkDescriptorBufferInfo> intBufferInfos(10);
+    for (int i = 0; i < 10; ++i) {
+        intBufferInfos[i].buffer = heIntBuffers[i].getBuffer();
+        intBufferInfos[i].offset = 0;
+        intBufferInfos[i].range = heIntBuffers[i].getSize();
+    }
+
+    VkWriteDescriptorSet intWrite{};
+    intWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    intWrite.dstSet = heDescriptorSet;
+    intWrite.dstBinding = 2;
+    intWrite.dstArrayElement = 0;
+    intWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    intWrite.descriptorCount = 10;
+    intWrite.pBufferInfo = intBufferInfos.data();
+    writes.push_back(intWrite);
+
+    // Binding 3: float buffers[1]
+    VkDescriptorBufferInfo floatBufferInfo{};
+    floatBufferInfo.buffer = heFloatBuffers[0].getBuffer();
+    floatBufferInfo.offset = 0;
+    floatBufferInfo.range = heFloatBuffers[0].getSize();
+
+    VkWriteDescriptorSet floatWrite{};
+    floatWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    floatWrite.dstSet = heDescriptorSet;
+    floatWrite.dstBinding = 3;
+    floatWrite.dstArrayElement = 0;
+    floatWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    floatWrite.descriptorCount = 1;
+    floatWrite.pBufferInfo = &floatBufferInfo;
+    writes.push_back(floatWrite);
+
+    vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
+                           writes.data(), 0, nullptr);
+}
+
+size_t Renderer::calculateVRAM() const {
+    size_t total = 0;
+    for (const auto& buf : heVec4Buffers) total += buf.getSize();
+    for (const auto& buf : heVec2Buffers) total += buf.getSize();
+    for (const auto& buf : heIntBuffers) total += buf.getSize();
+    for (const auto& buf : heFloatBuffers) total += buf.getSize();
+    total += sizeof(MeshInfoUBO);
+    return total;
 }
 
 void Renderer::initImGui() {

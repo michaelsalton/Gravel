@@ -61,8 +61,8 @@ set(SOURCES
     src/renderer.cpp
     src/loaders/ObjLoader.cpp
     src/HalfEdge.cpp
+    src/vkHelper.cpp
     ${IMGUI_SOURCES}
-    # src/vkHelper.cpp
     # src/AppResources.cpp
 )
 

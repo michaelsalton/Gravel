@@ -9,7 +9,10 @@
 #include <limits>
 #include <array>
 
+#include "vkHelper.h"
+
 class Window;
+struct HalfEdgeMesh;
 
 struct SwapChainSupportDetails {
     VkSurfaceCapabilitiesKHR capabilities;
@@ -55,6 +58,7 @@ public:
     void endFrame();
     void waitIdle();
     void recreateSwapChain();
+    void uploadHalfEdgeMesh(const HalfEdgeMesh& mesh);
 
     bool isFrameStarted() const { return frameStarted; }
 
@@ -81,6 +85,9 @@ private:
     void createGraphicsPipeline();
     void loadMeshShaderFunctions();
     void cleanupSwapChain();
+
+    void updateHEDescriptorSet();
+    size_t calculateVRAM() const;
 
     void initImGui();
     void cleanupImGui();
@@ -189,6 +196,26 @@ private:
     VkExtent2D swapChainExtent;
     std::vector<VkImage> swapChainImages;
     std::vector<VkImageView> swapChainImageViews;
+
+    // Half-edge SSBO buffers
+    std::vector<StorageBuffer> heVec4Buffers;   // 5: positions, colors, normals, faceNormals, faceCenters
+    std::vector<StorageBuffer> heVec2Buffers;   // 1: texCoords
+    std::vector<StorageBuffer> heIntBuffers;    // 10: topology arrays
+    std::vector<StorageBuffer> heFloatBuffers;  // 1: faceAreas
+
+    VkDescriptorSet heDescriptorSet = VK_NULL_HANDLE;
+
+    struct MeshInfoUBO {
+        uint32_t nbVertices;
+        uint32_t nbFaces;
+        uint32_t nbHalfEdges;
+        uint32_t padding;
+    };
+
+    VkBuffer meshInfoBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory meshInfoMemory = VK_NULL_HANDLE;
+
+    bool heMeshUploaded = false;
 
 #ifdef NDEBUG
     const bool enableValidationLayers = false;

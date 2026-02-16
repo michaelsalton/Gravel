@@ -76,9 +76,23 @@ int main() {
 
     std::cout << "--- Half-edge construction complete ---\n" << std::endl;
 
+    // --- GPU Buffer Upload ---
+    std::cout << "--- GPU buffer upload ---\n" << std::endl;
+
+    HalfEdgeMesh heMeshForGPU;
+    try {
+        NGonMesh cubeMeshGPU = ObjLoader::load(std::string(ASSETS_DIR) + "cube.obj");
+        heMeshForGPU = HalfEdgeBuilder::build(cubeMeshGPU);
+    } catch (const std::exception& e) {
+        std::cerr << "Mesh preparation error: " << e.what() << std::endl;
+        return 1;
+    }
+
     try {
         Window window(1280, 720, "Gravel - Mesh Shader Resurfacing");
         Renderer renderer(window);
+
+        renderer.uploadHalfEdgeMesh(heMeshForGPU);
 
         std::cout << "\nInitialization complete" << std::endl;
         std::cout << "Entering main loop (press ESC to exit)\n" << std::endl;

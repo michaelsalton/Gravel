@@ -47,7 +47,7 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 
 - [x] 2.1 OBJ Parser with N-gon Support (2-3h)
 - [x] 2.2 Half-Edge Data Structure (3-4h)
-- [ ] 2.3 GPU Buffer Upload (SSBOs) (2-3h)
+- [x] 2.3 GPU Buffer Upload (SSBOs) (2-3h)
 - [ ] 2.4 Shared Shader Interface (2h)
 
 **Milestone**: Icosphere loaded, half-edge data on GPU, test shader reads mesh data
@@ -177,9 +177,9 @@ If stuck on a feature:
 ## Progress Tracking
 
 ### Current Epic: Epic 2 - Mesh Loading and GPU Upload
-### Current Feature: 2.3 GPU Buffer Upload (SSBOs)
-### Features Completed: 13 / 48
-### Overall Progress: 27%
+### Current Feature: 2.4 Shared Shader Interface
+### Features Completed: 14 / 48
+### Overall Progress: 29%
 
 ---
 
