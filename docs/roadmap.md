@@ -28,7 +28,7 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 
 - [x] 1.1 CMake and Vulkan SDK Setup (1-2h)
 - [x] 1.2 GLFW Window Creation (1-2h)
-- [ ] 1.3 Vulkan Instance and Surface (2-3h)
+- [x] 1.3 Vulkan Instance and Surface (2-3h)
 - [ ] 1.4 Physical and Logical Device (2-3h)
 - [ ] 1.5 Swap Chain (2-3h)
 - [ ] 1.6 Depth Buffer and Render Pass (2h)

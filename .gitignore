@@ -88,4 +88,4 @@ lib/
 vcpkg_installed/
 conan/
 
-/.claude
+.claude/

@@ -58,7 +58,7 @@ endif()
 set(SOURCES
     src/main.cpp
     src/window.cpp
-    # src/renderer.cpp
+    src/renderer.cpp
     # src/vkHelper.cpp
     # src/HalfEdge.cpp
     # src/AppResources.cpp

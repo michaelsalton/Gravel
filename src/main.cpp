@@ -1,5 +1,5 @@
 #include "window.h"
-#include <vulkan/vulkan.h>
+#include "renderer.h"
 #include <iostream>
 #include <stdexcept>
 
@@ -8,18 +8,16 @@ int main() {
     std::cout << std::endl;
 
     try {
-        // Create window
-        const int WIDTH = 1280;
-        const int HEIGHT = 720;
-        Window window(WIDTH, HEIGHT, "Gravel - Mesh Shader Resurfacing");
+        Window window(1280, 720, "Gravel - Mesh Shader Resurfacing");
+        Renderer renderer(window);
 
-        // Main loop
-        std::cout << "Entering main loop (press ESC to exit)" << std::endl;
+        std::cout << "\nInitialization complete" << std::endl;
+        std::cout << "Entering main loop (press ESC to exit)\n" << std::endl;
 
         while (!window.shouldClose()) {
             window.pollEvents();
 
-            // TODO: Render here
+            // TODO: Render frame
 
             if (window.wasResized()) {
                 window.resetResizedFlag();
