@@ -1,0 +1,89 @@
+# Build directories
+build/
+cmake-build-*/
+out/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps
+
+# C++ compiled files
+*.o
+*.obj
+*.exe
+*.out
+*.app
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+
+# Precompiled headers
+*.gch
+*.pch
+
+# IDE specific files
+.vscode/
+.vs/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Visual Studio
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.vcxproj.filters
+*.vcxproj.user
+.vs/
+
+# Xcode
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+
+# Compiled shaders (SPIR-V)
+*.spv
+
+# Log files
+*.log
+
+# Profiling data
+*.nvvp
+*.nsys-rep
+*.qdrep
+
+# Temporary files
+*.tmp
+*.temp
+
+# Dependencies (if using git submodules or vendored)
+# Uncomment if you manage dependencies differently
+# libs/glfw/
+# libs/glm/
+# libs/imgui/
+
+# Assets (large binary files)
+# Uncomment specific patterns if needed
+# *.gltf
+# *.glb
+# *.png
+# *.jpg
+
+# Build artifacts
+bin/
+lib/
+
+# Package managers
+vcpkg_installed/
+conan/
