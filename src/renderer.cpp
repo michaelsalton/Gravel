@@ -22,9 +22,27 @@ Renderer::Renderer(Window& window) : window(window) {
     createFramebuffers();
     createCommandBuffers();
     createSyncObjects();
+    createDescriptorSetLayouts();
+    createPipelineLayout();
+    createUniformBuffers();
+    createDescriptorPool();
+    createDescriptorSets();
 }
 
 Renderer::~Renderer() {
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroyBuffer(device, viewUBOBuffers[i], nullptr);
+        vkFreeMemory(device, viewUBOMemory[i], nullptr);
+        vkDestroyBuffer(device, shadingUBOBuffers[i], nullptr);
+        vkFreeMemory(device, shadingUBOMemory[i], nullptr);
+    }
+
+    vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+    vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+    vkDestroyDescriptorSetLayout(device, sceneSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(device, halfEdgeSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(device, perObjectSetLayout, nullptr);
+
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
         vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
@@ -918,6 +936,243 @@ void Renderer::createSyncObjects() {
 
     std::cout << "Synchronization objects created ("
               << MAX_FRAMES_IN_FLIGHT << " frames in flight)" << std::endl;
+}
+
+void Renderer::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
+                             VkMemoryPropertyFlags properties,
+                             VkBuffer& buffer, VkDeviceMemory& bufferMemory) {
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size;
+    bufferInfo.usage = usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create buffer!");
+    }
+
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+
+    if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate buffer memory!");
+    }
+
+    vkBindBufferMemory(device, buffer, bufferMemory, 0);
+}
+
+void Renderer::createDescriptorSetLayouts() {
+    // Set 0: Scene
+    VkDescriptorSetLayoutBinding viewBinding{};
+    viewBinding.binding = 0;
+    viewBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    viewBinding.descriptorCount = 1;
+    viewBinding.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
+                              VK_SHADER_STAGE_MESH_BIT_EXT |
+                              VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutBinding shadingBinding{};
+    shadingBinding.binding = 1;
+    shadingBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    shadingBinding.descriptorCount = 1;
+    shadingBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    std::array<VkDescriptorSetLayoutBinding, 2> sceneBindings = {
+        viewBinding, shadingBinding
+    };
+
+    VkDescriptorSetLayoutCreateInfo sceneLayoutInfo{};
+    sceneLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    sceneLayoutInfo.bindingCount = static_cast<uint32_t>(sceneBindings.size());
+    sceneLayoutInfo.pBindings = sceneBindings.data();
+
+    if (vkCreateDescriptorSetLayout(device, &sceneLayoutInfo, nullptr,
+                                     &sceneSetLayout) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create scene descriptor set layout!");
+    }
+
+    // Set 1: HalfEdge (SSBOs for mesh data)
+    std::array<VkDescriptorSetLayoutBinding, 4> heBindings{};
+    for (uint32_t i = 0; i < 4; i++) {
+        heBindings[i].binding = i;
+        heBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        heBindings[i].descriptorCount = 1;
+        heBindings[i].stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
+                                    VK_SHADER_STAGE_MESH_BIT_EXT;
+    }
+
+    VkDescriptorSetLayoutCreateInfo heLayoutInfo{};
+    heLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    heLayoutInfo.bindingCount = static_cast<uint32_t>(heBindings.size());
+    heLayoutInfo.pBindings = heBindings.data();
+
+    if (vkCreateDescriptorSetLayout(device, &heLayoutInfo, nullptr,
+                                     &halfEdgeSetLayout) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create half-edge descriptor set layout!");
+    }
+
+    // Set 2: PerObject
+    std::array<VkDescriptorSetLayoutBinding, 2> objBindings{};
+
+    objBindings[0].binding = 0;
+    objBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    objBindings[0].descriptorCount = 1;
+    objBindings[0].stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
+                                 VK_SHADER_STAGE_MESH_BIT_EXT |
+                                 VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    objBindings[1].binding = 1;
+    objBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    objBindings[1].descriptorCount = 1;
+    objBindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutCreateInfo objLayoutInfo{};
+    objLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    objLayoutInfo.bindingCount = static_cast<uint32_t>(objBindings.size());
+    objLayoutInfo.pBindings = objBindings.data();
+
+    if (vkCreateDescriptorSetLayout(device, &objLayoutInfo, nullptr,
+                                     &perObjectSetLayout) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create per-object descriptor set layout!");
+    }
+
+    std::cout << "Descriptor set layouts created (Scene, HalfEdge, PerObject)" << std::endl;
+}
+
+void Renderer::createPipelineLayout() {
+    VkPushConstantRange pushConstantRange{};
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
+                                    VK_SHADER_STAGE_MESH_BIT_EXT;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(glm::mat4);
+
+    std::array<VkDescriptorSetLayout, 3> setLayouts = {
+        sceneSetLayout,
+        halfEdgeSetLayout,
+        perObjectSetLayout
+    };
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
+    pipelineLayoutInfo.pSetLayouts = setLayouts.data();
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+
+    if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr,
+                                &pipelineLayout) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create pipeline layout!");
+    }
+
+    std::cout << "Pipeline layout created (3 descriptor sets + push constants)" << std::endl;
+}
+
+void Renderer::createUniformBuffers() {
+    VkDeviceSize viewSize = sizeof(ViewUBO);
+    VkDeviceSize shadingSize = sizeof(GlobalShadingUBO);
+
+    viewUBOBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    viewUBOMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    viewUBOMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+    shadingUBOBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    shadingUBOMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    shadingUBOMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        createBuffer(viewSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     viewUBOBuffers[i], viewUBOMemory[i]);
+        vkMapMemory(device, viewUBOMemory[i], 0, viewSize, 0, &viewUBOMapped[i]);
+
+        createBuffer(shadingSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     shadingUBOBuffers[i], shadingUBOMemory[i]);
+        vkMapMemory(device, shadingUBOMemory[i], 0, shadingSize, 0, &shadingUBOMapped[i]);
+    }
+
+    std::cout << "Uniform buffers created and mapped" << std::endl;
+}
+
+void Renderer::createDescriptorPool() {
+    std::array<VkDescriptorPoolSize, 2> poolSizes{};
+
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2);
+
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 4);
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes = poolSizes.data();
+    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 3);
+
+    if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create descriptor pool!");
+    }
+
+    std::cout << "Descriptor pool created" << std::endl;
+}
+
+void Renderer::createDescriptorSets() {
+    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, sceneSetLayout);
+
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = descriptorPool;
+    allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    allocInfo.pSetLayouts = layouts.data();
+
+    sceneDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+    if (vkAllocateDescriptorSets(device, &allocInfo,
+                                  sceneDescriptorSets.data()) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate descriptor sets!");
+    }
+
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        VkDescriptorBufferInfo viewBufferInfo{};
+        viewBufferInfo.buffer = viewUBOBuffers[i];
+        viewBufferInfo.offset = 0;
+        viewBufferInfo.range = sizeof(ViewUBO);
+
+        VkDescriptorBufferInfo shadingBufferInfo{};
+        shadingBufferInfo.buffer = shadingUBOBuffers[i];
+        shadingBufferInfo.offset = 0;
+        shadingBufferInfo.range = sizeof(GlobalShadingUBO);
+
+        std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = sceneDescriptorSets[i];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].dstArrayElement = 0;
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pBufferInfo = &viewBufferInfo;
+
+        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet = sceneDescriptorSets[i];
+        descriptorWrites[1].dstBinding = 1;
+        descriptorWrites[1].dstArrayElement = 0;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pBufferInfo = &shadingBufferInfo;
+
+        vkUpdateDescriptorSets(device,
+            static_cast<uint32_t>(descriptorWrites.size()),
+            descriptorWrites.data(), 0, nullptr);
+    }
+
+    std::cout << "Descriptor sets allocated and written" << std::endl;
 }
 
 bool Renderer::checkValidationLayerSupport() {

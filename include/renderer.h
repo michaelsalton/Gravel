@@ -1,6 +1,8 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <vector>
 #include <string>
 #include <optional>
@@ -22,6 +24,23 @@ struct QueueFamilyIndices {
     bool isComplete() const {
         return graphicsFamily.has_value() && presentFamily.has_value();
     }
+};
+
+struct ViewUBO {
+    glm::mat4 view;
+    glm::mat4 projection;
+    glm::vec4 cameraPosition;
+    float nearPlane;
+    float farPlane;
+    float padding[2];
+};
+
+struct GlobalShadingUBO {
+    glm::vec4 lightPosition;
+    glm::vec4 ambientColor;
+    float ambientStrength;
+    float specularStrength;
+    float padding[2];
 };
 
 class Renderer {
@@ -54,6 +73,11 @@ private:
     void createFramebuffers();
     void createCommandBuffers();
     void createSyncObjects();
+    void createDescriptorSetLayouts();
+    void createPipelineLayout();
+    void createUniformBuffers();
+    void createDescriptorPool();
+    void createDescriptorSets();
     void cleanupSwapChain();
 
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
@@ -68,6 +92,9 @@ private:
                                  VkImageTiling tiling,
                                  VkFormatFeatureFlags features);
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
+                      VkMemoryPropertyFlags properties,
+                      VkBuffer& buffer, VkDeviceMemory& bufferMemory);
 
     bool checkValidationLayerSupport();
     std::vector<const char*> getRequiredExtensions();
@@ -109,6 +136,27 @@ private:
     uint32_t currentFrame = 0;
     uint32_t currentImageIndex = 0;
     bool frameStarted = false;
+
+    // Descriptor set layouts
+    VkDescriptorSetLayout sceneSetLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout halfEdgeSetLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout perObjectSetLayout = VK_NULL_HANDLE;
+
+    // Pipeline layout
+    VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+
+    // Descriptor pool and sets
+    VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+    std::vector<VkDescriptorSet> sceneDescriptorSets;
+
+    // Uniform buffers (one per frame in flight)
+    std::vector<VkBuffer> viewUBOBuffers;
+    std::vector<VkDeviceMemory> viewUBOMemory;
+    std::vector<void*> viewUBOMapped;
+
+    std::vector<VkBuffer> shadingUBOBuffers;
+    std::vector<VkDeviceMemory> shadingUBOMemory;
+    std::vector<void*> shadingUBOMapped;
 
     // Depth buffer
     VkImage depthImage = VK_NULL_HANDLE;
