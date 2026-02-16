@@ -29,7 +29,7 @@ This project implements a real-time geometry generation system that takes a base
 | Shader Compilation | glslangValidator → SPIR-V                       |
 | Windowing          | GLFW                                            |
 | Math               | GLM                                             |
-| UI                 | Dear ImGui (Vulkan backend)                     |
+| UI                 | ImGui (Vulkan backend)                     |
 | Mesh Loading       | OBJ loader (n-gon support), optional GLTF       |
 | Build System       | CMake                                           |
 
@@ -89,14 +89,14 @@ Gravel/
 
 This project follows an 8-phase implementation plan:
 
-1. **Vulkan Infrastructure** (Weeks 1-2)
-2. **Mesh Loading and GPU Upload** (Weeks 2-3)
-3. **Core Resurfacing Pipeline** (Weeks 3-4)
-4. **Amplification and LOD** (Weeks 4-5)
-5. **B-Spline Control Cages** (Weeks 5-7)
-6. **Pebble Generation** (Weeks 7-9)
-7. **Control Maps and Polish** (Weeks 9-10)
-8. **Performance Analysis** (Weeks 10-12)
+1. **Vulkan Infrastructure**
+2. **Mesh Loading and GPU Upload**
+3. **Core Resurfacing Pipeline**
+4. **Amplification and LOD**
+5. **B-Spline Control Cages**
+6. **Pebble Generation**
+7. **Control Maps and Polish**
+8. **Performance Analysis**
 
 See [docs/gravel_overview.pdf](docs/gravel_overview.pdf) for comprehensive technical details.
 
