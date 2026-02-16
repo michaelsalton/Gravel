@@ -17,14 +17,18 @@ int main() {
         while (!window.shouldClose()) {
             window.pollEvents();
 
-            // TODO: Render frame
-
             if (window.wasResized()) {
                 window.resetResizedFlag();
-                // TODO: Recreate swapchain
+                renderer.recreateSwapChain();
+            }
+
+            renderer.beginFrame();
+            if (renderer.isFrameStarted()) {
+                renderer.endFrame();
             }
         }
 
+        renderer.waitIdle();
         std::cout << "\nApplication closed successfully" << std::endl;
 
     } catch (const std::exception& e) {

@@ -32,7 +32,15 @@ public:
     Renderer(const Renderer&) = delete;
     Renderer& operator=(const Renderer&) = delete;
 
+    void beginFrame();
+    void endFrame();
+    void waitIdle();
+    void recreateSwapChain();
+
+    bool isFrameStarted() const { return frameStarted; }
+
 private:
+    void recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex);
     void createInstance();
     void setupDebugMessenger();
     void createSurface();
@@ -99,6 +107,8 @@ private:
     std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
     uint32_t currentFrame = 0;
+    uint32_t currentImageIndex = 0;
+    bool frameStarted = false;
 
     // Depth buffer
     VkImage depthImage = VK_NULL_HANDLE;
