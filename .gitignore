@@ -87,3 +87,5 @@ lib/
 # Package managers
 vcpkg_installed/
 conan/
+
+/.claude
