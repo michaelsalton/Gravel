@@ -60,9 +60,9 @@ set(SOURCES
     src/window.cpp
     src/renderer.cpp
     src/loaders/ObjLoader.cpp
+    src/HalfEdge.cpp
     ${IMGUI_SOURCES}
     # src/vkHelper.cpp
-    # src/HalfEdge.cpp
     # src/AppResources.cpp
 )
 

@@ -1,6 +1,7 @@
 #include "window.h"
 #include "renderer.h"
 #include "loaders/ObjLoader.h"
+#include "HalfEdge.h"
 #include <iostream>
 #include <stdexcept>
 
@@ -39,6 +40,41 @@ int main() {
     }
 
     std::cout << "--- OBJ loading complete ---\n" << std::endl;
+
+    // --- Test Half-Edge Conversion ---
+    std::cout << "--- Building half-edge structures ---\n" << std::endl;
+
+    try {
+        NGonMesh cubeMesh = ObjLoader::load(std::string(ASSETS_DIR) + "cube.obj");
+        HalfEdgeMesh heCube = HalfEdgeBuilder::build(cubeMesh);
+        std::cout << std::endl;
+
+        NGonMesh icoMesh = ObjLoader::load(std::string(ASSETS_DIR) + "icosphere.obj");
+        HalfEdgeMesh heIco = HalfEdgeBuilder::build(icoMesh);
+        std::cout << std::endl;
+
+        // Traverse first face of cube
+        if (heCube.nbFaces > 0) {
+            std::cout << "Cube - First face traversal:" << std::endl;
+            int edge = heCube.faceEdges[0];
+            int start = edge;
+            do {
+                int v = heCube.heVertex[edge];
+                int twin = heCube.heTwin[edge];
+                std::cout << "  HE " << edge << ": vertex " << v;
+                if (twin != -1) std::cout << ", twin " << twin;
+                else std::cout << ", boundary";
+                std::cout << std::endl;
+                edge = heCube.heNext[edge];
+            } while (edge != start);
+        }
+        std::cout << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "Half-edge error: " << e.what() << std::endl;
+        return 1;
+    }
+
+    std::cout << "--- Half-edge construction complete ---\n" << std::endl;
 
     try {
         Window window(1280, 720, "Gravel - Mesh Shader Resurfacing");
