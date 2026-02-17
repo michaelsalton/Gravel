@@ -1,0 +1,89 @@
+#version 450
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "../shaderInterface.h"
+#include "../common.glsl"
+
+// Task shader work group size: one thread per task
+layout(local_size_x = 1) in;
+
+// ============================================================================
+// Task Payload
+// ============================================================================
+
+// Payload transferred from task shader to mesh shader
+struct TaskPayload {
+    vec3 position;      // Face center or vertex position
+    vec3 normal;        // Face normal or vertex normal
+    float area;         // Face area (used for scaling)
+    uint taskId;        // Global element ID
+    uint isVertex;      // 1 if vertex element, 0 if face element
+    uint elementType;   // Parametric surface type
+    uint padding;       // Alignment
+};
+
+taskPayloadSharedEXT TaskPayload payload;
+
+// ============================================================================
+// Push Constants
+// ============================================================================
+
+layout(push_constant) uniform PushConstants {
+    mat4 model;         // Model matrix
+    uint nbFaces;       // Number of faces in mesh
+    uint nbVertices;    // Number of vertices in mesh
+    uint elementType;   // Parametric surface type (0=torus, 1=sphere, etc.)
+    uint padding;
+} push;
+
+// ============================================================================
+// Main: Mapping Function F
+// ============================================================================
+
+void main() {
+    // Global task ID = workgroup ID
+    uint globalId = gl_WorkGroupID.x;
+
+    // Total number of tasks = nbFaces + nbVertices
+    // First nbFaces tasks are face elements
+    // Remaining nbVertices tasks are vertex elements
+    bool isVertex = (globalId >= push.nbFaces);
+
+    uint faceId = 0;
+    uint vertId = 0;
+
+    if (isVertex) {
+        // Vertex element
+        vertId = globalId - push.nbFaces;
+
+        // Get associated face via outgoing half-edge
+        int edge = readVertexEdge(vertId);
+        if (edge >= 0) {
+            faceId = uint(readHalfEdgeFace(uint(edge)));
+        } else {
+            // Isolated vertex — shouldn't happen with valid mesh
+            faceId = 0;
+        }
+
+        payload.position = readVertexPosition(vertId);
+        payload.normal = readVertexNormal(vertId);
+        payload.area = readFaceArea(faceId); // Use adjacent face area for scaling
+    } else {
+        // Face element
+        faceId = globalId;
+
+        payload.position = readFaceCenter(faceId);
+        payload.normal = readFaceNormal(faceId);
+        payload.area = readFaceArea(faceId);
+    }
+
+    // Populate remaining payload fields
+    payload.taskId = globalId;
+    payload.isVertex = isVertex ? 1u : 0u;
+    payload.elementType = push.elementType;
+
+    // Emit one mesh shader invocation
+    // (In Epic 4, this will emit multiple invocations for large grids)
+    EmitMeshTasksEXT(1, 1, 1);
+}
