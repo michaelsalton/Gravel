@@ -57,13 +57,13 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 ## Epic 3: Core Resurfacing Pipeline
 **Details**: [epic-03/features/README.md](epic-03/features/README.md)
 
-- [ ] 3.1 Task Shader Mapping Function (F) (2h)
-- [ ] 3.2 Mesh Shader Hardcoded Quad (2-3h)
-- [ ] 3.3 Parametric Torus Evaluation (2h)
-- [ ] 3.4 Multiple Parametric Surfaces (2-3h)
-- [ ] 3.5 Transform Pipeline (offsetVertex) (2h)
-- [ ] 3.6 UV Grid Generation (2h)
-- [ ] 3.7 Fragment Shader and Shading (2h)
+- [x] 3.1 Task Shader Mapping Function (F) (2h)
+- [x] 3.2 Mesh Shader Hardcoded Quad (2-3h)
+- [x] 3.3 Parametric Torus Evaluation (2h)
+- [x] 3.4 Multiple Parametric Surfaces (2-3h)
+- [x] 3.5 Transform Pipeline (offsetVertex) (2h)
+- [x] 3.6 UV Grid Generation (2h)
+- [x] 3.7 Fragment Shader and Shading (2h)
 
 **Milestone**: Tori/spheres render on base mesh with proper orientation and lighting
 

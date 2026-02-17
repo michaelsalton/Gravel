@@ -39,11 +39,12 @@ struct ViewUBO {
 };
 
 struct GlobalShadingUBO {
-    glm::vec4 lightPosition;
-    glm::vec4 ambientColor;
-    float ambientStrength;
-    float specularStrength;
-    float padding[2];
+    glm::vec4 lightPosition;   // xyz = position
+    glm::vec4 ambient;         // rgb = color, a = intensity
+    float diffuse;
+    float specular;
+    float shininess;
+    float padding;
 };
 
 class Renderer {
@@ -227,6 +228,15 @@ private:
     float sphereRadius = 0.5f;
     uint32_t resolutionM = 8;
     uint32_t resolutionN = 8;
+    uint32_t debugMode = 0;         // 0=shading, 1=normals, 2=UV, 3=taskID, 4=element type
+
+    // Lighting config (driven by ImGui)
+    glm::vec3 lightPosition = glm::vec3(5.0f, 5.0f, 5.0f);
+    glm::vec3 ambientColor = glm::vec3(0.2f, 0.2f, 0.25f);
+    float ambientIntensity = 1.0f;
+    float diffuseIntensity = 0.7f;
+    float specularIntensity = 0.5f;
+    float shininess = 32.0f;
 
 #ifdef NDEBUG
     const bool enableValidationLayers = false;

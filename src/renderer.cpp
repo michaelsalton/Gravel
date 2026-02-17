@@ -646,6 +646,15 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                                  0, nullptr);
     }
 
+    // Update shading UBO with current lighting config
+    GlobalShadingUBO shadingData{};
+    shadingData.lightPosition = glm::vec4(lightPosition, 0.0f);
+    shadingData.ambient = glm::vec4(ambientColor, ambientIntensity);
+    shadingData.diffuse = diffuseIntensity;
+    shadingData.specular = specularIntensity;
+    shadingData.shininess = shininess;
+    memcpy(shadingUBOMapped[currentFrame], &shadingData, sizeof(GlobalShadingUBO));
+
     struct PushConstants {
         glm::mat4 model;
         uint32_t nbFaces;
@@ -657,6 +666,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         float sphereRadius;
         uint32_t resolutionM;
         uint32_t resolutionN;
+        uint32_t debugMode;
     } pushConstants{};
 
     pushConstants.model = glm::mat4(1.0f);
@@ -669,9 +679,11 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     pushConstants.sphereRadius = sphereRadius;
     pushConstants.resolutionM = resolutionM;
     pushConstants.resolutionN = resolutionN;
+    pushConstants.debugMode = debugMode;
 
     vkCmdPushConstants(cmd, pipelineLayout,
-                        VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT,
+                        VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
+                        VK_SHADER_STAGE_FRAGMENT_BIT,
                         0, sizeof(PushConstants), &pushConstants);
 
     uint32_t totalTasks = heMeshUploaded ? (heNbFaces + heNbVertices) : 1;
@@ -1141,9 +1153,10 @@ void Renderer::createDescriptorSetLayouts() {
 void Renderer::createPipelineLayout() {
     VkPushConstantRange pushConstantRange{};
     pushConstantRange.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
-                                    VK_SHADER_STAGE_MESH_BIT_EXT;
+                                    VK_SHADER_STAGE_MESH_BIT_EXT |
+                                    VK_SHADER_STAGE_FRAGMENT_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(glm::mat4) + 9 * sizeof(uint32_t); // 100 bytes
+    pushConstantRange.size = sizeof(glm::mat4) + 10 * sizeof(uint32_t); // 104 bytes
 
     std::array<VkDescriptorSetLayout, 3> setLayouts = {
         sceneSetLayout,
@@ -1208,10 +1221,11 @@ void Renderer::createUniformBuffers() {
     viewData.farPlane = 100.0f;
 
     GlobalShadingUBO shadingData{};
-    shadingData.lightPosition = glm::vec4(2.0f, 2.0f, 2.0f, 1.0f);
-    shadingData.ambientColor = glm::vec4(0.1f, 0.1f, 0.1f, 1.0f);
-    shadingData.ambientStrength = 0.1f;
-    shadingData.specularStrength = 0.5f;
+    shadingData.lightPosition = glm::vec4(lightPosition, 0.0f);
+    shadingData.ambient = glm::vec4(ambientColor, ambientIntensity);
+    shadingData.diffuse = diffuseIntensity;
+    shadingData.specular = specularIntensity;
+    shadingData.shininess = shininess;
 
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         memcpy(viewUBOMapped[i], &viewData, sizeof(ViewUBO));
@@ -1759,12 +1773,29 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                      heNbFaces + heNbVertices, heNbFaces, heNbVertices);
     }
 
-    // Rendering controls (placeholder)
-    if (ImGui::CollapsingHeader("Rendering")) {
-        static bool wireframe = false;
-        ImGui::Checkbox("Wireframe", &wireframe);
-        static bool showNormals = false;
-        ImGui::Checkbox("Show Normals", &showNormals);
+    // Lighting controls
+    if (ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::DragFloat3("Light Position", &lightPosition.x, 0.1f, -20.0f, 20.0f);
+        ImGui::ColorEdit3("Ambient Color", &ambientColor.x);
+        ImGui::SliderFloat("Ambient Intensity", &ambientIntensity, 0.0f, 1.0f);
+        ImGui::SliderFloat("Diffuse", &diffuseIntensity, 0.0f, 1.0f);
+        ImGui::SliderFloat("Specular", &specularIntensity, 0.0f, 1.0f);
+        ImGui::SliderFloat("Shininess", &shininess, 1.0f, 128.0f);
+    }
+
+    // Debug visualization
+    if (ImGui::CollapsingHeader("Debug Visualization")) {
+        const char* debugModes[] = {
+            "Shading (Blinn-Phong)",
+            "Normals (RGB)",
+            "UV Coordinates",
+            "Task ID (Per-Element)",
+            "Element Type (Face/Vertex)"
+        };
+        int mode = static_cast<int>(debugMode);
+        if (ImGui::Combo("Debug Mode", &mode, debugModes, 5)) {
+            debugMode = static_cast<uint32_t>(mode);
+        }
     }
 
     ImGui::End();

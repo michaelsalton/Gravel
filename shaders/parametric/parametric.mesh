@@ -48,6 +48,7 @@ layout(push_constant) uniform PushConstants {
     float sphereRadius;
     uint resolutionM;
     uint resolutionN;
+    uint debugMode;
 } push;
 
 layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {

@@ -40,6 +40,7 @@ layout(push_constant) uniform PushConstants {
     float sphereRadius; // Sphere radius
     uint resolutionM;   // UV grid M resolution
     uint resolutionN;   // UV grid N resolution
+    uint debugMode;     // Debug visualization mode
 } push;
 
 // ============================================================================
