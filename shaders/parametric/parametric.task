@@ -4,6 +4,7 @@
 
 #include "../shaderInterface.h"
 #include "../common.glsl"
+#include "../culling.glsl"
 
 // Task shader work group size: one thread per task
 layout(local_size_x = 1) in;
@@ -43,16 +44,25 @@ layout(push_constant) uniform PushConstants {
     uint resolutionM;   // UV grid M resolution
     uint resolutionN;   // UV grid N resolution
     uint debugMode;     // Debug visualization mode
+    uint enableCulling; // 0 = disabled, 1 = frustum culling
 } push;
+
+// ============================================================================
+// View UBO (for frustum culling)
+// ============================================================================
+
+layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
+    mat4 view;
+    mat4 projection;
+    vec4 cameraPosition;
+    float nearPlane;
+    float farPlane;
+} viewUBO;
 
 // ============================================================================
 // Amplification Function K
 // ============================================================================
 
-// Compute maximum tile size that fits within hardware limits
-// Constraints:
-//   (deltaU + 1) * (deltaV + 1) <= maxVertices
-//   deltaU * deltaV * 2 <= maxPrimitives
 void getDeltaUV(uint M, uint N, out uint deltaU, out uint deltaV) {
     const uint maxVertices = 256;
     const uint maxPrimitives = 256;
@@ -60,7 +70,7 @@ void getDeltaUV(uint M, uint N, out uint deltaU, out uint deltaV) {
     deltaU = M;
     deltaV = N;
 
-    // Vertex constraint
+    // Vertex constraint: (deltaU + 1) * (deltaV + 1) <= maxVertices
     uint numVerts = (deltaU + 1) * (deltaV + 1);
     if (numVerts > maxVertices) {
         uint maxDelta = uint(sqrt(float(maxVertices))) - 1;
@@ -68,7 +78,7 @@ void getDeltaUV(uint M, uint N, out uint deltaU, out uint deltaV) {
         deltaV = min(deltaV, maxDelta);
     }
 
-    // Primitive constraint
+    // Primitive constraint: deltaU * deltaV * 2 <= maxPrimitives
     uint numPrims = deltaU * deltaV * 2;
     if (numPrims > maxPrimitives) {
         uint maxDelta = uint(sqrt(float(maxPrimitives) / 2.0));
@@ -76,13 +86,12 @@ void getDeltaUV(uint M, uint N, out uint deltaU, out uint deltaV) {
         deltaV = min(deltaV, maxDelta);
     }
 
-    // Ensure at least 2x2 grid
     deltaU = max(deltaU, 2u);
     deltaV = max(deltaV, 2u);
 }
 
 // ============================================================================
-// Main: Mapping Function F with Amplification K
+// Main: Mapping Function F with Amplification K and Culling
 // ============================================================================
 
 void main() {
@@ -118,7 +127,16 @@ void main() {
     payload.isVertex = isVertex ? 1u : 0u;
     payload.elementType = push.elementType;
 
-    // Amplification: compute tile size and emit 2D grid of mesh tasks
+    // Frustum culling
+    bool isVisible = true;
+
+    if (push.enableCulling == 1) {
+        mat4 mvp = viewUBO.projection * viewUBO.view * push.model;
+        float boundingRadius = computeBoundingRadius(payload.area, push.userScaling, 2.0);
+        isVisible = isInFrustum(payload.position, boundingRadius, mvp, 0.1);
+    }
+
+    // Amplification
     uint M = push.resolutionM;
     uint N = push.resolutionN;
 
@@ -131,9 +149,10 @@ void main() {
     payload.deltaU = deltaU;
     payload.deltaV = deltaV;
 
-    // Ceiling division: number of tiles needed
     uint numTilesU = (M + deltaU - 1) / deltaU;
     uint numTilesV = (N + deltaV - 1) / deltaV;
 
-    EmitMeshTasksEXT(numTilesU, numTilesV, 1);
+    // Emit mesh tasks (0 if culled)
+    uint visible = isVisible ? 1u : 0u;
+    EmitMeshTasksEXT(numTilesU * visible, numTilesV * visible, 1);
 }

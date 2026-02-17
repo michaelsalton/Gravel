@@ -52,6 +52,7 @@ layout(push_constant) uniform PushConstants {
     uint resolutionM;
     uint resolutionN;
     uint debugMode;
+    uint enableCulling;
 } push;
 
 layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {

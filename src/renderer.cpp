@@ -667,6 +667,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         uint32_t resolutionM;
         uint32_t resolutionN;
         uint32_t debugMode;
+        uint32_t enableCulling;
     } pushConstants{};
 
     pushConstants.model = glm::mat4(1.0f);
@@ -680,6 +681,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     pushConstants.resolutionM = resolutionM;
     pushConstants.resolutionN = resolutionN;
     pushConstants.debugMode = debugMode;
+    pushConstants.enableCulling = enableCulling ? 1u : 0u;
 
     vkCmdPushConstants(cmd, pipelineLayout,
                         VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
@@ -1156,7 +1158,7 @@ void Renderer::createPipelineLayout() {
                                     VK_SHADER_STAGE_MESH_BIT_EXT |
                                     VK_SHADER_STAGE_FRAGMENT_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(glm::mat4) + 10 * sizeof(uint32_t); // 104 bytes
+    pushConstantRange.size = sizeof(glm::mat4) + 11 * sizeof(uint32_t); // 108 bytes
 
     std::array<VkDescriptorSetLayout, 3> setLayouts = {
         sceneSetLayout,
@@ -1792,6 +1794,11 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::Text("Elements: %u (%u faces + %u verts)",
                      totalElements, heNbFaces, heNbVertices);
         ImGui::Text("Total mesh tasks: %u", totalElements * totalTiles);
+    }
+
+    // Culling controls
+    if (ImGui::CollapsingHeader("Culling")) {
+        ImGui::Checkbox("Enable Frustum Culling", &enableCulling);
     }
 
     // Lighting controls
