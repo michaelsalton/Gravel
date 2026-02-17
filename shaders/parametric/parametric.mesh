@@ -41,6 +41,10 @@ layout(push_constant) uniform PushConstants {
     uint nbFaces;
     uint nbVertices;
     uint elementType;
+    float userScaling;
+    float torusMajorR;
+    float torusMinorR;
+    float sphereRadius;
     uint padding;
 } push;
 
@@ -53,7 +57,6 @@ layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
 } viewUBO;
 
 void main() {
-    // 8x8 grid for smooth torus geometry
     const uint M = 8;
     const uint N = 8;
 
@@ -66,14 +69,10 @@ void main() {
     mat4 mvp = viewUBO.projection * viewUBO.view * push.model;
     uint localId = gl_LocalInvocationID.x;
 
-    // Torus parameters (will come from UBO in Feature 3.4)
-    const float majorR = 1.0;
-    const float minorR = 0.3;
+    // Scale factor from face area and user scaling
+    float scale = sqrt(payload.area) * 0.1 * push.userScaling;
 
-    // Scale factor from face area
-    float scale = sqrt(payload.area) * 0.1;
-
-    // Rotation to align torus Z-up with element normal
+    // Rotation to align surface Z-up with element normal
     mat3 rotation = alignRotationToVector(payload.normal);
 
     // Generate vertices in parallel
@@ -82,9 +81,10 @@ void main() {
         uint v = i / (M + 1);
         vec2 uv = vec2(u, v) / vec2(M, N);
 
-        // Evaluate parametric torus
+        // Evaluate parametric surface via dispatch
         vec3 localPos, localNormal;
-        parametricTorus(uv, localPos, localNormal, majorR, minorR);
+        evaluateParametricSurface(uv, localPos, localNormal, payload.elementType,
+                                   push.torusMajorR, push.torusMinorR, push.sphereRadius);
 
         // Scale, rotate, translate
         localPos *= scale;

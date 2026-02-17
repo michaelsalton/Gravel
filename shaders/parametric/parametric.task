@@ -34,6 +34,10 @@ layout(push_constant) uniform PushConstants {
     uint nbFaces;       // Number of faces in mesh
     uint nbVertices;    // Number of vertices in mesh
     uint elementType;   // Parametric surface type (0=torus, 1=sphere, etc.)
+    float userScaling;  // Global scale multiplier
+    float torusMajorR;  // Torus major radius
+    float torusMinorR;  // Torus minor radius
+    float sphereRadius; // Sphere radius
     uint padding;
 } push;
 

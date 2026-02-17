@@ -219,6 +219,13 @@ private:
     uint32_t heNbFaces = 0;
     uint32_t heNbVertices = 0;
 
+    // Resurfacing config (driven by ImGui)
+    uint32_t elementType = 0;       // 0=torus, 1=sphere, 2=cone, 3=cylinder
+    float userScaling = 1.0f;
+    float torusMajorR = 1.0f;
+    float torusMinorR = 0.3f;
+    float sphereRadius = 0.5f;
+
 #ifdef NDEBUG
     const bool enableValidationLayers = false;
 #else

@@ -651,13 +651,21 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         uint32_t nbFaces;
         uint32_t nbVertices;
         uint32_t elementType;
+        float userScaling;
+        float torusMajorR;
+        float torusMinorR;
+        float sphereRadius;
         uint32_t padding;
     } pushConstants{};
 
     pushConstants.model = glm::mat4(1.0f);
     pushConstants.nbFaces = heNbFaces;
     pushConstants.nbVertices = heNbVertices;
-    pushConstants.elementType = 0;
+    pushConstants.elementType = elementType;
+    pushConstants.userScaling = userScaling;
+    pushConstants.torusMajorR = torusMajorR;
+    pushConstants.torusMinorR = torusMinorR;
+    pushConstants.sphereRadius = sphereRadius;
     pushConstants.padding = 0;
 
     vkCmdPushConstants(cmd, pipelineLayout,
@@ -1133,7 +1141,7 @@ void Renderer::createPipelineLayout() {
     pushConstantRange.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
                                     VK_SHADER_STAGE_MESH_BIT_EXT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(glm::mat4) + 4 * sizeof(uint32_t);
+    pushConstantRange.size = sizeof(glm::mat4) + 8 * sizeof(uint32_t); // 96 bytes
 
     std::array<VkDescriptorSetLayout, 3> setLayouts = {
         sceneSetLayout,
@@ -1703,14 +1711,30 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::DragFloat2("Rotation", cameraRot, 1.0f);
     }
 
-    // Resurfacing controls (placeholder)
-    if (ImGui::CollapsingHeader("Resurfacing")) {
-        ImGui::Text("(Available after Epic 3)");
-        static int gridResolution = 8;
-        ImGui::SliderInt("Grid Resolution", &gridResolution, 2, 32);
-        static int surfaceType = 0;
-        const char* surfaceTypes[] = {"Torus", "Sphere", "B-Spline"};
-        ImGui::Combo("Surface Type", &surfaceType, surfaceTypes, 3);
+    // Resurfacing controls
+    if (ImGui::CollapsingHeader("Resurfacing", ImGuiTreeNodeFlags_DefaultOpen)) {
+        const char* surfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder"};
+        int currentType = static_cast<int>(elementType);
+        if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 4)) {
+            elementType = static_cast<uint32_t>(currentType);
+        }
+
+        ImGui::SliderFloat("Global Scale", &userScaling, 0.1f, 3.0f);
+
+        ImGui::Separator();
+
+        if (elementType == 0) {
+            ImGui::Text("Torus Parameters:");
+            ImGui::SliderFloat("Major Radius", &torusMajorR, 0.3f, 2.0f);
+            ImGui::SliderFloat("Minor Radius", &torusMinorR, 0.05f, 1.0f);
+        } else if (elementType == 1) {
+            ImGui::Text("Sphere Parameters:");
+            ImGui::SliderFloat("Radius", &sphereRadius, 0.1f, 2.0f);
+        }
+
+        ImGui::Separator();
+        ImGui::Text("Tasks: %u (%u faces + %u verts)",
+                     heNbFaces + heNbVertices, heNbFaces, heNbVertices);
     }
 
     // Rendering controls (placeholder)
