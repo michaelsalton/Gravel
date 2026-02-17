@@ -3,9 +3,13 @@
 #extension GL_GOOGLE_include_directive : require
 
 #include "../shaderInterface.h"
+#include "../common.glsl"
 
-layout(local_size_x = 1) in;
-layout(max_vertices = 3, max_primitives = 1, triangles) out;
+// 32 threads for parallel vertex/primitive generation
+layout(local_size_x = 32) in;
+
+// Output limits: supports up to 8x8 grid (81 verts, 128 tris)
+layout(max_vertices = 81, max_primitives = 128, triangles) out;
 
 // Must match task shader payload
 struct TaskPayload {
@@ -20,7 +24,16 @@ struct TaskPayload {
 
 taskPayloadSharedEXT TaskPayload payload;
 
-layout(location = 0) out vec4 vColor[];
+// Per-vertex outputs
+layout(location = 0) out PerVertexData {
+    vec4 worldPosU;  // xyz = world position, w = u coordinate
+    vec4 normalV;    // xyz = world normal, w = v coordinate
+} vOut[];
+
+// Per-primitive outputs
+layout(location = 2) perprimitiveEXT out PerPrimitiveData {
+    flat uvec4 data;  // x = taskId, y = isVertex, z = elementType, w = unused
+} pOut[];
 
 layout(push_constant) uniform PushConstants {
     mat4 model;
@@ -39,34 +52,62 @@ layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
 } viewUBO;
 
 void main() {
-    SetMeshOutputsEXT(3, 1);
+    // Hardcoded 2x2 grid (parametric surfaces and configurable resolution come later)
+    const uint M = 2;
+    const uint N = 2;
+
+    const uint numVerts = (M + 1) * (N + 1);  // 9
+    const uint numQuads = M * N;               // 4
+    const uint numPrims = numQuads * 2;        // 8
+
+    SetMeshOutputsEXT(numVerts, numPrims);
 
     mat4 mvp = viewUBO.projection * viewUBO.view * push.model;
+    uint localId = gl_LocalInvocationID.x;
 
-    // Emit a small triangle at the element position for validation
-    float size = sqrt(payload.area) * 0.1;
-    vec3 p = payload.position;
-    vec3 n = normalize(payload.normal);
+    // Generate vertices in parallel
+    for (uint i = localId; i < numVerts; i += 32) {
+        uint u = i % (M + 1);
+        uint v = i / (M + 1);
+        vec2 uv = vec2(u, v) / vec2(M, N);
 
-    // Build a tangent frame from the normal
-    vec3 helper = abs(n.z) < 0.999 ? vec3(0, 0, 1) : vec3(1, 0, 0);
-    vec3 t = normalize(cross(helper, n));
-    vec3 b = cross(n, t);
+        // Local position: flat quad in [-1,1] range
+        vec3 localPos = vec3((uv - 0.5) * 2.0, 0.0);
 
-    vec3 v0 = p + t * size;
-    vec3 v1 = p - t * 0.5 * size + b * 0.866 * size;
-    vec3 v2 = p - t * 0.5 * size - b * 0.866 * size;
+        // Scale by face area
+        float scale = sqrt(payload.area) * 0.1;
+        localPos *= scale;
 
-    gl_MeshVerticesEXT[0].gl_Position = mvp * vec4(v0, 1.0);
-    gl_MeshVerticesEXT[1].gl_Position = mvp * vec4(v1, 1.0);
-    gl_MeshVerticesEXT[2].gl_Position = mvp * vec4(v2, 1.0);
+        // Rotate to align with element normal
+        mat3 rotation = alignRotationToVector(payload.normal);
+        localPos = rotation * localPos;
 
-    // Color: green for face elements, blue for vertex elements
-    vec4 color = payload.isVertex == 1u ? vec4(0.3, 0.5, 1.0, 1.0)
-                                        : vec4(0.3, 1.0, 0.5, 1.0);
-    vColor[0] = color;
-    vColor[1] = color;
-    vColor[2] = color;
+        // Translate to element position
+        vec3 worldPos = payload.position + localPos;
+        vec3 worldNormal = rotation * vec3(0.0, 0.0, 1.0);
 
-    gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0, 1, 2);
+        vOut[i].worldPosU = vec4(worldPos, uv.x);
+        vOut[i].normalV = vec4(worldNormal, uv.y);
+        gl_MeshVerticesEXT[i].gl_Position = mvp * vec4(worldPos, 1.0);
+    }
+
+    // Generate triangle indices in parallel
+    for (uint q = localId; q < numQuads; q += 32) {
+        uint qu = q % M;
+        uint qv = q / M;
+
+        uint v00 = qv * (M + 1) + qu;
+        uint v10 = v00 + 1;
+        uint v01 = v00 + (M + 1);
+        uint v11 = v01 + 1;
+
+        uint triId0 = 2 * q;
+        uint triId1 = 2 * q + 1;
+
+        gl_PrimitiveTriangleIndicesEXT[triId0] = uvec3(v00, v10, v11);
+        gl_PrimitiveTriangleIndicesEXT[triId1] = uvec3(v00, v11, v01);
+
+        pOut[triId0].data = uvec4(payload.taskId, payload.isVertex, payload.elementType, 0);
+        pOut[triId1].data = uvec4(payload.taskId, payload.isVertex, payload.elementType, 0);
+    }
 }

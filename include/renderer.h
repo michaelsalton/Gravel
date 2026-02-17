@@ -217,6 +217,7 @@ private:
 
     bool heMeshUploaded = false;
     uint32_t heNbFaces = 0;
+    uint32_t heNbVertices = 0;
 
 #ifdef NDEBUG
     const bool enableValidationLayers = false;

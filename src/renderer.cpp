@@ -646,12 +646,26 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                                  0, nullptr);
     }
 
-    glm::mat4 model = glm::mat4(1.0f);
+    struct PushConstants {
+        glm::mat4 model;
+        uint32_t nbFaces;
+        uint32_t nbVertices;
+        uint32_t elementType;
+        uint32_t padding;
+    } pushConstants{};
+
+    pushConstants.model = glm::mat4(1.0f);
+    pushConstants.nbFaces = heNbFaces;
+    pushConstants.nbVertices = heNbVertices;
+    pushConstants.elementType = 0;
+    pushConstants.padding = 0;
+
     vkCmdPushConstants(cmd, pipelineLayout,
                         VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT,
-                        0, sizeof(glm::mat4), &model);
+                        0, sizeof(PushConstants), &pushConstants);
 
-    pfnCmdDrawMeshTasksEXT(cmd, heMeshUploaded ? heNbFaces : 1, 1, 1);
+    uint32_t totalTasks = heMeshUploaded ? (heNbFaces + heNbVertices) : 1;
+    pfnCmdDrawMeshTasksEXT(cmd, totalTasks, 1, 1);
 
     // Draw ImGui on top
     renderImGui(cmd);
@@ -1119,7 +1133,7 @@ void Renderer::createPipelineLayout() {
     pushConstantRange.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
                                     VK_SHADER_STAGE_MESH_BIT_EXT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(glm::mat4);
+    pushConstantRange.size = sizeof(glm::mat4) + 4 * sizeof(uint32_t);
 
     std::array<VkDescriptorSetLayout, 3> setLayouts = {
         sceneSetLayout,
@@ -1325,9 +1339,9 @@ void Renderer::loadMeshShaderFunctions() {
 }
 
 void Renderer::createGraphicsPipeline() {
-    auto taskCode = readFile(std::string(SHADER_DIR) + "test.task.spv");
-    auto meshCode = readFile(std::string(SHADER_DIR) + "test_halfedge.mesh.spv");
-    auto fragCode = readFile(std::string(SHADER_DIR) + "test_halfedge.frag.spv");
+    auto taskCode = readFile(std::string(SHADER_DIR) + "parametric.task.spv");
+    auto meshCode = readFile(std::string(SHADER_DIR) + "parametric.mesh.spv");
+    auto fragCode = readFile(std::string(SHADER_DIR) + "parametric.frag.spv");
 
     VkShaderModule taskModule = createShaderModule(taskCode);
     VkShaderModule meshModule = createShaderModule(meshCode);
@@ -1510,6 +1524,7 @@ void Renderer::uploadHalfEdgeMesh(const HalfEdgeMesh& mesh) {
 
     heMeshUploaded = true;
     heNbFaces = mesh.nbFaces;
+    heNbVertices = mesh.nbVertices;
 
     size_t vram = calculateVRAM();
     std::cout << "Half-edge mesh uploaded to GPU" << std::endl;
