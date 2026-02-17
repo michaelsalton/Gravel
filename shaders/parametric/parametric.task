@@ -38,7 +38,8 @@ layout(push_constant) uniform PushConstants {
     float torusMajorR;  // Torus major radius
     float torusMinorR;  // Torus minor radius
     float sphereRadius; // Sphere radius
-    uint padding;
+    uint resolutionM;   // UV grid M resolution
+    uint resolutionN;   // UV grid N resolution
 } push;
 
 // ============================================================================

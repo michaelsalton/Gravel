@@ -225,6 +225,8 @@ private:
     float torusMajorR = 1.0f;
     float torusMinorR = 0.3f;
     float sphereRadius = 0.5f;
+    uint32_t resolutionM = 8;
+    uint32_t resolutionN = 8;
 
 #ifdef NDEBUG
     const bool enableValidationLayers = false;

@@ -9,8 +9,9 @@
 // 32 threads for parallel vertex/primitive generation
 layout(local_size_x = 32) in;
 
-// Output limits: 8x8 grid = 81 verts, 128 tris
-layout(max_vertices = 81, max_primitives = 128, triangles) out;
+// Output limits: supports up to 11x11 grid (144 verts, 242 prims)
+// GPU max: 256 verts, 256 prims
+layout(max_vertices = 256, max_primitives = 256, triangles) out;
 
 // Must match task shader payload
 struct TaskPayload {
@@ -45,7 +46,8 @@ layout(push_constant) uniform PushConstants {
     float torusMajorR;
     float torusMinorR;
     float sphereRadius;
-    uint padding;
+    uint resolutionM;
+    uint resolutionN;
 } push;
 
 layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
@@ -57,23 +59,18 @@ layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
 } viewUBO;
 
 void main() {
-    const uint M = 8;
-    const uint N = 8;
+    // Read resolution from push constants
+    uint M = push.resolutionM;
+    uint N = push.resolutionN;
 
-    const uint numVerts = (M + 1) * (N + 1);  // 81
-    const uint numQuads = M * N;               // 64
-    const uint numPrims = numQuads * 2;        // 128
+    uint numVerts = (M + 1) * (N + 1);
+    uint numQuads = M * N;
+    uint numPrims = numQuads * 2;
 
     SetMeshOutputsEXT(numVerts, numPrims);
 
     mat4 mvp = viewUBO.projection * viewUBO.view * push.model;
     uint localId = gl_LocalInvocationID.x;
-
-    // Scale factor from face area and user scaling
-    float scale = sqrt(payload.area) * 0.1 * push.userScaling;
-
-    // Rotation to align surface Z-up with element normal
-    mat3 rotation = alignRotationToVector(payload.normal);
 
     // Generate vertices in parallel
     for (uint i = localId; i < numVerts; i += 32) {
@@ -81,15 +78,16 @@ void main() {
         uint v = i / (M + 1);
         vec2 uv = vec2(u, v) / vec2(M, N);
 
-        // Evaluate parametric surface via dispatch
+        // Evaluate parametric surface in local space
         vec3 localPos, localNormal;
         evaluateParametricSurface(uv, localPos, localNormal, payload.elementType,
                                    push.torusMajorR, push.torusMinorR, push.sphereRadius);
 
-        // Scale, rotate, translate
-        localPos *= scale;
-        vec3 worldPos = payload.position + rotation * localPos;
-        vec3 worldNormal = rotation * localNormal;
+        // Transform to world space via offsetVertex
+        vec3 worldPos, worldNormal;
+        offsetVertex(localPos, localNormal,
+                     payload.position, payload.normal, payload.area, push.userScaling,
+                     worldPos, worldNormal);
 
         vOut[i].worldPosU = vec4(worldPos, uv.x);
         vOut[i].normalV = vec4(worldNormal, uv.y);

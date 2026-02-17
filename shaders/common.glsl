@@ -53,4 +53,23 @@ mat3 alignRotationToVector(vec3 normal) {
     return mat3(tangent, bitangent, n);
 }
 
+// Full transform pipeline: scale -> rotate -> translate
+// Converts local parametric surface coordinates to world space
+void offsetVertex(vec3 localPos, vec3 localNormal,
+                  vec3 elementPos, vec3 elementNormal, float faceArea, float userScaling,
+                  out vec3 worldPos, out vec3 worldNormal) {
+    // Scale proportionally to sqrt(face_area)
+    float scale = sqrt(faceArea) * userScaling;
+    vec3 scaledPos = localPos * scale;
+
+    // Rotate to align with element normal
+    mat3 rotation = alignRotationToVector(elementNormal);
+    vec3 rotatedPos = rotation * scaledPos;
+    vec3 rotatedNormal = rotation * localNormal;
+
+    // Translate to element position
+    worldPos = elementPos + rotatedPos;
+    worldNormal = rotatedNormal;
+}
+
 #endif // COMMON_GLSL

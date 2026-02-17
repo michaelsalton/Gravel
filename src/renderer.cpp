@@ -655,7 +655,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         float torusMajorR;
         float torusMinorR;
         float sphereRadius;
-        uint32_t padding;
+        uint32_t resolutionM;
+        uint32_t resolutionN;
     } pushConstants{};
 
     pushConstants.model = glm::mat4(1.0f);
@@ -666,7 +667,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     pushConstants.torusMajorR = torusMajorR;
     pushConstants.torusMinorR = torusMinorR;
     pushConstants.sphereRadius = sphereRadius;
-    pushConstants.padding = 0;
+    pushConstants.resolutionM = resolutionM;
+    pushConstants.resolutionN = resolutionN;
 
     vkCmdPushConstants(cmd, pipelineLayout,
                         VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT,
@@ -1141,7 +1143,7 @@ void Renderer::createPipelineLayout() {
     pushConstantRange.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
                                     VK_SHADER_STAGE_MESH_BIT_EXT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(glm::mat4) + 8 * sizeof(uint32_t); // 96 bytes
+    pushConstantRange.size = sizeof(glm::mat4) + 9 * sizeof(uint32_t); // 100 bytes
 
     std::array<VkDescriptorSetLayout, 3> setLayouts = {
         sceneSetLayout,
@@ -1730,6 +1732,26 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         } else if (elementType == 1) {
             ImGui::Text("Sphere Parameters:");
             ImGui::SliderFloat("Radius", &sphereRadius, 0.1f, 2.0f);
+        }
+
+        ImGui::Separator();
+
+        // Resolution controls
+        ImGui::Text("UV Grid Resolution:");
+        int resM = static_cast<int>(resolutionM);
+        int resN = static_cast<int>(resolutionN);
+        if (ImGui::SliderInt("Resolution M", &resM, 2, 11)) {
+            resolutionM = static_cast<uint32_t>(resM);
+        }
+        if (ImGui::SliderInt("Resolution N", &resN, 2, 11)) {
+            resolutionN = static_cast<uint32_t>(resN);
+        }
+
+        uint32_t numVerts = (resolutionM + 1) * (resolutionN + 1);
+        uint32_t numPrims = resolutionM * resolutionN * 2;
+        ImGui::Text("Verts: %u  Prims: %u  (max 256 each)", numVerts, numPrims);
+        if (numVerts > 256 || numPrims > 256) {
+            ImGui::TextColored(ImVec4(1, 0, 0, 1), "Exceeds GPU limits!");
         }
 
         ImGui::Separator();
