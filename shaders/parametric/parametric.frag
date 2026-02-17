@@ -15,17 +15,9 @@ layout(location = 2) perprimitiveEXT in PerPrimitiveData {
 layout(location = 0) out vec4 outColor;
 
 void main() {
-    vec2 uv = vec2(vIn.worldPosU.w, vIn.normalV.w);
-
-    // Color by UV for debugging
-    vec3 color = vec3(uv, 0.5);
-
-    // Tint face elements green, vertex elements blue
-    if (pIn.data.y == 1u) {
-        color *= vec3(0.6, 0.8, 1.0);
-    } else {
-        color *= vec3(0.8, 1.0, 0.6);
-    }
+    // Visualize normals as RGB colors (map [-1,1] to [0,1])
+    vec3 normal = normalize(vIn.normalV.xyz);
+    vec3 color = normal * 0.5 + 0.5;
 
     outColor = vec4(color, 1.0);
 }
