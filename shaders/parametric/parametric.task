@@ -12,7 +12,6 @@ layout(local_size_x = 1) in;
 // Task Payload
 // ============================================================================
 
-// Payload transferred from task shader to mesh shader
 struct TaskPayload {
     vec3 position;      // Face center or vertex position
     vec3 normal;        // Face normal or vertex normal
@@ -20,7 +19,10 @@ struct TaskPayload {
     uint taskId;        // Global element ID
     uint isVertex;      // 1 if vertex element, 0 if face element
     uint elementType;   // Parametric surface type
-    uint padding;       // Alignment
+    uint resolutionM;   // Target M resolution
+    uint resolutionN;   // Target N resolution
+    uint deltaU;        // Tile size in U direction
+    uint deltaV;        // Tile size in V direction
 };
 
 taskPayloadSharedEXT TaskPayload payload;
@@ -44,39 +46,67 @@ layout(push_constant) uniform PushConstants {
 } push;
 
 // ============================================================================
-// Main: Mapping Function F
+// Amplification Function K
+// ============================================================================
+
+// Compute maximum tile size that fits within hardware limits
+// Constraints:
+//   (deltaU + 1) * (deltaV + 1) <= maxVertices
+//   deltaU * deltaV * 2 <= maxPrimitives
+void getDeltaUV(uint M, uint N, out uint deltaU, out uint deltaV) {
+    const uint maxVertices = 256;
+    const uint maxPrimitives = 256;
+
+    deltaU = M;
+    deltaV = N;
+
+    // Vertex constraint
+    uint numVerts = (deltaU + 1) * (deltaV + 1);
+    if (numVerts > maxVertices) {
+        uint maxDelta = uint(sqrt(float(maxVertices))) - 1;
+        deltaU = min(deltaU, maxDelta);
+        deltaV = min(deltaV, maxDelta);
+    }
+
+    // Primitive constraint
+    uint numPrims = deltaU * deltaV * 2;
+    if (numPrims > maxPrimitives) {
+        uint maxDelta = uint(sqrt(float(maxPrimitives) / 2.0));
+        deltaU = min(deltaU, maxDelta);
+        deltaV = min(deltaV, maxDelta);
+    }
+
+    // Ensure at least 2x2 grid
+    deltaU = max(deltaU, 2u);
+    deltaV = max(deltaV, 2u);
+}
+
+// ============================================================================
+// Main: Mapping Function F with Amplification K
 // ============================================================================
 
 void main() {
-    // Global task ID = workgroup ID
     uint globalId = gl_WorkGroupID.x;
 
-    // Total number of tasks = nbFaces + nbVertices
-    // First nbFaces tasks are face elements
-    // Remaining nbVertices tasks are vertex elements
     bool isVertex = (globalId >= push.nbFaces);
 
     uint faceId = 0;
     uint vertId = 0;
 
     if (isVertex) {
-        // Vertex element
         vertId = globalId - push.nbFaces;
 
-        // Get associated face via outgoing half-edge
         int edge = readVertexEdge(vertId);
         if (edge >= 0) {
             faceId = uint(readHalfEdgeFace(uint(edge)));
         } else {
-            // Isolated vertex — shouldn't happen with valid mesh
             faceId = 0;
         }
 
         payload.position = readVertexPosition(vertId);
         payload.normal = readVertexNormal(vertId);
-        payload.area = readFaceArea(faceId); // Use adjacent face area for scaling
+        payload.area = readFaceArea(faceId);
     } else {
-        // Face element
         faceId = globalId;
 
         payload.position = readFaceCenter(faceId);
@@ -84,12 +114,26 @@ void main() {
         payload.area = readFaceArea(faceId);
     }
 
-    // Populate remaining payload fields
     payload.taskId = globalId;
     payload.isVertex = isVertex ? 1u : 0u;
     payload.elementType = push.elementType;
 
-    // Emit one mesh shader invocation
-    // (In Epic 4, this will emit multiple invocations for large grids)
-    EmitMeshTasksEXT(1, 1, 1);
+    // Amplification: compute tile size and emit 2D grid of mesh tasks
+    uint M = push.resolutionM;
+    uint N = push.resolutionN;
+
+    payload.resolutionM = M;
+    payload.resolutionN = N;
+
+    uint deltaU, deltaV;
+    getDeltaUV(M, N, deltaU, deltaV);
+
+    payload.deltaU = deltaU;
+    payload.deltaV = deltaV;
+
+    // Ceiling division: number of tiles needed
+    uint numTilesU = (M + deltaU - 1) / deltaU;
+    uint numTilesV = (N + deltaV - 1) / deltaV;
+
+    EmitMeshTasksEXT(numTilesU, numTilesV, 1);
 }

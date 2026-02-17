@@ -9,7 +9,7 @@
 // 32 threads for parallel vertex/primitive generation
 layout(local_size_x = 32) in;
 
-// Output limits: supports up to 11x11 grid (144 verts, 242 prims)
+// Output limits: max tile is 11x11 (144 verts, 242 prims)
 // GPU max: 256 verts, 256 prims
 layout(max_vertices = 256, max_primitives = 256, triangles) out;
 
@@ -21,7 +21,10 @@ struct TaskPayload {
     uint taskId;
     uint isVertex;
     uint elementType;
-    uint padding;
+    uint resolutionM;
+    uint resolutionN;
+    uint deltaU;
+    uint deltaV;
 };
 
 taskPayloadSharedEXT TaskPayload payload;
@@ -60,12 +63,24 @@ layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
 } viewUBO;
 
 void main() {
-    // Read resolution from push constants
-    uint M = push.resolutionM;
-    uint N = push.resolutionN;
+    // Read resolution and tile info from payload
+    uint M = payload.resolutionM;
+    uint N = payload.resolutionN;
+    uint deltaU = payload.deltaU;
+    uint deltaV = payload.deltaV;
 
-    uint numVerts = (M + 1) * (N + 1);
-    uint numQuads = M * N;
+    // Compute UV offset for this tile using workgroup ID
+    uint tileU = gl_WorkGroupID.x;
+    uint tileV = gl_WorkGroupID.y;
+    uint startU = tileU * deltaU;
+    uint startV = tileV * deltaV;
+
+    // Handle edge tiles (may be smaller than deltaU x deltaV)
+    uint localM = min(deltaU, M - startU);
+    uint localN = min(deltaV, N - startV);
+
+    uint numVerts = (localM + 1) * (localN + 1);
+    uint numQuads = localM * localN;
     uint numPrims = numQuads * 2;
 
     SetMeshOutputsEXT(numVerts, numPrims);
@@ -75,9 +90,11 @@ void main() {
 
     // Generate vertices in parallel
     for (uint i = localId; i < numVerts; i += 32) {
-        uint u = i % (M + 1);
-        uint v = i / (M + 1);
-        vec2 uv = vec2(u, v) / vec2(M, N);
+        uint u = i % (localM + 1);
+        uint v = i / (localM + 1);
+
+        // Map local tile UV to global UV [0,1]
+        vec2 uv = vec2(startU + u, startV + v) / vec2(M, N);
 
         // Evaluate parametric surface in local space
         vec3 localPos, localNormal;
@@ -97,12 +114,12 @@ void main() {
 
     // Generate triangle indices in parallel
     for (uint q = localId; q < numQuads; q += 32) {
-        uint qu = q % M;
-        uint qv = q / M;
+        uint qu = q % localM;
+        uint qv = q / localM;
 
-        uint v00 = qv * (M + 1) + qu;
+        uint v00 = qv * (localM + 1) + qu;
         uint v10 = v00 + 1;
-        uint v01 = v00 + (M + 1);
+        uint v01 = v00 + (localM + 1);
         uint v11 = v01 + 1;
 
         uint triId0 = 2 * q;

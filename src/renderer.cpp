@@ -1750,27 +1750,48 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
         ImGui::Separator();
 
-        // Resolution controls
+        // Resolution controls (tiling allows beyond single-tile limit)
         ImGui::Text("UV Grid Resolution:");
         int resM = static_cast<int>(resolutionM);
         int resN = static_cast<int>(resolutionN);
-        if (ImGui::SliderInt("Resolution M", &resM, 2, 11)) {
+        if (ImGui::SliderInt("Resolution M", &resM, 2, 64)) {
             resolutionM = static_cast<uint32_t>(resM);
         }
-        if (ImGui::SliderInt("Resolution N", &resN, 2, 11)) {
+        if (ImGui::SliderInt("Resolution N", &resN, 2, 64)) {
             resolutionN = static_cast<uint32_t>(resN);
         }
 
-        uint32_t numVerts = (resolutionM + 1) * (resolutionN + 1);
-        uint32_t numPrims = resolutionM * resolutionN * 2;
-        ImGui::Text("Verts: %u  Prims: %u  (max 256 each)", numVerts, numPrims);
-        if (numVerts > 256 || numPrims > 256) {
-            ImGui::TextColored(ImVec4(1, 0, 0, 1), "Exceeds GPU limits!");
+        // Compute tile info (mirror shader getDeltaUV logic)
+        uint32_t deltaU = resolutionM, deltaV = resolutionN;
+        if ((deltaU + 1) * (deltaV + 1) > 256) {
+            uint32_t maxD = static_cast<uint32_t>(std::sqrt(256.0f)) - 1;
+            deltaU = std::min(deltaU, maxD);
+            deltaV = std::min(deltaV, maxD);
         }
+        if (deltaU * deltaV * 2 > 256) {
+            uint32_t maxD = static_cast<uint32_t>(std::sqrt(256.0f / 2.0f));
+            deltaU = std::min(deltaU, maxD);
+            deltaV = std::min(deltaV, maxD);
+        }
+        deltaU = std::max(deltaU, 2u);
+        deltaV = std::max(deltaV, 2u);
+
+        uint32_t numTilesU = (resolutionM + deltaU - 1) / deltaU;
+        uint32_t numTilesV = (resolutionN + deltaV - 1) / deltaV;
+        uint32_t totalTiles = numTilesU * numTilesV;
+        uint32_t tileVerts = (deltaU + 1) * (deltaV + 1);
+        uint32_t tilePrims = deltaU * deltaV * 2;
+
+        ImGui::Text("Tile: %ux%u (%u verts, %u prims)",
+                     deltaU, deltaV, tileVerts, tilePrims);
+        ImGui::Text("Tiles: %ux%u = %u per element",
+                     numTilesU, numTilesV, totalTiles);
 
         ImGui::Separator();
-        ImGui::Text("Tasks: %u (%u faces + %u verts)",
-                     heNbFaces + heNbVertices, heNbFaces, heNbVertices);
+        uint32_t totalElements = heNbFaces + heNbVertices;
+        ImGui::Text("Elements: %u (%u faces + %u verts)",
+                     totalElements, heNbFaces, heNbVertices);
+        ImGui::Text("Total mesh tasks: %u", totalElements * totalTiles);
     }
 
     // Lighting controls
