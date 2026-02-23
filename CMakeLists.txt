@@ -58,6 +58,7 @@ endif()
 set(SOURCES
     src/main.cpp
     src/window.cpp
+    src/camera.cpp
     src/renderer.cpp
     src/loaders/ObjLoader.cpp
     src/loaders/LUTLoader.cpp

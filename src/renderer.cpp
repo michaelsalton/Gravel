@@ -682,22 +682,15 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
 
     // Update view UBO from current camera state
     {
-        glm::vec3 forward;
-        forward.x = cos(glm::radians(cameraYaw)) * cos(glm::radians(cameraPitch));
-        forward.y = sin(glm::radians(cameraPitch));
-        forward.z = sin(glm::radians(cameraYaw)) * cos(glm::radians(cameraPitch));
-        forward = glm::normalize(forward);
-
         float aspect = static_cast<float>(swapChainExtent.width) /
                        static_cast<float>(swapChainExtent.height);
 
         ViewUBO viewData{};
-        viewData.view = glm::lookAt(cameraPos, cameraPos + forward, glm::vec3(0.0f, 1.0f, 0.0f));
-        viewData.projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
-        viewData.projection[1][1] *= -1;
-        viewData.cameraPosition = glm::vec4(cameraPos, 1.0f);
-        viewData.nearPlane = 0.1f;
-        viewData.farPlane  = 100.0f;
+        viewData.view           = camera.getViewMatrix();
+        viewData.projection     = camera.getProjectionMatrix(aspect);
+        viewData.cameraPosition = glm::vec4(camera.position, 1.0f);
+        viewData.nearPlane      = camera.nearPlane;
+        viewData.farPlane       = camera.farPlane;
         memcpy(viewUBOMapped[currentFrame], &viewData, sizeof(ViewUBO));
     }
 
@@ -1275,15 +1268,11 @@ void Renderer::createUniformBuffers() {
                    static_cast<float>(swapChainExtent.height);
 
     ViewUBO viewData{};
-    viewData.view = glm::lookAt(
-        glm::vec3(0.0f, 2.0f, 4.0f),   // eye
-        glm::vec3(0.0f, 0.0f, 0.0f),   // center
-        glm::vec3(0.0f, 1.0f, 0.0f));  // up
-    viewData.projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
-    viewData.projection[1][1] *= -1;  // Flip Y for Vulkan
-    viewData.cameraPosition = glm::vec4(0.0f, 2.0f, 4.0f, 1.0f);
-    viewData.nearPlane = 0.1f;
-    viewData.farPlane = 100.0f;
+    viewData.view           = camera.getViewMatrix();
+    viewData.projection     = camera.getProjectionMatrix(aspect);
+    viewData.cameraPosition = glm::vec4(camera.position, 1.0f);
+    viewData.nearPlane      = camera.nearPlane;
+    viewData.farPlane       = camera.farPlane;
 
     GlobalShadingUBO shadingData{};
     shadingData.lightPosition = glm::vec4(lightPosition, 0.0f);
@@ -1788,57 +1777,7 @@ void Renderer::updatePerObjectDescriptorSet() {
 }
 
 void Renderer::processInput(Window& win, float deltaTime) {
-    GLFWwindow* glfwWin = win.getHandle();
-    ImGuiIO& io = ImGui::GetIO();
-
-    // Snapshot and reset accumulated deltas for this frame
-    float dx     = win.getMouseDeltaX();
-    float dy     = win.getMouseDeltaY();
-    float scroll = win.getScrollDelta();
-    win.resetInputDeltas();
-
-    // Mouse look — right-click drag, only when ImGui isn't using the mouse
-    if (!io.WantCaptureMouse &&
-        glfwGetMouseButton(glfwWin, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
-        cameraYaw   += dx * mouseSensitivity;
-        cameraPitch -= dy * mouseSensitivity;  // screen Y is inverted relative to world
-        cameraPitch  = glm::clamp(cameraPitch, -89.0f, 89.0f);
-    }
-
-    // Compute forward/right vectors from current yaw/pitch
-    glm::vec3 forward;
-    forward.x = cos(glm::radians(cameraYaw)) * cos(glm::radians(cameraPitch));
-    forward.y = sin(glm::radians(cameraPitch));
-    forward.z = sin(glm::radians(cameraYaw)) * cos(glm::radians(cameraPitch));
-    forward = glm::normalize(forward);
-
-    glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
-    glm::vec3 up    = glm::vec3(0.0f, 1.0f, 0.0f);
-
-    // Scroll: move forward/backward (no keyboard capture needed)
-    if (!io.WantCaptureMouse && scroll != 0.0f) {
-        cameraPos += forward * scroll * cameraSpeed * 0.5f;
-    }
-
-    // Keyboard movement — only when ImGui isn't using the keyboard
-    if (!io.WantCaptureKeyboard) {
-        float speed = cameraSpeed * deltaTime;
-        if (glfwGetKey(glfwWin, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
-            glfwGetKey(glfwWin, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS) {
-            speed *= 5.0f;
-        }
-
-        if (glfwGetKey(glfwWin, GLFW_KEY_W) == GLFW_PRESS ||
-            glfwGetKey(glfwWin, GLFW_KEY_UP) == GLFW_PRESS)    cameraPos += forward * speed;
-        if (glfwGetKey(glfwWin, GLFW_KEY_S) == GLFW_PRESS ||
-            glfwGetKey(glfwWin, GLFW_KEY_DOWN) == GLFW_PRESS)  cameraPos -= forward * speed;
-        if (glfwGetKey(glfwWin, GLFW_KEY_A) == GLFW_PRESS ||
-            glfwGetKey(glfwWin, GLFW_KEY_LEFT) == GLFW_PRESS)  cameraPos -= right * speed;
-        if (glfwGetKey(glfwWin, GLFW_KEY_D) == GLFW_PRESS ||
-            glfwGetKey(glfwWin, GLFW_KEY_RIGHT) == GLFW_PRESS) cameraPos += right * speed;
-        if (glfwGetKey(glfwWin, GLFW_KEY_E) == GLFW_PRESS)     cameraPos += up * speed;
-        if (glfwGetKey(glfwWin, GLFW_KEY_Q) == GLFW_PRESS)     cameraPos -= up * speed;
-    }
+    camera.processInput(win, deltaTime);
 }
 
 void Renderer::loadControlCage(const std::string& filepath) {
@@ -1986,9 +1925,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
     // Camera controls
     if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::DragFloat3("Position", &cameraPos.x, 0.1f);
-        ImGui::DragFloat("Yaw",   &cameraYaw,   0.5f, -180.0f, 180.0f, "%.1f deg");
-        ImGui::DragFloat("Pitch", &cameraPitch, 0.5f,  -89.0f,  89.0f, "%.1f deg");
+        camera.renderImGuiControls();
     }
 
     // Resurfacing controls
@@ -2113,18 +2050,9 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
         if (heMeshUploaded && (enableFrustumCulling || enableBackfaceCulling)) {
             // Mirror task shader culling on CPU to count visible elements
-            glm::vec3 forward;
-            forward.x = cos(glm::radians(cameraYaw))   * cos(glm::radians(cameraPitch));
-            forward.y = sin(glm::radians(cameraPitch));
-            forward.z = sin(glm::radians(cameraYaw))   * cos(glm::radians(cameraPitch));
-            forward = glm::normalize(forward);
-
             float aspect = static_cast<float>(swapChainExtent.width) /
                            static_cast<float>(swapChainExtent.height);
-            glm::mat4 view = glm::lookAt(cameraPos, cameraPos + forward, glm::vec3(0,1,0));
-            glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
-            proj[1][1] *= -1;
-            glm::mat4 mvp = proj * view; // model is identity
+            glm::mat4 mvp = camera.getProjectionMatrix(aspect) * camera.getViewMatrix();
 
             visibleElements = 0;
             auto testElement = [&](glm::vec3 pos, glm::vec3 normal, float area) -> bool {
@@ -2140,7 +2068,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                     if (ndc.z + cr <  0.0f || ndc.z - cr > 1.0f) return false;
                 }
                 if (enableBackfaceCulling) {
-                    glm::vec3 viewDir = glm::normalize(cameraPos - pos);
+                    glm::vec3 viewDir = glm::normalize(camera.position - pos);
                     if (glm::dot(viewDir, normal) <= cullingThreshold) return false;
                 }
                 return true;
