@@ -49,6 +49,8 @@ layout(push_constant) uniform PushConstants {
     uint debugMode;     // 0=shading, 1=normals, 2=UV, 3=taskID, 4=element type
     uint enableCulling;
     float cullingThreshold;
+    uint enableLod;
+    float lodFactor;
 } push;
 
 layout(location = 0) out vec4 outColor;

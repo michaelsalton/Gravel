@@ -100,4 +100,34 @@ float getScreenSpaceSize(vec3 elementPos, vec3 elementNormal, float faceArea, fl
                                   faceArea, userScaling, mvp);
 }
 
+// ============================================================================
+// LOD Resolution Selection
+// ============================================================================
+
+// Maps screen-space size to a UV grid resolution.
+// Formula: resolution = baseMN * sqrt(screenSize * lodFactor)
+// sqrt() ensures resolution scales as the square root of screen area,
+// keeping pixel density roughly constant.
+uint computeLodResolution(float screenSize, uint baseMN, float lodFactor,
+                          uint minResolution, uint maxResolution) {
+    float target = float(baseMN) * sqrt(screenSize * lodFactor);
+    uint resolution = uint(target);
+    resolution = max(resolution, minResolution);
+    resolution = min(resolution, maxResolution);
+    return resolution;
+}
+
+// Compute adaptive M×N resolution from element world-space data.
+void getLodMN(vec3 elementPos, vec3 elementNormal, float faceArea, float userScaling,
+              uint elementType, float torusMajorR, float torusMinorR, float sphereRadius,
+              mat4 mvp, uint baseMN, float lodFactor, uint minResolution, uint maxResolution,
+              out uint outM, out uint outN) {
+    float screenSize = getScreenSpaceSize(elementPos, elementNormal, faceArea, userScaling,
+                                          elementType, torusMajorR, torusMinorR, sphereRadius, mvp);
+
+    uint resolution = computeLodResolution(screenSize, baseMN, lodFactor, minResolution, maxResolution);
+    outM = resolution;
+    outN = resolution;
+}
+
 #endif // LODS_GLSL

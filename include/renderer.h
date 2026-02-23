@@ -240,6 +240,8 @@ private:
     bool enableFrustumCulling = false;
     bool enableBackfaceCulling = false;
     float cullingThreshold = 0.0f;  // Back-face dot product threshold [-1, 1]
+    bool enableLod = false;
+    float lodFactor = 1.0f;
     bool vsync = false;
     bool pendingSwapChainRecreation = false;
 

@@ -708,6 +708,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         uint32_t debugMode;
         uint32_t enableCulling;
         float cullingThreshold;
+        uint32_t enableLod;
+        float lodFactor;
     } pushConstants{};
 
     pushConstants.model = glm::mat4(1.0f);
@@ -723,6 +725,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     pushConstants.debugMode = debugMode;
     pushConstants.enableCulling = (enableFrustumCulling ? 1u : 0u) | (enableBackfaceCulling ? 2u : 0u);
     pushConstants.cullingThreshold = cullingThreshold;
+    pushConstants.enableLod = enableLod ? 1u : 0u;
+    pushConstants.lodFactor = lodFactor;
 
     vkCmdPushConstants(cmd, pipelineLayout,
                         VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
@@ -1200,7 +1204,7 @@ void Renderer::createPipelineLayout() {
                                     VK_SHADER_STAGE_MESH_BIT_EXT |
                                     VK_SHADER_STAGE_FRAGMENT_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(glm::mat4) + 12 * sizeof(uint32_t); // 112 bytes
+    pushConstantRange.size = sizeof(glm::mat4) + 14 * sizeof(uint32_t); // 120 bytes
 
     std::array<VkDescriptorSetLayout, 3> setLayouts = {
         sceneSetLayout,
@@ -1924,6 +1928,16 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             ImGui::Text("Culled:    %u (%.1f%%)", culledElements, pct);
         }
         ImGui::Text("Triangles: %u  (%u per element)", totalTris, trisPerElement);
+    }
+
+    // LOD controls
+    if (ImGui::CollapsingHeader("Level of Detail (LOD)")) {
+        ImGui::Checkbox("Adaptive LOD", &enableLod);
+        if (enableLod) {
+            ImGui::SliderFloat("LOD Factor", &lodFactor, 0.1f, 5.0f, "%.2f");
+            ImGui::TextDisabled("Base res (M/N above) = target at screen-fill");
+            ImGui::TextDisabled("< 1.0 = performance  |  > 1.0 = quality");
+        }
     }
 
     // Display / VSync
