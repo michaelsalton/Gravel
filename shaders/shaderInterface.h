@@ -53,6 +53,7 @@ struct MeshInfoUBO {
 
 #define BINDING_CONFIG_UBO 0
 #define BINDING_SHADING_UBO_PER_OBJECT 1
+#define BINDING_LUT_BUFFER 2
 
 struct ResurfacingUBO {
     uint elementType;      // 0-10 (torus, sphere, ..., B-spline, Bezier)
@@ -70,7 +71,14 @@ struct ResurfacingUBO {
     uint doCulling;        // enable culling
     float cullingThreshold;
 
-    uint padding2[4];
+    // LUT (control cage) metadata
+    uint lutNx;            // grid width  (U direction)
+    uint lutNy;            // grid height (V direction)
+    uint cyclicU;          // 0 = clamp, 1 = wrap in U
+    uint cyclicV;          // 0 = clamp, 1 = wrap in V
+
+    vec4 lutBBMin;         // bounding box minimum (w unused)
+    vec4 lutBBMax;         // bounding box maximum (w unused)
 };
 
 // ============================================================================
@@ -178,6 +186,16 @@ int getHalfEdgeTwin(uint heId) {
 
 int getVertexFaceIndex(uint index) {
     return heIntBuffer[9].data[index];
+}
+
+// --- LUT (control cage) SSBO ---
+
+LAYOUT_STD430(SET_PER_OBJECT, BINDING_LUT_BUFFER) readonly buffer LUTBuffer {
+    vec4 controlPoints[];  // Nx * Ny entries, w = 1.0 padding
+} lutBuffer;
+
+vec3 sampleLUT(uint index) {
+    return lutBuffer.controlPoints[index].xyz;
 }
 
 // --- Constants ---

@@ -1,5 +1,6 @@
 #include "renderer.h"
 #include "HalfEdge.h"
+#include "loaders/LUTLoader.h"
 #include "window.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -57,6 +58,16 @@ Renderer::~Renderer() {
         vkFreeMemory(device, viewUBOMemory[i], nullptr);
         vkDestroyBuffer(device, shadingUBOBuffers[i], nullptr);
         vkFreeMemory(device, shadingUBOMemory[i], nullptr);
+    }
+
+    if (resurfacingUBOBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, resurfacingUBOBuffer, nullptr);
+        vkFreeMemory(device, resurfacingUBOMemory, nullptr);
+    }
+
+    if (lutSSBOBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, lutSSBOBuffer, nullptr);
+        vkFreeMemory(device, lutSSBOMemory, nullptr);
     }
 
     vkDestroyDescriptorPool(device, descriptorPool, nullptr);
@@ -664,6 +675,11 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                                  0, nullptr);
     }
 
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                             pipelineLayout, 2, 1,
+                             &perObjectDescriptorSet,
+                             0, nullptr);
+
     // Update view UBO from current camera state
     {
         glm::vec3 forward;
@@ -1171,19 +1187,20 @@ void Renderer::createDescriptorSetLayouts() {
     }
 
     // Set 2: PerObject
+    // Binding 0: ResurfacingUBO (task + mesh stages)
+    // Binding 2: LUT SSBO - control cage control points (mesh stage)
     std::array<VkDescriptorSetLayoutBinding, 2> objBindings{};
 
-    objBindings[0].binding = 0;
+    objBindings[0].binding = 0;  // BINDING_CONFIG_UBO
     objBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     objBindings[0].descriptorCount = 1;
     objBindings[0].stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
-                                 VK_SHADER_STAGE_MESH_BIT_EXT |
-                                 VK_SHADER_STAGE_FRAGMENT_BIT;
+                                 VK_SHADER_STAGE_MESH_BIT_EXT;
 
-    objBindings[1].binding = 1;
-    objBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    objBindings[1].binding = 2;  // BINDING_LUT_BUFFER
+    objBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     objBindings[1].descriptorCount = 1;
-    objBindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    objBindings[1].stageFlags = VK_SHADER_STAGE_MESH_BIT_EXT;
 
     VkDescriptorSetLayoutCreateInfo objLayoutInfo{};
     objLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1280,23 +1297,36 @@ void Renderer::createUniformBuffers() {
         memcpy(shadingUBOMapped[i], &shadingData, sizeof(GlobalShadingUBO));
     }
 
+    // ResurfacingUBO (per-object, not per-frame)
+    VkDeviceSize resurfSize = sizeof(ResurfacingUBO);
+    createBuffer(resurfSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 resurfacingUBOBuffer, resurfacingUBOMemory);
+    vkMapMemory(device, resurfacingUBOMemory, 0, resurfSize, 0, &resurfacingUBOMapped);
+
+    ResurfacingUBO resurfData{};
+    memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
+
     std::cout << "Uniform buffers created and mapped" << std::endl;
 }
 
 void Renderer::createDescriptorPool() {
     std::array<VkDescriptorPoolSize, 2> poolSizes{};
 
+    // UBOs: 2 per scene frame + 1 ResurfacingUBO for per-object set
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2);
+    poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2 + 1);
 
+    // SSBOs: 17 for HE buffers + 1 for LUT
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[1].descriptorCount = 17;  // 5 vec4 + 1 vec2 + 10 int + 1 float
+    poolSizes[1].descriptorCount = 18;
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT + 1);  // scene sets + 1 HE set
+    // scene sets + 1 HE set + 1 per-object set
+    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT + 2);
 
     if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create descriptor pool!");
@@ -1365,6 +1395,34 @@ void Renderer::createDescriptorSets() {
                                   &heDescriptorSet) != VK_SUCCESS) {
         throw std::runtime_error("Failed to allocate half-edge descriptor set!");
     }
+
+    // Allocate per-object descriptor set (Set 2)
+    VkDescriptorSetAllocateInfo objAllocInfo{};
+    objAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    objAllocInfo.descriptorPool = descriptorPool;
+    objAllocInfo.descriptorSetCount = 1;
+    objAllocInfo.pSetLayouts = &perObjectSetLayout;
+
+    if (vkAllocateDescriptorSets(device, &objAllocInfo,
+                                  &perObjectDescriptorSet) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate per-object descriptor set!");
+    }
+
+    // Create 1-element dummy LUT SSBO (placeholder until a real cage is loaded)
+    lutSSBOSize = sizeof(glm::vec4);
+    createBuffer(lutSSBOSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 lutSSBOBuffer, lutSSBOMemory);
+    {
+        glm::vec4 zero{0.0f};
+        void* mapped;
+        vkMapMemory(device, lutSSBOMemory, 0, lutSSBOSize, 0, &mapped);
+        memcpy(mapped, &zero, lutSSBOSize);
+        vkUnmapMemory(device, lutSSBOMemory);
+    }
+
+    // Write both bindings to the per-object descriptor set
+    updatePerObjectDescriptorSet();
 
     std::cout << "Descriptor sets allocated and written" << std::endl;
 }
@@ -1696,6 +1754,93 @@ void Renderer::updateHEDescriptorSet() {
                            writes.data(), 0, nullptr);
 }
 
+void Renderer::updatePerObjectDescriptorSet() {
+    VkDescriptorBufferInfo uboInfo{};
+    uboInfo.buffer = resurfacingUBOBuffer;
+    uboInfo.offset = 0;
+    uboInfo.range = sizeof(ResurfacingUBO);
+
+    VkDescriptorBufferInfo ssboInfo{};
+    ssboInfo.buffer = lutSSBOBuffer;
+    ssboInfo.offset = 0;
+    ssboInfo.range = VK_WHOLE_SIZE;
+
+    std::array<VkWriteDescriptorSet, 2> writes{};
+
+    writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[0].dstSet = perObjectDescriptorSet;
+    writes[0].dstBinding = 0;  // BINDING_CONFIG_UBO
+    writes[0].dstArrayElement = 0;
+    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[0].descriptorCount = 1;
+    writes[0].pBufferInfo = &uboInfo;
+
+    writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[1].dstSet = perObjectDescriptorSet;
+    writes[1].dstBinding = 2;  // BINDING_LUT_BUFFER
+    writes[1].dstArrayElement = 0;
+    writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writes[1].descriptorCount = 1;
+    writes[1].pBufferInfo = &ssboInfo;
+
+    vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
+                           writes.data(), 0, nullptr);
+}
+
+void Renderer::loadControlCage(const std::string& filepath) {
+    LutData lut = LUTLoader::loadControlCage(filepath);
+    if (!lut.isValid) {
+        std::cerr << "LUT: failed to load " << filepath << std::endl;
+        return;
+    }
+
+    // Wait for GPU to finish using the old LUT buffer before replacing it
+    vkDeviceWaitIdle(device);
+
+    // Destroy old LUT SSBO
+    if (lutSSBOBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, lutSSBOBuffer, nullptr);
+        vkFreeMemory(device, lutSSBOMemory, nullptr);
+        lutSSBOBuffer = VK_NULL_HANDLE;
+        lutSSBOMemory = VK_NULL_HANDLE;
+    }
+
+    // Upload control points as vec4 array (w = 1.0 padding)
+    std::vector<glm::vec4> data;
+    data.reserve(lut.controlPoints.size());
+    for (const auto& p : lut.controlPoints)
+        data.push_back(glm::vec4(p, 1.0f));
+
+    lutSSBOSize = data.size() * sizeof(glm::vec4);
+    createBuffer(lutSSBOSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 lutSSBOBuffer, lutSSBOMemory);
+
+    void* mapped;
+    vkMapMemory(device, lutSSBOMemory, 0, lutSSBOSize, 0, &mapped);
+    memcpy(mapped, data.data(), lutSSBOSize);
+    vkUnmapMemory(device, lutSSBOMemory);
+
+    // Update ResurfacingUBO with LUT metadata
+    ResurfacingUBO* resurfData = static_cast<ResurfacingUBO*>(resurfacingUBOMapped);
+    resurfData->lutNx    = lut.Nx;
+    resurfData->lutNy    = lut.Ny;
+    resurfData->cyclicU  = cyclicU ? 1u : 0u;
+    resurfData->cyclicV  = cyclicV ? 1u : 0u;
+    resurfData->lutBBMin = glm::vec4(lut.bbMin, 0.0f);
+    resurfData->lutBBMax = glm::vec4(lut.bbMax, 0.0f);
+
+    currentLut  = lut;
+    lutLoaded   = true;
+    lutFilename = filepath;
+
+    // Rebind descriptor set with new SSBO
+    updatePerObjectDescriptorSet();
+
+    std::cout << "LUT loaded and uploaded: " << lut.controlPoints.size()
+              << " control points (" << lut.Nx << "x" << lut.Ny << ")" << std::endl;
+}
+
 size_t Renderer::calculateVRAM() const {
     size_t total = 0;
     for (const auto& buf : heVec4Buffers) total += buf.getSize();
@@ -1937,6 +2082,40 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             ImGui::SliderFloat("LOD Factor", &lodFactor, 0.1f, 5.0f, "%.2f");
             ImGui::TextDisabled("Base res (M/N above) = target at screen-fill");
             ImGui::TextDisabled("< 1.0 = performance  |  > 1.0 = quality");
+        }
+    }
+
+    // Control Cage (LUT)
+    if (ImGui::CollapsingHeader("Control Cage", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("File: %s", lutFilename.c_str());
+
+        if (lutLoaded) {
+            ImGui::Text("Grid: %ux%u (%zu pts)",
+                        currentLut.Nx, currentLut.Ny, currentLut.controlPoints.size());
+            ImGui::Text("BB min: (%.2f, %.2f, %.2f)",
+                        currentLut.bbMin.x, currentLut.bbMin.y, currentLut.bbMin.z);
+            ImGui::Text("BB max: (%.2f, %.2f, %.2f)",
+                        currentLut.bbMax.x, currentLut.bbMax.y, currentLut.bbMax.z);
+
+            ImGui::Separator();
+
+            bool prevCyclicU = cyclicU;
+            bool prevCyclicV = cyclicV;
+            ImGui::Checkbox("Cyclic U", &cyclicU);
+            ImGui::Checkbox("Cyclic V", &cyclicV);
+            if (cyclicU != prevCyclicU || cyclicV != prevCyclicV) {
+                ResurfacingUBO* d = static_cast<ResurfacingUBO*>(resurfacingUBOMapped);
+                d->cyclicU = cyclicU ? 1u : 0u;
+                d->cyclicV = cyclicV ? 1u : 0u;
+            }
+        } else {
+            ImGui::TextDisabled("No cage loaded.");
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::Button("Load scale_4x4.obj")) {
+            loadControlCage(std::string(ASSETS_DIR) + "parametric_luts/scale_4x4.obj");
         }
     }
 

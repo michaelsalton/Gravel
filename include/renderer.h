@@ -10,6 +10,7 @@
 #include <array>
 
 #include "vkHelper.h"
+#include "loaders/LUTLoader.h"
 
 class Window;
 struct HalfEdgeMesh;
@@ -38,6 +39,33 @@ struct ViewUBO {
     float padding[2];
 };
 
+// Must stay in sync with shaders/shaderInterface.h ResurfacingUBO
+struct ResurfacingUBO {
+    uint32_t elementType   = 0;
+    float    userScaling   = 1.0f;
+    uint32_t resolutionM   = 8;
+    uint32_t resolutionN   = 8;
+
+    float    torusMajorR   = 1.0f;
+    float    torusMinorR   = 0.3f;
+    float    sphereRadius  = 0.5f;
+    float    padding1      = 0.0f;
+
+    uint32_t doLod         = 0;
+    float    lodFactor     = 1.0f;
+    uint32_t doCulling     = 0;
+    float    cullingThreshold = 0.0f;
+
+    // LUT (control cage) metadata
+    uint32_t lutNx    = 0;
+    uint32_t lutNy    = 0;
+    uint32_t cyclicU  = 0;
+    uint32_t cyclicV  = 0;
+
+    glm::vec4 lutBBMin{0.0f};
+    glm::vec4 lutBBMax{0.0f};
+};
+
 struct GlobalShadingUBO {
     glm::vec4 lightPosition;   // xyz = position
     glm::vec4 ambient;         // rgb = color, a = intensity
@@ -62,6 +90,8 @@ public:
     void uploadHalfEdgeMesh(const HalfEdgeMesh& mesh);
 
     bool isFrameStarted() const { return frameStarted; }
+
+    void loadControlCage(const std::string& filepath);
 
 private:
     void recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex);
@@ -88,6 +118,7 @@ private:
     void cleanupSwapChain();
 
     void updateHEDescriptorSet();
+    void updatePerObjectDescriptorSet();
     size_t calculateVRAM() const;
 
     void initImGui();
@@ -219,6 +250,26 @@ private:
     bool heMeshUploaded = false;
     uint32_t heNbFaces = 0;
     uint32_t heNbVertices = 0;
+
+    // Per-object descriptor set (Set 2) and associated buffers
+    VkDescriptorSet perObjectDescriptorSet = VK_NULL_HANDLE;
+
+    // ResurfacingUBO (set 2, binding 0)
+    VkBuffer resurfacingUBOBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory resurfacingUBOMemory = VK_NULL_HANDLE;
+    void* resurfacingUBOMapped = nullptr;
+
+    // LUT SSBO (set 2, binding 2)
+    VkBuffer lutSSBOBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory lutSSBOMemory = VK_NULL_HANDLE;
+    VkDeviceSize lutSSBOSize = 0;
+
+    // LUT state
+    LutData currentLut;
+    bool lutLoaded = false;
+    std::string lutFilename = "None";
+    bool cyclicU = false;
+    bool cyclicV = false;
 
     // CPU-side mesh data for stats computation
     std::vector<glm::vec3> cpuFaceCenters;
