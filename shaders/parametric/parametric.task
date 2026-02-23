@@ -44,7 +44,8 @@ layout(push_constant) uniform PushConstants {
     uint resolutionM;   // UV grid M resolution
     uint resolutionN;   // UV grid N resolution
     uint debugMode;     // Debug visualization mode
-    uint enableCulling; // 0 = disabled, 1 = frustum culling
+    uint enableCulling; // Bitmask: bit0 = frustum, bit1 = backface
+    float cullingThreshold; // Back-face culling dot product threshold
 } push;
 
 // ============================================================================
@@ -127,13 +128,20 @@ void main() {
     payload.isVertex = isVertex ? 1u : 0u;
     payload.elementType = push.elementType;
 
-    // Frustum culling
+    // Culling (frustum + backface)
     bool isVisible = true;
 
-    if (push.enableCulling == 1) {
+    if ((push.enableCulling & 1u) != 0) {
+        // Frustum culling
         mat4 mvp = viewUBO.projection * viewUBO.view * push.model;
         float boundingRadius = computeBoundingRadius(payload.area, push.userScaling, 2.0);
         isVisible = isInFrustum(payload.position, boundingRadius, mvp, 0.1);
+    }
+
+    if (isVisible && (push.enableCulling & 2u) != 0) {
+        // Back-face culling
+        isVisible = isFrontFacing(payload.position, payload.normal,
+                                   viewUBO.cameraPosition.xyz, push.cullingThreshold);
     }
 
     // Amplification

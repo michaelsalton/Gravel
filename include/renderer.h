@@ -229,7 +229,9 @@ private:
     uint32_t resolutionM = 8;
     uint32_t resolutionN = 8;
     uint32_t debugMode = 0;         // 0=shading, 1=normals, 2=UV, 3=taskID, 4=element type
-    bool enableCulling = false;     // Frustum culling toggle
+    bool enableFrustumCulling = false;
+    bool enableBackfaceCulling = false;
+    float cullingThreshold = 0.0f;  // Back-face dot product threshold [-1, 1]
 
     // Lighting config (driven by ImGui)
     glm::vec3 lightPosition = glm::vec3(5.0f, 5.0f, 5.0f);

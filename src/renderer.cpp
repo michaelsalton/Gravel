@@ -668,6 +668,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         uint32_t resolutionN;
         uint32_t debugMode;
         uint32_t enableCulling;
+        float cullingThreshold;
     } pushConstants{};
 
     pushConstants.model = glm::mat4(1.0f);
@@ -681,7 +682,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     pushConstants.resolutionM = resolutionM;
     pushConstants.resolutionN = resolutionN;
     pushConstants.debugMode = debugMode;
-    pushConstants.enableCulling = enableCulling ? 1u : 0u;
+    pushConstants.enableCulling = (enableFrustumCulling ? 1u : 0u) | (enableBackfaceCulling ? 2u : 0u);
+    pushConstants.cullingThreshold = cullingThreshold;
 
     vkCmdPushConstants(cmd, pipelineLayout,
                         VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
@@ -1158,7 +1160,7 @@ void Renderer::createPipelineLayout() {
                                     VK_SHADER_STAGE_MESH_BIT_EXT |
                                     VK_SHADER_STAGE_FRAGMENT_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(glm::mat4) + 11 * sizeof(uint32_t); // 108 bytes
+    pushConstantRange.size = sizeof(glm::mat4) + 12 * sizeof(uint32_t); // 112 bytes
 
     std::array<VkDescriptorSetLayout, 3> setLayouts = {
         sceneSetLayout,
@@ -1798,7 +1800,13 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
     // Culling controls
     if (ImGui::CollapsingHeader("Culling")) {
-        ImGui::Checkbox("Enable Frustum Culling", &enableCulling);
+        ImGui::Checkbox("Frustum Culling", &enableFrustumCulling);
+        ImGui::Checkbox("Back-Face Culling", &enableBackfaceCulling);
+        if (enableBackfaceCulling) {
+            ImGui::SliderFloat("Threshold", &cullingThreshold, -1.0f, 1.0f, "%.2f");
+            ImGui::SameLine();
+            if (ImGui::Button("Reset##threshold")) cullingThreshold = 0.0f;
+        }
     }
 
     // Lighting controls

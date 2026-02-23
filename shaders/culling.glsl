@@ -45,4 +45,16 @@ float computeBoundingRadius(float faceArea, float userScaling, float surfaceMarg
     return baseRadius * userScaling * surfaceMargin;
 }
 
+// ============================================================================
+// Back-Face Culling
+// ============================================================================
+
+// Check if element normal faces toward camera
+// viewDir dot normal > threshold means front-facing
+bool isFrontFacing(vec3 worldPos, vec3 normal, vec3 cameraPos, float threshold) {
+    vec3 viewDir = normalize(cameraPos - worldPos);
+    float facing = dot(viewDir, normal);
+    return facing > threshold;
+}
+
 #endif // CULLING_GLSL
