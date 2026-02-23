@@ -188,6 +188,29 @@ int getVertexFaceIndex(uint index) {
     return heIntBuffer[9].data[index];
 }
 
+// --- ResurfacingUBO (set 2, binding 0): per-object configuration ---
+
+LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
+    uint  elementType;
+    float userScaling;
+    uint  resolutionM;
+    uint  resolutionN;
+    float torusMajorR;
+    float torusMinorR;
+    float sphereRadius;
+    float padding1;
+    uint  doLod;
+    float lodFactor;
+    uint  doCulling;
+    float cullingThreshold;
+    uint  lutNx;
+    uint  lutNy;
+    uint  cyclicU;
+    uint  cyclicV;
+    vec4  lutBBMin;
+    vec4  lutBBMax;
+} resurfacingUBO;
+
 // --- LUT (control cage) SSBO ---
 
 LAYOUT_STD430(SET_PER_OBJECT, BINDING_LUT_BUFFER) readonly buffer LUTBuffer {

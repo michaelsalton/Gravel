@@ -1939,9 +1939,9 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
     // Resurfacing controls
     if (ImGui::CollapsingHeader("Resurfacing", ImGuiTreeNodeFlags_DefaultOpen)) {
-        const char* surfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder"};
+        const char* surfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder", "B-Spline"};
         int currentType = static_cast<int>(elementType);
-        if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 4)) {
+        if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 5)) {
             elementType = static_cast<uint32_t>(currentType);
         }
 
