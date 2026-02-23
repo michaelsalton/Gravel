@@ -92,6 +92,7 @@ public:
     bool isFrameStarted() const { return frameStarted; }
 
     void loadControlCage(const std::string& filepath);
+    void processInput(Window& window, float deltaTime);
 
 private:
     void recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex);
@@ -298,9 +299,11 @@ private:
     bool pendingSwapChainRecreation = false;
 
     // Camera state
-    glm::vec3 cameraPos = glm::vec3(0.0f, 2.0f, 4.0f);
-    float cameraYaw   = -90.0f;   // degrees, -90 = facing -Z
-    float cameraPitch = -26.57f;  // degrees, matches default lookAt(eye, origin)
+    glm::vec3 cameraPos   = glm::vec3(0.0f, 2.0f, 4.0f);
+    float cameraYaw       = -90.0f;   // degrees, -90 = facing -Z
+    float cameraPitch     = -26.57f;  // degrees, matches default lookAt(eye, origin)
+    float cameraSpeed     = 3.0f;     // units per second
+    float mouseSensitivity = 0.1f;    // degrees per pixel
 
     // Lighting config (driven by ImGui)
     glm::vec3 lightPosition = glm::vec3(5.0f, 5.0f, 5.0f);

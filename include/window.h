@@ -23,13 +23,29 @@ public:
     bool wasResized() const { return framebufferResized; }
     void resetResizedFlag() { framebufferResized = false; }
 
+    // Input state — call once per frame, resets delta after reading
+    float getMouseDeltaX() const { return mouseDeltaX; }
+    float getMouseDeltaY() const { return mouseDeltaY; }
+    float getScrollDelta() const { return scrollDelta; }
+    void  resetInputDeltas() { mouseDeltaX = 0.0f; mouseDeltaY = 0.0f; scrollDelta = 0.0f; }
+
 private:
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
     static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+    static void cursorPosCallback(GLFWwindow* window, double x, double y);
+    static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
 
     GLFWwindow* window;
     int width;
     int height;
     std::string title;
     bool framebufferResized = false;
+
+    // Mouse tracking
+    double lastMouseX = 0.0;
+    double lastMouseY = 0.0;
+    bool firstMouse = true;
+    float mouseDeltaX = 0.0f;
+    float mouseDeltaY = 0.0f;
+    float scrollDelta = 0.0f;
 };

@@ -21,6 +21,8 @@ Window::Window(int width, int height, const std::string& title)
     glfwSetWindowUserPointer(window, this);
     glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
     glfwSetKeyCallback(window, keyCallback);
+    glfwSetCursorPosCallback(window, cursorPosCallback);
+    glfwSetScrollCallback(window, scrollCallback);
 
     std::cout << "Window created: " << width << "x" << height << std::endl;
 }
@@ -47,4 +49,26 @@ void Window::keyCallback(GLFWwindow* window, int key, int scancode, int action, 
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, GLFW_TRUE);
     }
+}
+
+void Window::cursorPosCallback(GLFWwindow* window, double x, double y) {
+    auto* app = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
+
+    if (app->firstMouse) {
+        app->lastMouseX = x;
+        app->lastMouseY = y;
+        app->firstMouse = false;
+        return;
+    }
+
+    app->mouseDeltaX += static_cast<float>(x - app->lastMouseX);
+    app->mouseDeltaY += static_cast<float>(y - app->lastMouseY);
+    app->lastMouseX = x;
+    app->lastMouseY = y;
+}
+
+void Window::scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
+    (void)xoffset;
+    auto* app = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
+    app->scrollDelta += static_cast<float>(yoffset);
 }

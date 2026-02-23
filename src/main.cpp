@@ -97,13 +97,21 @@ int main() {
         std::cout << "\nInitialization complete" << std::endl;
         std::cout << "Entering main loop (press ESC to exit)\n" << std::endl;
 
+        double lastTime = glfwGetTime();
+
         while (!window.shouldClose()) {
+            double currentTime = glfwGetTime();
+            float deltaTime = static_cast<float>(currentTime - lastTime);
+            lastTime = currentTime;
+
             window.pollEvents();
 
             if (window.wasResized()) {
                 window.resetResizedFlag();
                 renderer.recreateSwapChain();
             }
+
+            renderer.processInput(window, deltaTime);
 
             renderer.beginFrame();
             if (renderer.isFrameStarted()) {

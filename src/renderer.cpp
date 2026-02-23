@@ -1787,6 +1787,60 @@ void Renderer::updatePerObjectDescriptorSet() {
                            writes.data(), 0, nullptr);
 }
 
+void Renderer::processInput(Window& win, float deltaTime) {
+    GLFWwindow* glfwWin = win.getHandle();
+    ImGuiIO& io = ImGui::GetIO();
+
+    // Snapshot and reset accumulated deltas for this frame
+    float dx     = win.getMouseDeltaX();
+    float dy     = win.getMouseDeltaY();
+    float scroll = win.getScrollDelta();
+    win.resetInputDeltas();
+
+    // Mouse look — right-click drag, only when ImGui isn't using the mouse
+    if (!io.WantCaptureMouse &&
+        glfwGetMouseButton(glfwWin, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
+        cameraYaw   += dx * mouseSensitivity;
+        cameraPitch -= dy * mouseSensitivity;  // screen Y is inverted relative to world
+        cameraPitch  = glm::clamp(cameraPitch, -89.0f, 89.0f);
+    }
+
+    // Compute forward/right vectors from current yaw/pitch
+    glm::vec3 forward;
+    forward.x = cos(glm::radians(cameraYaw)) * cos(glm::radians(cameraPitch));
+    forward.y = sin(glm::radians(cameraPitch));
+    forward.z = sin(glm::radians(cameraYaw)) * cos(glm::radians(cameraPitch));
+    forward = glm::normalize(forward);
+
+    glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
+    glm::vec3 up    = glm::vec3(0.0f, 1.0f, 0.0f);
+
+    // Scroll: move forward/backward (no keyboard capture needed)
+    if (!io.WantCaptureMouse && scroll != 0.0f) {
+        cameraPos += forward * scroll * cameraSpeed * 0.5f;
+    }
+
+    // Keyboard movement — only when ImGui isn't using the keyboard
+    if (!io.WantCaptureKeyboard) {
+        float speed = cameraSpeed * deltaTime;
+        if (glfwGetKey(glfwWin, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
+            glfwGetKey(glfwWin, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS) {
+            speed *= 5.0f;
+        }
+
+        if (glfwGetKey(glfwWin, GLFW_KEY_W) == GLFW_PRESS ||
+            glfwGetKey(glfwWin, GLFW_KEY_UP) == GLFW_PRESS)    cameraPos += forward * speed;
+        if (glfwGetKey(glfwWin, GLFW_KEY_S) == GLFW_PRESS ||
+            glfwGetKey(glfwWin, GLFW_KEY_DOWN) == GLFW_PRESS)  cameraPos -= forward * speed;
+        if (glfwGetKey(glfwWin, GLFW_KEY_A) == GLFW_PRESS ||
+            glfwGetKey(glfwWin, GLFW_KEY_LEFT) == GLFW_PRESS)  cameraPos -= right * speed;
+        if (glfwGetKey(glfwWin, GLFW_KEY_D) == GLFW_PRESS ||
+            glfwGetKey(glfwWin, GLFW_KEY_RIGHT) == GLFW_PRESS) cameraPos += right * speed;
+        if (glfwGetKey(glfwWin, GLFW_KEY_E) == GLFW_PRESS)     cameraPos += up * speed;
+        if (glfwGetKey(glfwWin, GLFW_KEY_Q) == GLFW_PRESS)     cameraPos -= up * speed;
+    }
+}
+
 void Renderer::loadControlCage(const std::string& filepath) {
     LutData lut = LUTLoader::loadControlCage(filepath);
     if (!lut.isValid) {
