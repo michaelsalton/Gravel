@@ -171,4 +171,167 @@ void parametricBSpline(vec2 uv, out vec3 pos, out vec3 normal,
     normal = (lenN > 1e-6) ? n / lenN : vec3(0.0, 0.0, 1.0);
 }
 
+// ============================================================================
+// Bernstein Basis Functions (for Bézier surfaces)
+// ============================================================================
+
+/**
+ * Linear Bernstein polynomials (degree 1).
+ *   B0(t) = 1 - t
+ *   B1(t) = t
+ */
+vec2 bernsteinLinear(float t) {
+    return vec2(1.0 - t, t);
+}
+
+/**
+ * Quadratic Bernstein polynomials (degree 2).
+ *   B0(t) = (1-t)²
+ *   B1(t) = 2(1-t)t
+ *   B2(t) = t²
+ */
+vec3 bernsteinQuadratic(float t) {
+    float omt = 1.0 - t;
+    return vec3(omt * omt, 2.0 * omt * t, t * t);
+}
+
+/**
+ * Cubic Bernstein polynomials (degree 3).
+ *   B0(t) = (1-t)³
+ *   B1(t) = 3(1-t)²t
+ *   B2(t) = 3(1-t)t²
+ *   B3(t) = t³
+ */
+vec4 bernsteinCubic(float t) {
+    float omt = 1.0 - t;
+    return vec4(omt*omt*omt, 3.0*omt*omt*t, 3.0*omt*t*t, t*t*t);
+}
+
+/**
+ * Derivatives of linear Bernstein polynomials.
+ *   B0'(t) = -1,  B1'(t) = 1
+ */
+vec2 bernsteinLinearDeriv(float t) {
+    return vec2(-1.0, 1.0);
+}
+
+/**
+ * Derivatives of quadratic Bernstein polynomials.
+ *   B0'(t) = -2(1-t)
+ *   B1'(t) = 2(1-2t)
+ *   B2'(t) = 2t
+ */
+vec3 bernsteinQuadraticDeriv(float t) {
+    return vec3(-2.0*(1.0-t), 2.0*(1.0-2.0*t), 2.0*t);
+}
+
+/**
+ * Derivatives of cubic Bernstein polynomials.
+ *   B0'(t) = -3(1-t)²
+ *   B1'(t) = 3(1-t)(1-3t)
+ *   B2'(t) = 3t(2-3t)
+ *   B3'(t) = 3t²
+ */
+vec4 bernsteinCubicDeriv(float t) {
+    float omt = 1.0 - t;
+    return vec4(-3.0*omt*omt, 3.0*omt*(1.0-3.0*t), 3.0*t*(2.0-3.0*t), 3.0*t*t);
+}
+
+// ============================================================================
+// Bézier Surface Evaluation
+// ============================================================================
+
+/**
+ * Evaluate a Bézier surface at UV coordinates.
+ *
+ * Supports degree 1 (bilinear), 2 (biquadratic), and 3 (bicubic).
+ * Normals are computed analytically via cross(dS/du, dS/dv), avoiding
+ * finite differences and recursive calls (which SPIR-V does not allow).
+ *
+ * @param uv     Surface parameter in [0,1]²
+ * @param pos    Output: surface position
+ * @param normal Output: surface normal (unit length)
+ * @param Nx     Grid width  (control points in U)
+ * @param Ny     Grid height (control points in V)
+ * @param degree Bézier degree: 1, 2, or 3
+ */
+void parametricBezier(vec2 uv, out vec3 pos, out vec3 normal,
+                      uint Nx, uint Ny, uint degree) {
+    // Fallback when no LUT is loaded
+    if (Nx == 0u || Ny == 0u) {
+        float theta = uv.x * 2.0 * PI;
+        float phi   = uv.y * PI;
+        pos    = 0.5 * vec3(sin(phi)*cos(theta), sin(phi)*sin(theta), cos(phi));
+        normal = normalize(pos);
+        return;
+    }
+
+    // Map UV [0,1] → grid space [0, Nx-1] × [0, Ny-1]
+    vec2  gridUV = uv * vec2(float(Nx - 1u), float(Ny - 1u));
+    int   u0     = int(floor(gridUV.x));
+    int   v0     = int(floor(gridUV.y));
+    float tu     = fract(gridUV.x);
+    float tv     = fract(gridUV.y);
+
+    pos         = vec3(0.0);
+    vec3 dpdu   = vec3(0.0);
+    vec3 dpdv   = vec3(0.0);
+
+    if (degree == 3u) {
+        vec4 Bu  = bernsteinCubic(tu);
+        vec4 Bv  = bernsteinCubic(tv);
+        vec4 dBu = bernsteinCubicDeriv(tu);
+        vec4 dBv = bernsteinCubicDeriv(tv);
+
+        for (int j = 0; j < 4; j++) {
+            vec3 rowPos  = vec3(0.0);
+            vec3 rowDerU = vec3(0.0);
+            for (int i = 0; i < 4; i++) {
+                vec3 P  = sampleControlPoint(u0+i, v0+j, Nx, Ny, false, false);
+                rowPos  += Bu[i]  * P;
+                rowDerU += dBu[i] * P;
+            }
+            pos  += Bv[j]  * rowPos;
+            dpdv += dBv[j] * rowPos;
+            dpdu += Bv[j]  * rowDerU;
+        }
+    } else if (degree == 2u) {
+        vec3 Bu  = bernsteinQuadratic(tu);
+        vec3 Bv  = bernsteinQuadratic(tv);
+        vec3 dBu = bernsteinQuadraticDeriv(tu);
+        vec3 dBv = bernsteinQuadraticDeriv(tv);
+
+        for (int j = 0; j < 3; j++) {
+            vec3 rowPos  = vec3(0.0);
+            vec3 rowDerU = vec3(0.0);
+            for (int i = 0; i < 3; i++) {
+                vec3 P  = sampleControlPoint(u0+i, v0+j, Nx, Ny, false, false);
+                rowPos  += Bu[i]  * P;
+                rowDerU += dBu[i] * P;
+            }
+            pos  += Bv[j]  * rowPos;
+            dpdv += dBv[j] * rowPos;
+            dpdu += Bv[j]  * rowDerU;
+        }
+    } else {
+        // degree == 1: bilinear
+        vec2 Bu  = bernsteinLinear(tu);
+        vec2 Bv  = bernsteinLinear(tv);
+
+        vec3 P00 = sampleControlPoint(u0,   v0,   Nx, Ny, false, false);
+        vec3 P10 = sampleControlPoint(u0+1, v0,   Nx, Ny, false, false);
+        vec3 P01 = sampleControlPoint(u0,   v0+1, Nx, Ny, false, false);
+        vec3 P11 = sampleControlPoint(u0+1, v0+1, Nx, Ny, false, false);
+
+        pos  = Bu[0]*Bv[0]*P00 + Bu[1]*Bv[0]*P10
+             + Bu[0]*Bv[1]*P01 + Bu[1]*Bv[1]*P11;
+        dpdu = Bv[0]*(P10-P00) + Bv[1]*(P11-P01);
+        dpdv = Bu[0]*(P01-P00) + Bu[1]*(P11-P10);
+    }
+
+    vec3  n    = cross(dpdu, dpdv);
+    float lenN = length(n);
+    normal = (lenN > 1e-6) ? n / lenN : vec3(0.0, 0.0, 1.0);
+}
+
 #endif // PARAMETRIC_GRIDS_GLSL

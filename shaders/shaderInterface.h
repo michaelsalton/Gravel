@@ -64,7 +64,7 @@ struct ResurfacingUBO {
     float torusMajorR;
     float torusMinorR;
     float sphereRadius;
-    float padding1;
+    uint bezierDegree;     // Bézier degree: 1=linear, 2=quadratic, 3=cubic
 
     uint doLod;            // enable LOD
     float lodFactor;       // LOD multiplier
@@ -198,7 +198,7 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
     float torusMajorR;
     float torusMinorR;
     float sphereRadius;
-    float padding1;
+    uint  bezierDegree;
     uint  doLod;
     float lodFactor;
     uint  doCulling;

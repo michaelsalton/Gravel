@@ -49,7 +49,7 @@ struct ResurfacingUBO {
     float    torusMajorR   = 1.0f;
     float    torusMinorR   = 0.3f;
     float    sphereRadius  = 0.5f;
-    float    padding1      = 0.0f;
+    uint32_t bezierDegree  = 3u;
 
     uint32_t doLod         = 0;
     float    lodFactor     = 1.0f;
@@ -270,6 +270,7 @@ private:
     std::string lutFilename = "None";
     bool cyclicU = false;
     bool cyclicV = false;
+    int bezierDegree = 3;  // 1=bilinear, 2=biquadratic, 3=bicubic
 
     // CPU-side mesh data for stats computation
     std::vector<glm::vec3> cpuFaceCenters;

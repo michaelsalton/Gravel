@@ -1939,10 +1939,47 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
     // Resurfacing controls
     if (ImGui::CollapsingHeader("Resurfacing", ImGuiTreeNodeFlags_DefaultOpen)) {
-        const char* surfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder", "B-Spline"};
+        const char* surfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder",
+                                      "B-Spline (LUT)", "Bezier (LUT)"};
         int currentType = static_cast<int>(elementType);
-        if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 5)) {
+        if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 6)) {
             elementType = static_cast<uint32_t>(currentType);
+        }
+
+        // Inline controls for LUT-based surfaces
+        if (elementType == 4 || elementType == 5) {
+            ImGui::Indent();
+            if (!lutLoaded) {
+                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f),
+                                   "No LUT loaded! Use Control Cage section.");
+            } else {
+                ImGui::Text("Cage: %s (%ux%u)", lutFilename.c_str(),
+                            currentLut.Nx, currentLut.Ny);
+                if (elementType == 4) {
+                    // B-Spline boundary modes
+                    bool prevCyclicU = cyclicU, prevCyclicV = cyclicV;
+                    ImGui::Checkbox("Cyclic U", &cyclicU);
+                    ImGui::SameLine();
+                    ImGui::Checkbox("Cyclic V", &cyclicV);
+                    if (cyclicU != prevCyclicU || cyclicV != prevCyclicV) {
+                        ResurfacingUBO* d = static_cast<ResurfacingUBO*>(resurfacingUBOMapped);
+                        d->cyclicU = cyclicU ? 1u : 0u;
+                        d->cyclicV = cyclicV ? 1u : 0u;
+                    }
+                } else {
+                    // Bezier degree
+                    int prevDegree = bezierDegree;
+                    ImGui::SliderInt("Degree", &bezierDegree, 1, 3);
+                    const char* degreeNames[] = {"", "Bilinear", "Biquadratic", "Bicubic"};
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(%s)", degreeNames[bezierDegree]);
+                    if (bezierDegree != prevDegree) {
+                        ResurfacingUBO* d = static_cast<ResurfacingUBO*>(resurfacingUBOMapped);
+                        d->bezierDegree = static_cast<uint32_t>(bezierDegree);
+                    }
+                }
+            }
+            ImGui::Unindent();
         }
 
         ImGui::SliderFloat("Global Scale", &userScaling, 0.1f, 3.0f);
@@ -2097,17 +2134,6 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             ImGui::Text("BB max: (%.2f, %.2f, %.2f)",
                         currentLut.bbMax.x, currentLut.bbMax.y, currentLut.bbMax.z);
 
-            ImGui::Separator();
-
-            bool prevCyclicU = cyclicU;
-            bool prevCyclicV = cyclicV;
-            ImGui::Checkbox("Cyclic U", &cyclicU);
-            ImGui::Checkbox("Cyclic V", &cyclicV);
-            if (cyclicU != prevCyclicU || cyclicV != prevCyclicV) {
-                ResurfacingUBO* d = static_cast<ResurfacingUBO*>(resurfacingUBOMapped);
-                d->cyclicU = cyclicU ? 1u : 0u;
-                d->cyclicV = cyclicV ? 1u : 0u;
-            }
         } else {
             ImGui::TextDisabled("No cage loaded.");
         }

@@ -72,12 +72,12 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 ## Epic 4: Amplification and LOD
 **Details**: [epic-04/features/README.md](epic-04/features/README.md)
 
-- [ ] 4.1 Amplification Function K (2-3h)
-- [ ] 4.2 Variable Resolution in Mesh Shader (2-3h)
-- [ ] 4.3 Frustum Culling (2h)
-- [ ] 4.4 Back-Face Culling (1-2h)
-- [ ] 4.5 Screen-Space LOD - Bounding Box (2-3h)
-- [ ] 4.6 Screen-Space LOD - Resolution Adaptation (2h)
+- [x] 4.1 Amplification Function K (2-3h)
+- [x] 4.2 Variable Resolution in Mesh Shader (2-3h)
+- [x] 4.3 Frustum Culling (2h)
+- [x] 4.4 Back-Face Culling (1-2h)
+- [x] 4.5 Screen-Space LOD - Bounding Box (2-3h)
+- [x] 4.6 Screen-Space LOD - Resolution Adaptation (2h)
 
 **Milestone**: High-resolution grids (32×32+) work, culling and LOD improve performance 80%+
 
@@ -86,12 +86,12 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 ## Epic 5: B-Spline Control Cages
 **Details**: [epic-05/features/README.md](epic-05/features/README.md)
 
-- [ ] 5.1 Control Cage OBJ Loader (2-3h)
-- [ ] 5.2 Control Cage GPU Upload (1-2h)
-- [ ] 5.3 B-Spline Basis Functions (1-2h)
-- [ ] 5.4 B-Spline Surface Evaluation (3-4h)
-- [ ] 5.5 Bézier Surface Evaluation (2h)
-- [ ] 5.6 Integration and Boundary Modes (2h)
+- [x] 5.1 Control Cage OBJ Loader (2-3h)
+- [x] 5.2 Control Cage GPU Upload (1-2h)
+- [x] 5.3 B-Spline Basis Functions (1-2h)
+- [x] 5.4 B-Spline Surface Evaluation (3-4h)
+- [x] 5.5 Bézier Surface Evaluation (2h)
+- [x] 5.6 Integration and Boundary Modes (2h)
 
 **Milestone**: Smooth B-spline/Bézier surfaces render, cyclic boundaries work
 
@@ -171,15 +171,6 @@ If stuck on a feature:
 2. Check the project overview PDF for theory
 3. Reference the paper for algorithms
 4. Check the reference implementation on GitHub
-
----
-
-## Progress Tracking
-
-### Current Epic: Epic 3 - Core Resurfacing Pipeline
-### Current Feature: 3.1 Task Shader Mapping Function (F)
-### Features Completed: 15 / 48
-### Overall Progress: 31%
 
 ---
 
