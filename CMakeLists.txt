@@ -60,6 +60,7 @@ set(SOURCES
     src/window.cpp
     src/renderer.cpp
     src/loaders/ObjLoader.cpp
+    src/loaders/LUTLoader.cpp
     src/HalfEdge.cpp
     src/vkHelper.cpp
     ${IMGUI_SOURCES}
