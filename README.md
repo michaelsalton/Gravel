@@ -83,8 +83,6 @@ Gravel/
 
 **Paper**: Raad et al., "Real-time procedural resurfacing using GPU mesh shader," Computer Graphics Forum 44(2), Eurographics 2025
 
-**Reference Implementation**: [github.com/andarael/resurfacing](https://github.com/andarael/resurfacing)
-
 ## Development Phases
 
 This project follows an 8-phase implementation plan:
