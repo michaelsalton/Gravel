@@ -456,11 +456,29 @@ VkSurfaceFormatKHR Renderer::chooseSwapSurfaceFormat(
 
 VkPresentModeKHR Renderer::chooseSwapPresentMode(
     const std::vector<VkPresentModeKHR>& availablePresentModes) {
-    for (const auto& presentMode : availablePresentModes) {
-        if (presentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
-            return presentMode;
+
+    if (!vsync) {
+        // Look for IMMEDIATE mode to completely unlock FPS
+        for (const auto& presentMode : availablePresentModes) {
+            if (presentMode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
+                std::cout << "Present mode: IMMEDIATE (uncapped)" << std::endl;
+                return presentMode;
+            }
         }
+
+        // Fallback to Mailbox (Triple Buffering) if Immediate isn't there
+        for (const auto& presentMode : availablePresentModes) {
+            if (presentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+                std::cout << "Present mode: MAILBOX (triple buffered)" << std::endl;
+                return presentMode;
+            }
+        }
+
+        std::cout << "Present mode: FIFO (VSync) - IMMEDIATE/MAILBOX unavailable on this compositor" << std::endl;
+    } else {
+        std::cout << "Present mode: FIFO (VSync)" << std::endl;
     }
+
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
@@ -646,6 +664,27 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                                  0, nullptr);
     }
 
+    // Update view UBO from current camera state
+    {
+        glm::vec3 forward;
+        forward.x = cos(glm::radians(cameraYaw)) * cos(glm::radians(cameraPitch));
+        forward.y = sin(glm::radians(cameraPitch));
+        forward.z = sin(glm::radians(cameraYaw)) * cos(glm::radians(cameraPitch));
+        forward = glm::normalize(forward);
+
+        float aspect = static_cast<float>(swapChainExtent.width) /
+                       static_cast<float>(swapChainExtent.height);
+
+        ViewUBO viewData{};
+        viewData.view = glm::lookAt(cameraPos, cameraPos + forward, glm::vec3(0.0f, 1.0f, 0.0f));
+        viewData.projection = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
+        viewData.projection[1][1] *= -1;
+        viewData.cameraPosition = glm::vec4(cameraPos, 1.0f);
+        viewData.nearPlane = 0.1f;
+        viewData.farPlane  = 100.0f;
+        memcpy(viewUBOMapped[currentFrame], &viewData, sizeof(ViewUBO));
+    }
+
     // Update shading UBO with current lighting config
     GlobalShadingUBO shadingData{};
     shadingData.lightPosition = glm::vec4(lightPosition, 0.0f);
@@ -742,7 +781,8 @@ void Renderer::endFrame() {
 
     VkResult result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || pendingSwapChainRecreation) {
+        pendingSwapChainRecreation = false;
         recreateSwapChain();
     } else if (result != VK_SUCCESS) {
         throw std::runtime_error("Failed to present swap chain image!");
@@ -1550,6 +1590,24 @@ void Renderer::uploadHalfEdgeMesh(const HalfEdgeMesh& mesh) {
 
     updateHEDescriptorSet();
 
+    // Store CPU copies for per-frame stats computation
+    cpuFaceCenters.resize(mesh.nbFaces);
+    cpuFaceNormals.resize(mesh.nbFaces);
+    cpuFaceAreas = mesh.faceAreas;
+    cpuVertexPositions.resize(mesh.nbVertices);
+    cpuVertexNormals.resize(mesh.nbVertices);
+    cpuVertexFaceAreas.resize(mesh.nbVertices);
+    for (uint32_t i = 0; i < mesh.nbFaces; i++) {
+        cpuFaceCenters[i] = glm::vec3(mesh.faceCenters[i]);
+        cpuFaceNormals[i] = glm::vec3(mesh.faceNormals[i]);
+    }
+    for (uint32_t i = 0; i < mesh.nbVertices; i++) {
+        cpuVertexPositions[i] = glm::vec3(mesh.vertexPositions[i]);
+        cpuVertexNormals[i]   = glm::vec3(mesh.vertexNormals[i]);
+        int edge = mesh.vertexEdges[i];
+        cpuVertexFaceAreas[i] = (edge >= 0) ? mesh.faceAreas[mesh.heFace[edge]] : 0.0f;
+    }
+
     heMeshUploaded = true;
     heNbFaces = mesh.nbFaces;
     heNbVertices = mesh.nbVertices;
@@ -1723,12 +1781,11 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                 1000.0f / ImGui::GetIO().Framerate);
     ImGui::Separator();
 
-    // Camera controls (placeholder values)
+    // Camera controls
     if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
-        static float cameraPos[3] = {0.0f, 0.0f, 3.0f};
-        static float cameraRot[2] = {0.0f, 0.0f};
-        ImGui::DragFloat3("Position", cameraPos, 0.1f);
-        ImGui::DragFloat2("Rotation", cameraRot, 1.0f);
+        ImGui::DragFloat3("Position", &cameraPos.x, 0.1f);
+        ImGui::DragFloat("Yaw",   &cameraYaw,   0.5f, -180.0f, 180.0f, "%.1f deg");
+        ImGui::DragFloat("Pitch", &cameraPitch, 0.5f,  -89.0f,  89.0f, "%.1f deg");
     }
 
     // Resurfacing controls
@@ -1806,6 +1863,75 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             ImGui::SliderFloat("Threshold", &cullingThreshold, -1.0f, 1.0f, "%.2f");
             ImGui::SameLine();
             if (ImGui::Button("Reset##threshold")) cullingThreshold = 0.0f;
+        }
+    }
+
+    // Statistics
+    if (ImGui::CollapsingHeader("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
+        uint32_t totalElements = heNbFaces + heNbVertices;
+        uint32_t visibleElements = totalElements;
+
+        if (heMeshUploaded && (enableFrustumCulling || enableBackfaceCulling)) {
+            // Mirror task shader culling on CPU to count visible elements
+            glm::vec3 forward;
+            forward.x = cos(glm::radians(cameraYaw))   * cos(glm::radians(cameraPitch));
+            forward.y = sin(glm::radians(cameraPitch));
+            forward.z = sin(glm::radians(cameraYaw))   * cos(glm::radians(cameraPitch));
+            forward = glm::normalize(forward);
+
+            float aspect = static_cast<float>(swapChainExtent.width) /
+                           static_cast<float>(swapChainExtent.height);
+            glm::mat4 view = glm::lookAt(cameraPos, cameraPos + forward, glm::vec3(0,1,0));
+            glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 100.0f);
+            proj[1][1] *= -1;
+            glm::mat4 mvp = proj * view; // model is identity
+
+            visibleElements = 0;
+            auto testElement = [&](glm::vec3 pos, glm::vec3 normal, float area) -> bool {
+                float radius = std::sqrt(area) * userScaling * 2.0f; // matches computeBoundingRadius
+
+                if (enableFrustumCulling) {
+                    glm::vec4 clip = mvp * glm::vec4(pos, 1.0f);
+                    if (clip.w <= 0.0f) return false;
+                    float cr = radius / clip.w * 2.0f * 1.1f; // margin = 0.1
+                    glm::vec3 ndc = glm::vec3(clip) / clip.w;
+                    if (ndc.x + cr < -1.0f || ndc.x - cr > 1.0f) return false;
+                    if (ndc.y + cr < -1.0f || ndc.y - cr > 1.0f) return false;
+                    if (ndc.z + cr <  0.0f || ndc.z - cr > 1.0f) return false;
+                }
+                if (enableBackfaceCulling) {
+                    glm::vec3 viewDir = glm::normalize(cameraPos - pos);
+                    if (glm::dot(viewDir, normal) <= cullingThreshold) return false;
+                }
+                return true;
+            };
+
+            for (uint32_t i = 0; i < heNbFaces; i++)
+                if (testElement(cpuFaceCenters[i], cpuFaceNormals[i], cpuFaceAreas[i]))
+                    visibleElements++;
+            for (uint32_t i = 0; i < heNbVertices; i++)
+                if (testElement(cpuVertexPositions[i], cpuVertexNormals[i], cpuVertexFaceAreas[i]))
+                    visibleElements++;
+        }
+
+        uint32_t culledElements  = totalElements - visibleElements;
+        uint32_t trisPerElement  = resolutionM * resolutionN * 2;
+        uint32_t totalTris       = visibleElements * trisPerElement;
+
+        ImGui::Text("Elements:  %u visible / %u total", visibleElements, totalElements);
+        if (totalElements > 0) {
+            float pct = 100.0f * culledElements / totalElements;
+            ImGui::Text("Culled:    %u (%.1f%%)", culledElements, pct);
+        }
+        ImGui::Text("Triangles: %u  (%u per element)", totalTris, trisPerElement);
+    }
+
+    // Display / VSync
+    if (ImGui::CollapsingHeader("Display")) {
+        bool prevVsync = vsync;
+        ImGui::Checkbox("VSync", &vsync);
+        if (vsync != prevVsync) {
+            pendingSwapChainRecreation = true;
         }
     }
 

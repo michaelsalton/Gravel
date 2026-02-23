@@ -220,9 +220,17 @@ private:
     uint32_t heNbFaces = 0;
     uint32_t heNbVertices = 0;
 
+    // CPU-side mesh data for stats computation
+    std::vector<glm::vec3> cpuFaceCenters;
+    std::vector<glm::vec3> cpuFaceNormals;
+    std::vector<float>     cpuFaceAreas;
+    std::vector<glm::vec3> cpuVertexPositions;
+    std::vector<glm::vec3> cpuVertexNormals;
+    std::vector<float>     cpuVertexFaceAreas;  // area of adjacent face, for bounding radius
+
     // Resurfacing config (driven by ImGui)
     uint32_t elementType = 0;       // 0=torus, 1=sphere, 2=cone, 3=cylinder
-    float userScaling = 1.0f;
+    float userScaling = 0.1f;
     float torusMajorR = 1.0f;
     float torusMinorR = 0.3f;
     float sphereRadius = 0.5f;
@@ -232,6 +240,13 @@ private:
     bool enableFrustumCulling = false;
     bool enableBackfaceCulling = false;
     float cullingThreshold = 0.0f;  // Back-face dot product threshold [-1, 1]
+    bool vsync = false;
+    bool pendingSwapChainRecreation = false;
+
+    // Camera state
+    glm::vec3 cameraPos = glm::vec3(0.0f, 2.0f, 4.0f);
+    float cameraYaw   = -90.0f;   // degrees, -90 = facing -Z
+    float cameraPitch = -26.57f;  // degrees, matches default lookAt(eye, origin)
 
     // Lighting config (driven by ImGui)
     glm::vec3 lightPosition = glm::vec3(5.0f, 5.0f, 5.0f);
