@@ -12,24 +12,10 @@
 #include "vkHelper.h"
 #include "loaders/LUTLoader.h"
 #include "camera.h"
+#include "renderer_init.h"
 
 class Window;
 struct HalfEdgeMesh;
-
-struct SwapChainSupportDetails {
-    VkSurfaceCapabilitiesKHR capabilities;
-    std::vector<VkSurfaceFormatKHR> formats;
-    std::vector<VkPresentModeKHR> presentModes;
-};
-
-struct QueueFamilyIndices {
-    std::optional<uint32_t> graphicsFamily;
-    std::optional<uint32_t> presentFamily;
-
-    bool isComplete() const {
-        return graphicsFamily.has_value() && presentFamily.has_value();
-    }
-};
 
 struct ViewUBO {
     glm::mat4 view;
@@ -238,13 +224,6 @@ private:
     std::vector<StorageBuffer> heFloatBuffers;  // 1: faceAreas
 
     VkDescriptorSet heDescriptorSet = VK_NULL_HANDLE;
-
-    struct MeshInfoUBO {
-        uint32_t nbVertices;
-        uint32_t nbFaces;
-        uint32_t nbHalfEdges;
-        uint32_t padding;
-    };
 
     VkBuffer meshInfoBuffer = VK_NULL_HANDLE;
     VkDeviceMemory meshInfoMemory = VK_NULL_HANDLE;

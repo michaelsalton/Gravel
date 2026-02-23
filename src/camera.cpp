@@ -32,22 +32,22 @@ void Camera::processInput(Window& win, float deltaTime) {
     ImGuiIO& io = ImGui::GetIO();
 
     // Snapshot and reset accumulated deltas for this frame
-    float dx     = win.getMouseDeltaX();
-    float dy     = win.getMouseDeltaY();
+    float dx = win.getMouseDeltaX();
+    float dy = win.getMouseDeltaY();
     float scroll = win.getScrollDelta();
     win.resetInputDeltas();
 
     // Right-click drag: rotate yaw/pitch
     if (!io.WantCaptureMouse &&
         glfwGetMouseButton(glfwWin, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
-        yaw   += dx * sensitivity;
+        yaw += dx * sensitivity;
         pitch -= dy * sensitivity;  // screen Y is inverted relative to world
-        pitch  = glm::clamp(pitch, -89.0f, 89.0f);
+        pitch = glm::clamp(pitch, -89.0f, 89.0f);
     }
 
     glm::vec3 forward = getForward();
-    glm::vec3 right   = getRight();
-    glm::vec3 up      = glm::vec3(0.0f, 1.0f, 0.0f);
+    glm::vec3 right = getRight();
+    glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
 
     // Scroll: move forward/backward
     if (!io.WantCaptureMouse && scroll != 0.0f) {
@@ -61,17 +61,28 @@ void Camera::processInput(Window& win, float deltaTime) {
             glfwGetKey(glfwWin, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS) {
             s *= 5.0f;
         }
-
         if (glfwGetKey(glfwWin, GLFW_KEY_W) == GLFW_PRESS ||
-            glfwGetKey(glfwWin, GLFW_KEY_UP) == GLFW_PRESS)    position += forward * s;
+            glfwGetKey(glfwWin, GLFW_KEY_UP) == GLFW_PRESS) {
+            position += forward * s;
+        }
         if (glfwGetKey(glfwWin, GLFW_KEY_S) == GLFW_PRESS ||
-            glfwGetKey(glfwWin, GLFW_KEY_DOWN) == GLFW_PRESS)  position -= forward * s;
+            glfwGetKey(glfwWin, GLFW_KEY_DOWN) == GLFW_PRESS) {
+            position -= forward * s;
+        }
         if (glfwGetKey(glfwWin, GLFW_KEY_A) == GLFW_PRESS ||
-            glfwGetKey(glfwWin, GLFW_KEY_LEFT) == GLFW_PRESS)  position -= right * s;
+            glfwGetKey(glfwWin, GLFW_KEY_LEFT) == GLFW_PRESS) {
+            position -= right * s;
+        }
         if (glfwGetKey(glfwWin, GLFW_KEY_D) == GLFW_PRESS ||
-            glfwGetKey(glfwWin, GLFW_KEY_RIGHT) == GLFW_PRESS) position += right * s;
-        if (glfwGetKey(glfwWin, GLFW_KEY_E) == GLFW_PRESS)     position += up * s;
-        if (glfwGetKey(glfwWin, GLFW_KEY_Q) == GLFW_PRESS)     position -= up * s;
+            glfwGetKey(glfwWin, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+            position += right * s;
+        }
+        if (glfwGetKey(glfwWin, GLFW_KEY_E) == GLFW_PRESS) {
+            position += up * s;
+        }
+        if (glfwGetKey(glfwWin, GLFW_KEY_Q) == GLFW_PRESS) {
+            position -= up * s;
+        }
     }
 }
 
