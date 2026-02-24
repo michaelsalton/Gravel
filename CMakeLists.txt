@@ -23,23 +23,23 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 find_package(Vulkan REQUIRED)
 
 # Find GLFW
-find_package(glfw3 REQUIRED)
+find_package(glfw3 CONFIG REQUIRED)
 
 # GLM (header-only, may need to adjust path)
-# Option 1: If GLM is installed system-wide
-find_package(glm QUIET)
+# Option 1: If GLM is installed system-wide or via vcpkg
+find_package(glm CONFIG QUIET)
 if(NOT glm_FOUND)
     # Option 2: Use libs/glm subdirectory
-    if(EXISTS "${CMAKE_SOURCE_DIR}/libs/glm")
+    if(EXISTS "${CMAKE_SOURCE_DIR}/libs/glm/CMakeLists.txt")
         add_subdirectory(libs/glm)
     else()
-        message(WARNING "GLM not found. Please install GLM or add it to libs/glm")
+        message(FATAL_ERROR "GLM not found. Please install GLM via vcpkg: vcpkg install glm:x64-windows")
     endif()
 endif()
 
 # Dear ImGui (will be added as source files)
 set(IMGUI_DIR "${CMAKE_SOURCE_DIR}/libs/imgui")
-if(EXISTS ${IMGUI_DIR})
+if(EXISTS ${IMGUI_DIR}/imgui.cpp)
     set(IMGUI_SOURCES
         ${IMGUI_DIR}/imgui.cpp
         ${IMGUI_DIR}/imgui_demo.cpp
@@ -50,7 +50,7 @@ if(EXISTS ${IMGUI_DIR})
         ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
     )
 else()
-    message(WARNING "ImGui not found at ${IMGUI_DIR}. Please add ImGui to libs/imgui")
+    message(FATAL_ERROR "ImGui not found at ${IMGUI_DIR}. Please download ImGui and extract to libs/imgui")
     set(IMGUI_SOURCES "")
 endif()
 

@@ -55,9 +55,12 @@ void Renderer::initImGui() {
     initInfo.DescriptorPool = imguiDescriptorPool;
     initInfo.MinImageCount = 2;
     initInfo.ImageCount = static_cast<uint32_t>(swapChainImages.size());
-    initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-    initInfo.RenderPass = renderPass;
-    initInfo.Subpass = 0;
+    initInfo.UseDynamicRendering = false;
+
+    // Set up pipeline info (newer ImGui API as of 2025/09/26)
+    initInfo.PipelineInfoMain.RenderPass = renderPass;
+    initInfo.PipelineInfoMain.Subpass = 0;
+    initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
     ImGui_ImplVulkan_Init(&initInfo);
 

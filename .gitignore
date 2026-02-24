@@ -15,7 +15,6 @@ _deps
 
 # C++ compiled files
 *.o
-*.obj
 *.exe
 *.out
 *.app
@@ -72,13 +71,6 @@ xcuserdata/
 # libs/glfw/
 # libs/glm/
 # libs/imgui/
-
-# Assets (large binary files)
-# Uncomment specific patterns if needed
-# *.gltf
-# *.glb
-# *.png
-# *.jpg
 
 # Build artifacts
 bin/
