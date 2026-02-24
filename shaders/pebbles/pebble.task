@@ -40,6 +40,9 @@ void main() {
     payload.subdivisionLevel = push.subdivisionLevel;
     payload.extrusionAmount  = push.extrusionAmount;
     payload.roundness        = push.roundness;
+    payload.doNoise         = push.doNoise;
+    payload.noiseAmplitude  = push.noiseAmplitude;
+    payload.noiseFrequency  = push.noiseFrequency;
 
     // One pebble patch per face for now (edge regions + layers in later features)
     payload.patchCount = 1u;

@@ -328,6 +328,9 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         pebblePC.extrusionAmount   = pebbleConfig.extrusionAmount;
         pebblePC.roundness         = pebbleConfig.roundness;
         pebblePC.debugMode         = debugMode;
+        pebblePC.doNoise           = pebbleConfig.doNoise;
+        pebblePC.noiseAmplitude    = pebbleConfig.noiseAmplitude;
+        pebblePC.noiseFrequency    = pebbleConfig.noiseFrequency;
         vkCmdPushConstants(cmd, activeLayout,
                             VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
                             VK_SHADER_STAGE_FRAGMENT_BIT,

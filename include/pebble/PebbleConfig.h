@@ -22,7 +22,10 @@ struct PebblePushConstants {
     uint32_t  _pad3            = 0;     // offset  92
     uint32_t  _pad4            = 0;     // offset  96
     uint32_t  debugMode        = 0;     // offset 100 — matches parametric layout
-    uint32_t  _pad5[4]         = {};    // offset 104 — pad to 120 bytes
+    uint32_t  doNoise          = 0;     // offset 104
+    float     noiseAmplitude   = 0.f;   // offset 108
+    float     noiseFrequency   = 0.f;   // offset 112
+    uint32_t  _pad6            = 0;     // offset 116 — pad to 120 bytes
 };
 static_assert(sizeof(PebblePushConstants) == 120, "PebblePushConstants must be 120 bytes");
 

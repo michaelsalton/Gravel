@@ -6,6 +6,7 @@
 #include "common.glsl"
 #include "../parametric/parametricGrids.glsl"
 #include "pebbleInterface.glsl"
+#include "../include/noise.glsl"
 
 layout(local_size_x = 32) in;
 layout(triangles, max_vertices = 256, max_primitives = 256) out;
@@ -179,6 +180,12 @@ void main() {
 
         vec3 localPos, localNormal;
         evalPatch(uv, localPos, localNormal);
+
+        if (payload.doNoise != 0u) {
+            float n = fbm(localPos * payload.noiseFrequency);
+            // Remap [0,1] → [-0.5, 0.5] so noise is centred around the surface
+            localPos += localNormal * (n - 0.5) * payload.noiseAmplitude;
+        }
 
         vec3 worldPos = vec3(push.model * vec4(localPos, 1.0));
 

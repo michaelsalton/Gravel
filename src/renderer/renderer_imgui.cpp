@@ -327,7 +327,12 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::Text("  Resolution: %ux%u", 1u << subdiv, 1u << subdiv);
         ImGui::SliderFloat("Extrusion", &pebbleConfig.extrusionAmount, 0.05f, 0.5f);
         ImGui::SliderFloat("Roundness", &pebbleConfig.roundness, 1.0f, 3.0f);
-        ImGui::TextDisabled("Noise: not yet implemented");
+        ImGui::Separator();
+        ImGui::Checkbox("Enable Noise", reinterpret_cast<bool*>(&pebbleConfig.doNoise));
+        if (pebbleConfig.doNoise) {
+            ImGui::SliderFloat("Amplitude", &pebbleConfig.noiseAmplitude, 0.001f, 0.3f);
+            ImGui::SliderFloat("Frequency", &pebbleConfig.noiseFrequency, 0.5f, 20.0f);
+        }
     }
 
     } // end render mode sections

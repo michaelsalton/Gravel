@@ -9,6 +9,9 @@ struct PebblePayload {
     uint  subdivisionLevel;   // 2^level grid resolution
     float extrusionAmount;
     float roundness;
+    uint  doNoise;            // 0 = off, 1 = on
+    float noiseAmplitude;
+    float noiseFrequency;
 };
 
 // Push constants layout for pebble shaders
@@ -27,6 +30,10 @@ layout(push_constant) uniform PebblePushConstants {
     uint  _pad3;              // offset  92
     uint  _pad4;              // offset  96
     uint  debugMode;          // offset 100 — matches parametric layout
+    uint  doNoise;            // offset 104
+    float noiseAmplitude;     // offset 108
+    float noiseFrequency;     // offset 112
+    uint  _pad6;              // offset 116 — pad to 120 bytes
 } push;
 
 #endif
