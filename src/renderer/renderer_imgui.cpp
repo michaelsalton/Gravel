@@ -88,10 +88,21 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                 1000.0f / ImGui::GetIO().Framerate);
     ImGui::Separator();
 
+    // Render mode selector
+    {
+        const char* modes[] = {"Parametric Surfaces", "Pebble Generation"};
+        int mode = static_cast<int>(renderMode);
+        if (ImGui::Combo("Render Mode", &mode, modes, 2))
+            renderMode = static_cast<RenderMode>(mode);
+    }
+    ImGui::Separator();
+
     // Camera controls
     if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
         camera.renderImGuiControls();
     }
+
+    if (renderMode == RENDER_MODE_PARAMETRIC) {
 
     // Resurfacing controls
     if (ImGui::CollapsingHeader("Resurfacing", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -291,6 +302,20 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             loadControlCage(std::string(ASSETS_DIR) + "parametric_luts/scale_4x4.obj");
         }
     }
+
+    } else { // RENDER_MODE_PEBBLES
+
+    if (ImGui::CollapsingHeader("Pebble Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
+        int subdiv = static_cast<int>(pebbleConfig.subdivisionLevel);
+        if (ImGui::SliderInt("Subdivision Level", &subdiv, 0, 6))
+            pebbleConfig.subdivisionLevel = static_cast<uint32_t>(subdiv);
+        ImGui::Text("  Resolution: %ux%u", 1u << subdiv, 1u << subdiv);
+        ImGui::SliderFloat("Extrusion", &pebbleConfig.extrusionAmount, 0.05f, 0.5f);
+        ImGui::SliderFloat("Roundness", &pebbleConfig.roundness, 1.0f, 3.0f);
+        ImGui::TextDisabled("Noise: not yet implemented");
+    }
+
+    } // end render mode sections
 
     // Display / VSync
     if (ImGui::CollapsingHeader("Display")) {

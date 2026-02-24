@@ -1,0 +1,10 @@
+#version 450
+#extension GL_EXT_mesh_shader : require
+
+layout(local_size_x = 1) in;
+layout(triangles, max_vertices = 3, max_primitives = 1) out;
+
+void main() {
+    // Placeholder: emit no geometry
+    SetMeshOutputsEXT(0, 0);
+}

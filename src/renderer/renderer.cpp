@@ -26,11 +26,13 @@ Renderer::Renderer(Window& window) : window(window) {
     createDescriptorPool();
     createDescriptorSets();
     createGraphicsPipeline();
+    pebblePipeline.create(device, renderPass, sceneSetLayout, halfEdgeSetLayout, perObjectSetLayout);
     initImGui();
 }
 
 Renderer::~Renderer() {
     cleanupImGui();
+    pebblePipeline.destroy(device);
     vkDestroyPipeline(device, graphicsPipeline, nullptr);
 
     // Cleanup half-edge SSBO buffers (StorageBuffer destructors handle their own cleanup)
@@ -164,22 +166,29 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     scissor.extent = swapChainExtent;
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+    VkPipeline       activePipeline = (renderMode == RENDER_MODE_PARAMETRIC)
+                                        ? graphicsPipeline
+                                        : pebblePipeline.pipeline;
+    VkPipelineLayout activeLayout   = (renderMode == RENDER_MODE_PARAMETRIC)
+                                        ? pipelineLayout
+                                        : pebblePipeline.pipelineLayout;
+
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, activePipeline);
 
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                             pipelineLayout, 0, 1,
+                             activeLayout, 0, 1,
                              &sceneDescriptorSets[currentFrame],
                              0, nullptr);
 
     if (heMeshUploaded) {
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                 pipelineLayout, 1, 1,
+                                 activeLayout, 1, 1,
                                  &heDescriptorSet,
                                  0, nullptr);
     }
 
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                             pipelineLayout, 2, 1,
+                             activeLayout, 2, 1,
                              &perObjectDescriptorSet,
                              0, nullptr);
 
@@ -240,13 +249,18 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     pushConstants.enableLod = enableLod ? 1u : 0u;
     pushConstants.lodFactor = lodFactor;
 
-    vkCmdPushConstants(cmd, pipelineLayout,
+    vkCmdPushConstants(cmd, activeLayout,
                         VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
                         VK_SHADER_STAGE_FRAGMENT_BIT,
                         0, sizeof(PushConstants), &pushConstants);
 
-    uint32_t totalTasks = heMeshUploaded ? (heNbFaces + heNbVertices) : 1;
-    pfnCmdDrawMeshTasksEXT(cmd, totalTasks, 1, 1);
+    if (renderMode == RENDER_MODE_PARAMETRIC) {
+        uint32_t totalTasks = heMeshUploaded ? (heNbFaces + heNbVertices) : 1;
+        pfnCmdDrawMeshTasksEXT(cmd, totalTasks, 1, 1);
+    } else {
+        uint32_t faceTasks = heMeshUploaded ? heNbFaces : 0;
+        pfnCmdDrawMeshTasksEXT(cmd, faceTasks, 1, 1);
+    }
 
     // Draw ImGui on top
     renderImGui(cmd);

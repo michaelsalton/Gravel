@@ -67,6 +67,7 @@ set(SOURCES
     src/loaders/LUTLoader.cpp
     src/geometry/HalfEdge.cpp
     src/vulkan/vkHelper.cpp
+    src/pebble/PebblePipeline.cpp
     ${IMGUI_SOURCES}
     # src/AppResources.cpp
 )

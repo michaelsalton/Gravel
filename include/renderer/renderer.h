@@ -13,6 +13,8 @@
 #include "loaders/LUTLoader.h"
 #include "core/camera.h"
 #include "renderer/renderer_init.h"
+#include "pebble/PebblePipeline.h"
+#include "pebble/PebbleConfig.h"
 
 class Window;
 struct HalfEdgeMesh;
@@ -181,6 +183,11 @@ private:
     // Pipeline layout and graphics pipeline
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     VkPipeline graphicsPipeline = VK_NULL_HANDLE;
+
+    // Pebble pipeline
+    PebblePipeline pebblePipeline;
+    PebbleConfig   pebbleConfig;
+    RenderMode     renderMode = RENDER_MODE_PARAMETRIC;
 
     // Mesh shader function pointer
     PFN_vkCmdDrawMeshTasksEXT pfnCmdDrawMeshTasksEXT = nullptr;
