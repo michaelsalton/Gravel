@@ -62,6 +62,9 @@ xcuserdata/
 *.nsys-rep
 *.qdrep
 
+# ImGui runtime config (written to CWD at runtime)
+imgui.ini
+
 # Temporary files
 *.tmp
 *.temp

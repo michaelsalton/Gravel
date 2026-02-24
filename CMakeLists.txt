@@ -110,6 +110,7 @@ endif()
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     SHADER_DIR="${CMAKE_BINARY_DIR}/shaders/"
     ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets/"
+    BUILD_DIR="${CMAKE_BINARY_DIR}/"
 )
 
 # Compiler warnings

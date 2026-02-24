@@ -39,6 +39,7 @@ void Renderer::initImGui() {
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.IniFilename = BUILD_DIR "imgui.ini";
 
     ImGui::StyleColorsDark();
 
