@@ -1,7 +1,14 @@
 #version 450
+#extension GL_EXT_mesh_shader : require
 #extension GL_GOOGLE_include_directive : require
 
 #include "shaderInterface.h"
+#include "shading.glsl"
+
+layout(location = 0) in PerVertexData {
+    vec3 worldPos;
+    vec3 normal;
+} vIn;
 
 layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
     mat4  view;
@@ -11,22 +18,30 @@ layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
     float farPlane;
 } viewUBO;
 
-layout(location = 0) in PerVertexData {
-    vec3 worldPos;
-    vec3 normal;
-} vIn;
+layout(set = SET_SCENE, binding = BINDING_SHADING_UBO) uniform ShadingUBOBlock {
+    vec4  lightPosition;
+    vec4  ambient;       // rgb = color, a = intensity
+    float diffuse;
+    float specular;
+    float shininess;
+    float padding;
+} shadingUBO;
 
 layout(location = 0) out vec4 outColor;
 
 void main() {
-    vec3 N = normalize(vIn.normal);
-    vec3 L = normalize(vec3(1.0, 2.0, 1.0));  // directional light
+    vec3 worldPos = vIn.worldPos;
+    vec3 normal   = normalize(vIn.normal);
 
-    float diff    = max(dot(N, L), 0.0);
-    float ambient = 0.15;
+    vec3 lighting = blinnPhong(worldPos, normal,
+                               shadingUBO.lightPosition.xyz,
+                               viewUBO.cameraPosition.xyz,
+                               shadingUBO.ambient,
+                               shadingUBO.diffuse,
+                               shadingUBO.specular,
+                               shadingUBO.shininess);
 
-    vec3 baseColor = vec3(0.6, 0.55, 0.45);  // warm stone colour
-    vec3 color     = baseColor * (ambient + diff);
-
-    outColor = vec4(color, 1.0);
+    // Warm stone base colour — tints the Blinn-Phong result
+    vec3 stoneColor = vec3(0.72, 0.62, 0.50);
+    outColor = vec4(lighting * stoneColor, 1.0);
 }
