@@ -1,7 +1,7 @@
 #ifndef PARAMETRIC_GRIDS_GLSL
 #define PARAMETRIC_GRIDS_GLSL
 
-#include "../common.glsl"
+#include "common.glsl"
 
 // ============================================================================
 // Cubic B-Spline Basis Functions

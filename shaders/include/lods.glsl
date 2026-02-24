@@ -2,7 +2,7 @@
 #define LODS_GLSL
 
 #include "common.glsl"
-#include "parametric/parametricSurfaces.glsl"
+#include "../parametric/parametricSurfaces.glsl"
 
 // ============================================================================
 // Bounding Box Computation

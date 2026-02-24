@@ -1,7 +1,7 @@
 #ifndef PARAMETRIC_SURFACES_GLSL
 #define PARAMETRIC_SURFACES_GLSL
 
-#include "../common.glsl"
+#include "common.glsl"
 
 // ============================================================================
 // Parametric Torus

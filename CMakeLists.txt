@@ -135,6 +135,7 @@ function(compile_shader TARGET_NAME SHADER_SOURCE)
             -V ${SHADER_SOURCE}
             -o ${SHADER_OUTPUT}
             -I${CMAKE_SOURCE_DIR}/shaders
+            -I${CMAKE_SOURCE_DIR}/shaders/include
         DEPENDS ${SHADER_SOURCE}
         COMMENT "Compiling shader ${SHADER_NAME}"
         VERBATIM

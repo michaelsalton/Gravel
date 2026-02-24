@@ -2,10 +2,10 @@
 #extension GL_EXT_mesh_shader : require
 #extension GL_GOOGLE_include_directive : require
 
-#include "../shaderInterface.h"
-#include "../common.glsl"
-#include "../culling.glsl"
-#include "../lods.glsl"
+#include "shaderInterface.h"
+#include "common.glsl"
+#include "culling.glsl"
+#include "lods.glsl"
 
 // Task shader work group size: one thread per task
 layout(local_size_x = 1) in;

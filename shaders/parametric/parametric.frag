@@ -2,8 +2,8 @@
 #extension GL_EXT_mesh_shader : require
 #extension GL_GOOGLE_include_directive : require
 
-#include "../shaderInterface.h"
-#include "../shading.glsl"
+#include "shaderInterface.h"
+#include "shading.glsl"
 
 // Per-vertex inputs (interpolated)
 layout(location = 0) in PerVertexData {
