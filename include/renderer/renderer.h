@@ -113,6 +113,10 @@ private:
     void updatePerObjectDescriptorSet();
     size_t calculateVRAM() const;
 
+    void applyPresetChainMail();
+    void applyPresetDragonScales();
+    void applyPresetCobblestone();
+
     void initImGui();
     void cleanupImGui();
     void renderImGui(VkCommandBuffer cmd);

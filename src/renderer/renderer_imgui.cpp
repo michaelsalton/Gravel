@@ -383,8 +383,47 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         }
     }
 
+    // Presets
+    if (ImGui::CollapsingHeader("Presets")) {
+        if (ImGui::Button("Chain Mail"))    applyPresetChainMail();
+        ImGui::SameLine();
+        if (ImGui::Button("Dragon Scales")) applyPresetDragonScales();
+        ImGui::SameLine();
+        if (ImGui::Button("Cobblestone"))   applyPresetCobblestone();
+    }
+
     ImGui::End();
 
     ImGui::Render();
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
+}
+
+void Renderer::applyPresetChainMail() {
+    renderMode  = RENDER_MODE_PARAMETRIC;
+    elementType = 0;      // Torus
+    torusMajorR = 1.0f;
+    torusMinorR = 0.3f;
+    userScaling = 0.15f;
+    resolutionM = 8;
+    resolutionN = 8;
+}
+
+void Renderer::applyPresetDragonScales() {
+    renderMode                    = RENDER_MODE_PEBBLES;
+    pebbleConfig.subdivisionLevel = 3;
+    pebbleConfig.extrusionAmount  = 0.2f;
+    pebbleConfig.roundness        = 2.0f;
+    pebbleConfig.doNoise          = 1;
+    pebbleConfig.noiseAmplitude   = 0.08f;
+    pebbleConfig.noiseFrequency   = 4.0f;
+}
+
+void Renderer::applyPresetCobblestone() {
+    renderMode                    = RENDER_MODE_PEBBLES;
+    pebbleConfig.subdivisionLevel = 2;
+    pebbleConfig.extrusionAmount  = 0.1f;
+    pebbleConfig.roundness        = 2.0f;
+    pebbleConfig.doNoise          = 1;
+    pebbleConfig.noiseAmplitude   = 0.05f;
+    pebbleConfig.noiseFrequency   = 6.0f;
 }
