@@ -1,0 +1,51 @@
+#version 450
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "shaderInterface.h"
+#include "pebbleInterface.glsl"
+
+layout(local_size_x = 1) in;
+// Max 8-vertex n-gon → 8 verts, 6 triangles (fan from v0)
+layout(triangles, max_vertices = 8, max_primitives = 6) out;
+
+layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
+    mat4  view;
+    mat4  projection;
+    vec4  cameraPosition;
+    float nearPlane;
+    float farPlane;
+} viewUBO;
+
+void main() {
+    uint faceId = gl_WorkGroupID.x;
+
+    if (faceId >= push.nbFaces) {
+        SetMeshOutputsEXT(0u, 0u);
+        return;
+    }
+
+    // Walk half-edge loop to collect face vertices
+    int  faceEdge = getFaceEdge(faceId);
+    int  e        = faceEdge;
+    vec3 verts[8];
+    uint count = 0u;
+    do {
+        verts[count] = getVertexPosition(uint(getHalfEdgeVertex(uint(e))));
+        count++;
+        e = getHalfEdgeNext(uint(e));
+    } while (e != faceEdge && count < 8u);
+
+    uint primCount = count - 2u;
+    SetMeshOutputsEXT(count, primCount);
+
+    mat4 mvp = viewUBO.projection * viewUBO.view * push.model;
+    for (uint i = 0u; i < count; i++) {
+        gl_MeshVerticesEXT[i].gl_Position = mvp * vec4(verts[i], 1.0);
+    }
+
+    // Triangle fan from vertex 0
+    for (uint t = 0u; t < primCount; t++) {
+        gl_PrimitiveTriangleIndicesEXT[t] = uvec3(0u, t + 1u, t + 2u);
+    }
+}

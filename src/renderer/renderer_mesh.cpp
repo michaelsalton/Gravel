@@ -1,6 +1,7 @@
 #include "renderer/renderer.h"
 #include "renderer/renderer_mesh.h"
 #include "geometry/HalfEdge.h"
+#include "loaders/ObjLoader.h"
 #include "core/window.h"
 #include <iostream>
 #include <cstring>
@@ -282,4 +283,11 @@ size_t Renderer::calculateVRAM() const {
     for (const auto& buf : heFloatBuffers) total += buf.getSize();
     total += sizeof(MeshInfoUBO);
     return total;
+}
+
+void Renderer::loadMesh(const std::string& path) {
+    vkDeviceWaitIdle(device);
+    NGonMesh ngon = ObjLoader::load(path);
+    HalfEdgeMesh heMesh = HalfEdgeBuilder::build(ngon);
+    uploadHalfEdgeMesh(heMesh);
 }

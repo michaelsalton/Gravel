@@ -97,6 +97,21 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     }
     ImGui::Separator();
 
+    // Base mesh — always visible regardless of render mode
+    if (ImGui::CollapsingHeader("Base Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
+        const char* meshNames[] = { "Cube", "Plane" };
+        const char* meshPaths[] = {
+            ASSETS_DIR "cube.obj",
+            ASSETS_DIR "plane.obj"
+        };
+        int prev = selectedMesh;
+        ImGui::Combo("Mesh", &selectedMesh, meshNames, 2);
+        if (selectedMesh != prev)
+            loadMesh(meshPaths[selectedMesh]);
+        ImGui::Checkbox("Show Base Mesh", &showBaseMesh);
+    }
+    ImGui::Separator();
+
     // Camera controls
     if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
         camera.renderImGuiControls();
@@ -307,7 +322,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
     if (ImGui::CollapsingHeader("Pebble Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
         int subdiv = static_cast<int>(pebbleConfig.subdivisionLevel);
-        if (ImGui::SliderInt("Subdivision Level", &subdiv, 0, 6))
+        if (ImGui::SliderInt("Subdivision Level", &subdiv, 0, 3))
             pebbleConfig.subdivisionLevel = static_cast<uint32_t>(subdiv);
         ImGui::Text("  Resolution: %ux%u", 1u << subdiv, 1u << subdiv);
         ImGui::SliderFloat("Extrusion", &pebbleConfig.extrusionAmount, 0.05f, 0.5f);

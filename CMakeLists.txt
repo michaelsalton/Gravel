@@ -68,6 +68,7 @@ set(SOURCES
     src/geometry/HalfEdge.cpp
     src/vulkan/vkHelper.cpp
     src/pebble/PebblePipeline.cpp
+    src/pebble/BaseMeshPipeline.cpp
     ${IMGUI_SOURCES}
     # src/AppResources.cpp
 )

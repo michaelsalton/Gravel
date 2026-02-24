@@ -4,6 +4,7 @@
 
 #include "shaderInterface.h"
 #include "common.glsl"
+#include "../parametric/parametricGrids.glsl"
 #include "pebbleInterface.glsl"
 
 layout(local_size_x = 32) in;
@@ -22,6 +23,12 @@ layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
     float farPlane;
 } viewUBO;
 
+// Per-vertex outputs for lighting (consumed in feature 6.6)
+layout(location = 0) out PerVertexData {
+    vec3 worldPos;
+    vec3 normal;
+} vOut[];
+
 // Hash for per-vertex random variation
 float hash(uint n) {
     n = (n << 13u) ^ n;
@@ -29,11 +36,48 @@ float hash(uint n) {
     return float(n & 0x7fffffffu) / float(0x7fffffffu);
 }
 
+// Evaluate the 4×4 B-spline patch at uv ∈ [0,1]².
+// Reads controlCage[] from shared memory directly.
+void evalPatch(vec2 uv, out vec3 pos, out vec3 normal) {
+    vec4 Bu  = bsplineBasis(uv.x);
+    vec4 Bv  = bsplineBasis(uv.y);
+    vec4 dBu = bsplineBasisDerivative(uv.x);
+    vec4 dBv = bsplineBasisDerivative(uv.y);
+
+    pos         = vec3(0.0);
+    vec3 dpdu   = vec3(0.0);
+    vec3 dpdv   = vec3(0.0);
+
+    for (int j = 0; j < 4; j++) {
+        vec3 rowPos  = vec3(0.0);
+        vec3 rowDerU = vec3(0.0);
+        for (int i = 0; i < 4; i++) {
+            vec3 P   = controlCage[j * 4 + i];
+            rowPos  += Bu[i]  * P;
+            rowDerU += dBu[i] * P;
+        }
+        pos  += Bv[j]  * rowPos;
+        dpdv += dBv[j] * rowPos;
+        dpdu += Bv[j]  * rowDerU;
+    }
+
+    vec3  n    = cross(dpdu, dpdv);
+    float lenN = length(n);
+    normal = (lenN > 1e-6) ? n / lenN : vec3(0.0, 0.0, 1.0);
+}
+
 void main() {
     uint localId = gl_LocalInvocationID.x;
 
-    // Must be called unconditionally before any gl_MeshVerticesEXT writes
-    SetMeshOutputsEXT(16u, 0u);
+    // Cap at level 3 (M=8): numVerts=81, numPrims=128 — both within the 256 limit.
+    // Level 4 would need 512 primitives which exceeds gl_MaxMeshOutputPrimitivesEXT.
+    uint level    = min(payload.subdivisionLevel, 3u);
+    uint M        = 1u << level;
+    uint numVerts = (M + 1u) * (M + 1u);
+    uint numPrims = M * M * 2u;
+
+    // Must be unconditional, before any gl_MeshVerticesEXT / gl_PrimitiveTriangleIndicesEXT writes
+    SetMeshOutputsEXT(numVerts, numPrims);
 
     // =========================================================================
     // Step 1: Build 4×4 control cage in shared memory (thread 0 only)
@@ -70,15 +114,13 @@ void main() {
             vec3  extruded  = faceVerts[vi] + faceNormal * extrusion;
 
             // Project toward center+normal peak for roundness
-            // roundness=1 → no projection (linear), roundness=2 → half projection (quadratic)
-            float t    = 1.0 / payload.roundness;
-            extruded   = mix(extruded, faceCenter + faceNormal * extrusion, t);
+            float t  = 1.0 / payload.roundness;
+            extruded = mix(extruded, faceCenter + faceNormal * extrusion, t);
 
             controlCage[8u + i] = extruded;
         }
 
-        // Snapshot both layers before the reconstruction loop overwrites controlCage[0..11].
-        // Without this, rows v=2 and v=3 would read stale/overwritten values.
+        // Snapshot both layers before reconstruction overwrites controlCage[0..11]
         vec3 baseVerts[4];
         vec3 extrudedVerts[4];
         for (uint i = 0u; i < 4u; i++) {
@@ -86,9 +128,7 @@ void main() {
             extrudedVerts[i] = controlCage[8u + i];
         }
 
-        // Reconstruct full 4×4 grid by interpolating along the extrusion axis:
-        //   row 0 (v=0) → base layer
-        //   row 3 (v=3) → extruded layer
+        // Interpolate into 4×4 grid: row 0 = base, row 3 = extruded
         for (uint v = 0u; v < 4u; v++) {
             float tV = float(v) / 3.0;
             for (uint u = 0u; u < 4u; u++) {
@@ -100,11 +140,42 @@ void main() {
     barrier();
 
     // =========================================================================
-    // Step 2: Write 16 cage vertices (debug — no primitives yet)
+    // Step 2: Evaluate B-spline surface — write vertices
     // =========================================================================
 
-    if (localId < 16u) {
-        mat4 mvp = viewUBO.projection * viewUBO.view * push.model;
-        gl_MeshVerticesEXT[localId].gl_Position = mvp * vec4(controlCage[localId], 1.0);
+    mat4 mvp = viewUBO.projection * viewUBO.view * push.model;
+    mat3 normalMat = transpose(inverse(mat3(push.model)));
+
+    for (uint i = localId; i < numVerts; i += 32u) {
+        uint iu = i % (M + 1u);
+        uint iv = i / (M + 1u);
+        vec2 uv = vec2(iu, iv) / vec2(M, M);
+
+        vec3 localPos, localNormal;
+        evalPatch(uv, localPos, localNormal);
+
+        vec3 worldPos = vec3(push.model * vec4(localPos, 1.0));
+
+        gl_MeshVerticesEXT[i].gl_Position = mvp * vec4(localPos, 1.0);
+        vOut[i].worldPos = worldPos;
+        vOut[i].normal   = normalize(normalMat * localNormal);
+    }
+
+    // =========================================================================
+    // Step 3: Generate triangle indices (two triangles per quad)
+    // =========================================================================
+
+    uint numQuads = M * M;
+    for (uint q = localId; q < numQuads; q += 32u) {
+        uint qu = q % M;
+        uint qv = q / M;
+
+        uint v00 = qv * (M + 1u) + qu;
+        uint v10 = v00 + 1u;
+        uint v01 = v00 + (M + 1u);
+        uint v11 = v01 + 1u;
+
+        gl_PrimitiveTriangleIndicesEXT[2u * q    ] = uvec3(v00, v10, v11);
+        gl_PrimitiveTriangleIndicesEXT[2u * q + 1u] = uvec3(v00, v11, v01);
     }
 }

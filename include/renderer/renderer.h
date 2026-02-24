@@ -14,6 +14,7 @@
 #include "core/camera.h"
 #include "renderer/renderer_init.h"
 #include "pebble/PebblePipeline.h"
+#include "pebble/BaseMeshPipeline.h"
 #include "pebble/PebbleConfig.h"
 
 class Window;
@@ -81,6 +82,7 @@ public:
     bool isFrameStarted() const { return frameStarted; }
 
     void loadControlCage(const std::string& filepath);
+    void loadMesh(const std::string& path);
     void processInput(Window& window, float deltaTime);
 
 private:
@@ -185,9 +187,12 @@ private:
     VkPipeline graphicsPipeline = VK_NULL_HANDLE;
 
     // Pebble pipeline
-    PebblePipeline pebblePipeline;
-    PebbleConfig   pebbleConfig;
-    RenderMode     renderMode = RENDER_MODE_PARAMETRIC;
+    PebblePipeline   pebblePipeline;
+    BaseMeshPipeline baseMeshPipeline;
+    PebbleConfig     pebbleConfig;
+    RenderMode       renderMode     = RENDER_MODE_PARAMETRIC;
+    bool             showBaseMesh   = false;
+    int              selectedMesh   = 0;  // 0 = cube, 1 = plane
 
     // Mesh shader function pointer
     PFN_vkCmdDrawMeshTasksEXT pfnCmdDrawMeshTasksEXT = nullptr;
