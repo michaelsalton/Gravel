@@ -25,7 +25,7 @@ layout(push_constant) uniform PebblePushConstants {
     uint  subdivisionLevel;   // offset  72
     float extrusionAmount;    // offset  76
     float roundness;          // offset  80
-    uint  _pad1;              // offset  84
+    uint  enableLod;          // offset  84
     uint  _pad2;              // offset  88
     uint  _pad3;              // offset  92
     uint  _pad4;              // offset  96

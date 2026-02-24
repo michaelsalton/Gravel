@@ -327,6 +327,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         pebblePC.subdivisionLevel  = pebbleConfig.subdivisionLevel;
         pebblePC.extrusionAmount   = pebbleConfig.extrusionAmount;
         pebblePC.roundness         = pebbleConfig.roundness;
+        pebblePC.enableLod         = pebbleConfig.enableLod;
         pebblePC.debugMode         = debugMode;
         pebblePC.doNoise           = pebbleConfig.doNoise;
         pebblePC.noiseAmplitude    = pebbleConfig.noiseAmplitude;

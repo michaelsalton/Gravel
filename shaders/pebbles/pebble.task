@@ -4,11 +4,20 @@
 
 #include "shaderInterface.h"
 #include "common.glsl"
+#include "culling.glsl"
 #include "pebbleInterface.glsl"
 
 layout(local_size_x = 1) in;
 
 taskPayloadSharedEXT PebblePayload payload;
+
+layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
+    mat4  view;
+    mat4  projection;
+    vec4  cameraPosition;
+    float nearPlane;
+    float farPlane;
+} viewUBO;
 
 void main() {
     uint faceId = gl_WorkGroupID.x;
@@ -34,15 +43,43 @@ void main() {
         currentEdge = getHalfEdgeNext(currentEdge);
     } while (currentEdge != startEdge && vertCount < 16u);
 
+    // =========================================================================
+    // LOD: adaptive subdivision level based on screen-space size
+    // =========================================================================
+
+    uint subdivLevel;
+    if (push.enableLod != 0u) {
+        vec3  faceCenter = readFaceCenter(faceId);
+        float faceArea   = readFaceArea(faceId);
+        mat4  mvp        = viewUBO.projection * viewUBO.view * push.model;
+
+        // Bounding sphere radius (face footprint + extrusion headroom)
+        float radius = computeBoundingRadius(faceArea, push.extrusionAmount, 2.0);
+
+        // Project face centre to clip space; compute apparent NDC diameter
+        vec4  clipPos    = mvp * vec4(faceCenter, 1.0);
+        float screenSize = (clipPos.w > 0.0) ? (2.0 * radius / clipPos.w) : 10.0;
+
+        // Map screen size to subdivision level (max level = push.subdivisionLevel)
+        if      (screenSize < 0.1) subdivLevel = 0u;
+        else if (screenSize < 0.2) subdivLevel = 1u;
+        else if (screenSize < 0.5) subdivLevel = 2u;
+        else                       subdivLevel = 3u;
+
+        subdivLevel = min(subdivLevel, push.subdivisionLevel);
+    } else {
+        subdivLevel = push.subdivisionLevel;
+    }
+
     // Fill task payload
-    payload.faceId          = faceId;
-    payload.vertCount       = vertCount;
-    payload.subdivisionLevel = push.subdivisionLevel;
+    payload.faceId           = faceId;
+    payload.vertCount        = vertCount;
+    payload.subdivisionLevel = subdivLevel;
     payload.extrusionAmount  = push.extrusionAmount;
     payload.roundness        = push.roundness;
-    payload.doNoise         = push.doNoise;
-    payload.noiseAmplitude  = push.noiseAmplitude;
-    payload.noiseFrequency  = push.noiseFrequency;
+    payload.doNoise          = push.doNoise;
+    payload.noiseAmplitude   = push.noiseAmplitude;
+    payload.noiseFrequency   = push.noiseFrequency;
 
     // One pebble patch per face for now (edge regions + layers in later features)
     payload.patchCount = 1u;

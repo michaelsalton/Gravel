@@ -327,6 +327,11 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::Text("  Resolution: %ux%u", 1u << subdiv, 1u << subdiv);
         ImGui::SliderFloat("Extrusion", &pebbleConfig.extrusionAmount, 0.05f, 0.5f);
         ImGui::SliderFloat("Roundness", &pebbleConfig.roundness, 1.0f, 3.0f);
+        ImGui::Checkbox("Adaptive LOD", reinterpret_cast<bool*>(&pebbleConfig.enableLod));
+        if (pebbleConfig.enableLod) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("(max level: %u)", pebbleConfig.subdivisionLevel);
+        }
         ImGui::Separator();
         ImGui::Checkbox("Enable Noise", reinterpret_cast<bool*>(&pebbleConfig.doNoise));
         if (pebbleConfig.doNoise) {

@@ -17,7 +17,7 @@ struct PebblePushConstants {
     uint32_t  subdivisionLevel = 0;     // offset  72
     float     extrusionAmount  = 0.f;   // offset  76
     float     roundness        = 0.f;   // offset  80
-    uint32_t  _pad1            = 0;     // offset  84
+    uint32_t  enableLod        = 0;     // offset  84
     uint32_t  _pad2            = 0;     // offset  88
     uint32_t  _pad3            = 0;     // offset  92
     uint32_t  _pad4            = 0;     // offset  96
@@ -30,9 +30,10 @@ struct PebblePushConstants {
 static_assert(sizeof(PebblePushConstants) == 120, "PebblePushConstants must be 120 bytes");
 
 struct PebbleConfig {
-    uint32_t subdivisionLevel = 3;      // 2^level grid per face
+    uint32_t subdivisionLevel = 3;      // 2^level grid per face (also LOD ceiling)
     float    extrusionAmount  = 0.15f;
     float    roundness        = 2.0f;   // 1=linear, 2=quadratic projection
+    uint32_t enableLod        = 1;      // 0=fixed subdivisionLevel, 1=screen-size adaptive
     uint32_t doNoise          = 0;
 
     float    noiseAmplitude   = 0.08f;
