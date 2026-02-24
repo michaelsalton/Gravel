@@ -211,8 +211,8 @@ void main() {
         gl_PrimitiveTriangleIndicesEXT[2u * q    ] = uvec3(v00, v10, v11);
         gl_PrimitiveTriangleIndicesEXT[2u * q + 1u] = uvec3(v00, v11, v01);
 
-        // Tag both triangles with this face's ID for debug visualisation
-        pOut[2u * q    ].data = uvec4(payload.faceId, 0u, 0u, 0u);
-        pOut[2u * q + 1u].data = uvec4(payload.faceId, 0u, 0u, 0u);
+        // Tag both triangles with this face's ID and subdivision level for debug visualisation
+        pOut[2u * q    ].data = uvec4(payload.faceId, level, M, 0u);
+        pOut[2u * q + 1u].data = uvec4(payload.faceId, level, M, 0u);
     }
 }

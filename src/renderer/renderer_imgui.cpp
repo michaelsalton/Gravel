@@ -58,9 +58,9 @@ void Renderer::initImGui() {
     initInfo.ImageCount = static_cast<uint32_t>(swapChainImages.size());
     initInfo.UseDynamicRendering = false;
 
-    initInfo.RenderPass = renderPass;
-    initInfo.Subpass = 0;
-    initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    initInfo.PipelineInfoMain.RenderPass = renderPass;
+    initInfo.PipelineInfoMain.Subpass = 0;
+    initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
     ImGui_ImplVulkan_Init(&initInfo);
 
@@ -374,12 +374,36 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             "Shading (Blinn-Phong)",
             "Normals (RGB)",
             "UV Coordinates",
-            "Task ID (Per-Element)",
-            "Element Type (Face/Vertex)"
+            "Task/Face ID (Per-Element)",
+            "Element Type / LOD"
         };
         int mode = static_cast<int>(debugMode);
         if (ImGui::Combo("Debug Mode", &mode, debugModes, 5)) {
             debugMode = static_cast<uint32_t>(mode);
+        }
+
+        // Show mode-specific info
+        if (debugMode > 0) {
+            ImGui::Indent();
+            switch (debugMode) {
+                case 1:
+                    ImGui::TextDisabled("RGB colors represent surface normals");
+                    break;
+                case 2:
+                    ImGui::TextDisabled("Red = U axis, Green = V axis");
+                    break;
+                case 3:
+                    ImGui::TextDisabled("Unique color per surface element");
+                    break;
+                case 4:
+                    if (renderMode == RENDER_MODE_PARAMETRIC) {
+                        ImGui::TextDisabled("Red = Vertex, Blue = Face");
+                    } else {
+                        ImGui::TextDisabled("Blue->Green->Yellow->Red (LOD 0->3)");
+                    }
+                    break;
+            }
+            ImGui::Unindent();
         }
     }
 

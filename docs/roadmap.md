@@ -118,7 +118,7 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 - [ ] 7.2 Control Map Sampling and Element Type Selection (2-3h)
 - [x] 7.3 Base Mesh Rendering (3-4h)
 - [x] 7.4 UI Organization and Presets (2-3h)
-- [ ] 7.5 Debug Visualization Modes (2h)
+- [x] 7.5 Debug Visualization Modes (2h)
 - [ ] 7.6 Skeletal Animation (4-5h) **[OPTIONAL]**
 
 **Milestone**: Hybrid surfaces via control maps, polished UI, presets, debug modes

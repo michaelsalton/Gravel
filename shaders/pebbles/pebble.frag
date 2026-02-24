@@ -12,7 +12,7 @@ layout(location = 0) in PerVertexData {
 } vIn;
 
 layout(location = 2) perprimitiveEXT in PerPrimitiveData {
-    flat uvec4 data;  // x = faceId
+    flat uvec4 data;  // x = faceId, y = subdivisionLevel, z = resolution (M)
 } pIn;
 
 layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
@@ -74,6 +74,24 @@ void main() {
         case 3: {
             // Face ID — unique colour per face (equivalent to task ID in parametric)
             color = getDebugColor(faceId);
+            break;
+        }
+
+        case 4: {
+            // LOD level visualization based on subdivision level
+            uint level = pIn.data.y;
+            uint resolution = pIn.data.z;
+
+            // Color based on subdivision level (0-3)
+            if (level == 0) {
+                color = vec3(0.0, 0.0, 1.0);  // Blue = lowest detail (2x2)
+            } else if (level == 1) {
+                color = vec3(0.0, 1.0, 0.0);  // Green = low detail (4x4)
+            } else if (level == 2) {
+                color = vec3(1.0, 1.0, 0.0);  // Yellow = medium detail (8x8)
+            } else {
+                color = vec3(1.0, 0.0, 0.0);  // Red = high detail (16x16)
+            }
             break;
         }
 
