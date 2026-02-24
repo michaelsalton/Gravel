@@ -23,26 +23,27 @@ layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
     float farPlane;
 } viewUBO;
 
-// Per-vertex outputs for lighting (consumed in feature 6.6)
+// Per-vertex outputs for lighting
 layout(location = 0) out PerVertexData {
     vec3 worldPos;
     vec3 normal;
 } vOut[];
 
-// Hash for per-vertex random variation
+// Hash for per-face random variation
 float hash(uint n) {
     n = (n << 13u) ^ n;
     n = n * (n * n * 15731u + 789221u) + 1376312589u;
     return float(n & 0x7fffffffu) / float(0x7fffffffu);
 }
 
-// Evaluate the 4×4 B-spline patch at uv ∈ [0,1]².
+// Evaluate the 4×4 Bezier patch at uv ∈ [0,1]².
 // Reads controlCage[] from shared memory directly.
+// Uses Bernstein basis so corners are interpolated exactly.
 void evalPatch(vec2 uv, out vec3 pos, out vec3 normal) {
-    vec4 Bu  = bsplineBasis(uv.x);
-    vec4 Bv  = bsplineBasis(uv.y);
-    vec4 dBu = bsplineBasisDerivative(uv.x);
-    vec4 dBv = bsplineBasisDerivative(uv.y);
+    vec4 Bu  = bernsteinCubic(uv.x);
+    vec4 Bv  = bernsteinCubic(uv.y);
+    vec4 dBu = bernsteinCubicDeriv(uv.x);
+    vec4 dBv = bernsteinCubicDeriv(uv.y);
 
     pos         = vec3(0.0);
     vec3 dpdu   = vec3(0.0);
@@ -70,7 +71,6 @@ void main() {
     uint localId = gl_LocalInvocationID.x;
 
     // Cap at level 3 (M=8): numVerts=81, numPrims=128 — both within the 256 limit.
-    // Level 4 would need 512 primitives which exceeds gl_MaxMeshOutputPrimitivesEXT.
     uint level    = min(payload.subdivisionLevel, 3u);
     uint M        = 1u << level;
     uint numVerts = (M + 1u) * (M + 1u);
@@ -80,67 +80,88 @@ void main() {
     SetMeshOutputsEXT(numVerts, numPrims);
 
     // =========================================================================
-    // Step 1: Build 4×4 control cage in shared memory (thread 0 only)
+    // Step 1: Build 4×4 dome-shaped Bezier cage in shared memory (thread 0)
+    //
+    // Cage layout: u = c[0]→c[1] direction, v = c[0]→c[3] direction
+    //
+    //   c[3] --- c[2]      (v=1, row 3)
+    //    |         |
+    //    | (raised)|       (rows 1 & 2 interior: dome bump)
+    //    |         |
+    //   c[0] --- c[1]      (v=0, row 0)
+    //
+    // Interior control point height = e[corner] * roundness * (16/9).
+    // The Bernstein blending at the patch centre reduces height by factor 9/16,
+    // so the dome peak equals approximately e[corner] * roundness.
     // =========================================================================
 
     if (localId == 0u) {
         uint faceId     = payload.faceId;
-        vec3 faceCenter = readFaceCenter(faceId);
         vec3 faceNormal = readFaceNormal(faceId);
         int  faceEdge   = readFaceEdge(faceId);
 
-        // Walk half-edge loop to collect face vertices (up to 8)
-        vec3 faceVerts[8];
+        // Walk half-edge loop to collect up to 4 face vertices
+        vec3 c[4];
         uint vertCount   = 0u;
         int  currentEdge = faceEdge;
         do {
-            int vertId             = getHalfEdgeVertex(uint(currentEdge));
-            faceVerts[vertCount]   = readVertexPosition(uint(vertId));
+            int vertId = getHalfEdgeVertex(uint(currentEdge));
+            if (vertCount < 4u) c[vertCount] = readVertexPosition(uint(vertId));
             vertCount++;
             currentEdge = getHalfEdgeNext(uint(currentEdge));
         } while (currentEdge != faceEdge && vertCount < 8u);
 
-        // Build base layer (indices 0–3) and extruded layer (indices 8–11).
-        // For faces with fewer than 4 vertices, duplicate the last corner.
+        // Pad triangles / n-gons: duplicate last corner to fill 4 slots
+        for (uint i = vertCount; i < 4u; i++) c[i] = c[vertCount - 1u];
+
+        // Per-corner extrusion with random variation [0.85, 1.15]
+        // Interior control point at quadrant i gets height h[i].
+        // Factor (16/9) compensates for Bernstein blending so dome peak ≈ e[i]*roundness.
+        float h[4];
         for (uint i = 0u; i < 4u; i++) {
-            uint vi = (i < vertCount) ? i : (vertCount - 1u);
-
-            // Base: contract 10% toward face center
-            controlCage[i] = mix(faceVerts[vi], faceCenter, 0.1);
-
-            // Extrude along face normal with per-vertex random variation [0.85, 1.15]
-            float randomVar = hash(faceId * 16u + i) * 0.3 + 0.85;
-            float extrusion = payload.extrusionAmount * randomVar;
-            vec3  extruded  = faceVerts[vi] + faceNormal * extrusion;
-
-            // Project toward center+normal peak for roundness
-            float t  = 1.0 / payload.roundness;
-            extruded = mix(extruded, faceCenter + faceNormal * extrusion, t);
-
-            controlCage[8u + i] = extruded;
+            float rnd = hash(faceId * 16u + i) * 0.3 + 0.85;
+            h[i] = payload.extrusionAmount * rnd * payload.roundness * (16.0 / 9.0);
         }
 
-        // Snapshot both layers before reconstruction overwrites controlCage[0..11]
-        vec3 baseVerts[4];
-        vec3 extrudedVerts[4];
-        for (uint i = 0u; i < 4u; i++) {
-            baseVerts[i]     = controlCage[i];
-            extrudedVerts[i] = controlCage[8u + i];
-        }
+        // Row 0 (v=0): bottom edge c[0]→c[1], at face level
+        controlCage[0]  = c[0];
+        controlCage[1]  = mix(c[0], c[1], 1.0/3.0);
+        controlCage[2]  = mix(c[0], c[1], 2.0/3.0);
+        controlCage[3]  = c[1];
 
-        // Interpolate into 4×4 grid: row 0 = base, row 3 = extruded
-        for (uint v = 0u; v < 4u; v++) {
-            float tV = float(v) / 3.0;
-            for (uint u = 0u; u < 4u; u++) {
-                controlCage[v * 4u + u] = mix(baseVerts[u], extrudedVerts[u], tV);
-            }
-        }
+        // Row 1 (v=1/3): bilinear grid positions + normal-lift
+        // Interior pts near c[0] (col1) and c[1] (col2)
+        controlCage[4]  = mix(c[0], c[3], 1.0/3.0);
+        controlCage[5]  = mix(mix(c[0], c[1], 1.0/3.0),
+                              mix(c[3], c[2], 1.0/3.0), 1.0/3.0)
+                          + faceNormal * h[0];
+        controlCage[6]  = mix(mix(c[0], c[1], 2.0/3.0),
+                              mix(c[3], c[2], 2.0/3.0), 1.0/3.0)
+                          + faceNormal * h[1];
+        controlCage[7]  = mix(c[1], c[2], 1.0/3.0);
+
+        // Row 2 (v=2/3): bilinear grid positions + normal-lift
+        // Interior pts near c[3] (col1) and c[2] (col2)
+        controlCage[8]  = mix(c[0], c[3], 2.0/3.0);
+        controlCage[9]  = mix(mix(c[0], c[1], 1.0/3.0),
+                              mix(c[3], c[2], 1.0/3.0), 2.0/3.0)
+                          + faceNormal * h[3];
+        controlCage[10] = mix(mix(c[0], c[1], 2.0/3.0),
+                              mix(c[3], c[2], 2.0/3.0), 2.0/3.0)
+                          + faceNormal * h[2];
+        controlCage[11] = mix(c[1], c[2], 2.0/3.0);
+
+        // Row 3 (v=1): top edge c[3]→c[2], at face level
+        controlCage[12] = c[3];
+        controlCage[13] = mix(c[3], c[2], 1.0/3.0);
+        controlCage[14] = mix(c[3], c[2], 2.0/3.0);
+        controlCage[15] = c[2];
     }
 
     barrier();
 
     // =========================================================================
-    // Step 2: Evaluate B-spline surface — write vertices
+    // Step 2: Evaluate Bezier surface — write vertices
     // =========================================================================
 
     mat4 mvp = viewUBO.projection * viewUBO.view * push.model;
