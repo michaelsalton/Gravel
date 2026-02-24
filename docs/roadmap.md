@@ -100,8 +100,8 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 ## Epic 6: Pebble Generation
 **Details**: [epic-06/features/README.md](epic-06/features/README.md)
 
-- [ ] 6.1 Pebble Pipeline Setup (2h)
-- [ ] 6.2 Pebble Task Shader (2-3h)
+- [x] 6.1 Pebble Pipeline Setup (2h)
+- [x] 6.2 Pebble Task Shader (2-3h)
 - [ ] 6.3 Procedural Control Cage Construction (3-4h)
 - [ ] 6.4 Pebble B-Spline Evaluation (2-3h)
 - [ ] 6.5 Procedural Noise (2-3h)

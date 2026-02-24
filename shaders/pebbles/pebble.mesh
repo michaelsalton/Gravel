@@ -1,10 +1,110 @@
 #version 450
 #extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
 
-layout(local_size_x = 1) in;
-layout(triangles, max_vertices = 3, max_primitives = 1) out;
+#include "shaderInterface.h"
+#include "common.glsl"
+#include "pebbleInterface.glsl"
+
+layout(local_size_x = 32) in;
+layout(triangles, max_vertices = 256, max_primitives = 256) out;
+
+taskPayloadSharedEXT PebblePayload payload;
+
+// 4×4 control cage in shared memory (16 points)
+shared vec3 controlCage[16];
+
+layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
+    mat4  view;
+    mat4  projection;
+    vec4  cameraPosition;
+    float nearPlane;
+    float farPlane;
+} viewUBO;
+
+// Hash for per-vertex random variation
+float hash(uint n) {
+    n = (n << 13u) ^ n;
+    n = n * (n * n * 15731u + 789221u) + 1376312589u;
+    return float(n & 0x7fffffffu) / float(0x7fffffffu);
+}
 
 void main() {
-    // Placeholder: emit no geometry
-    SetMeshOutputsEXT(0, 0);
+    uint localId = gl_LocalInvocationID.x;
+
+    // Must be called unconditionally before any gl_MeshVerticesEXT writes
+    SetMeshOutputsEXT(16u, 0u);
+
+    // =========================================================================
+    // Step 1: Build 4×4 control cage in shared memory (thread 0 only)
+    // =========================================================================
+
+    if (localId == 0u) {
+        uint faceId     = payload.faceId;
+        vec3 faceCenter = readFaceCenter(faceId);
+        vec3 faceNormal = readFaceNormal(faceId);
+        int  faceEdge   = readFaceEdge(faceId);
+
+        // Walk half-edge loop to collect face vertices (up to 8)
+        vec3 faceVerts[8];
+        uint vertCount   = 0u;
+        int  currentEdge = faceEdge;
+        do {
+            int vertId             = getHalfEdgeVertex(uint(currentEdge));
+            faceVerts[vertCount]   = readVertexPosition(uint(vertId));
+            vertCount++;
+            currentEdge = getHalfEdgeNext(uint(currentEdge));
+        } while (currentEdge != faceEdge && vertCount < 8u);
+
+        // Build base layer (indices 0–3) and extruded layer (indices 8–11).
+        // For faces with fewer than 4 vertices, duplicate the last corner.
+        for (uint i = 0u; i < 4u; i++) {
+            uint vi = (i < vertCount) ? i : (vertCount - 1u);
+
+            // Base: contract 10% toward face center
+            controlCage[i] = mix(faceVerts[vi], faceCenter, 0.1);
+
+            // Extrude along face normal with per-vertex random variation [0.85, 1.15]
+            float randomVar = hash(faceId * 16u + i) * 0.3 + 0.85;
+            float extrusion = payload.extrusionAmount * randomVar;
+            vec3  extruded  = faceVerts[vi] + faceNormal * extrusion;
+
+            // Project toward center+normal peak for roundness
+            // roundness=1 → no projection (linear), roundness=2 → half projection (quadratic)
+            float t    = 1.0 / payload.roundness;
+            extruded   = mix(extruded, faceCenter + faceNormal * extrusion, t);
+
+            controlCage[8u + i] = extruded;
+        }
+
+        // Snapshot both layers before the reconstruction loop overwrites controlCage[0..11].
+        // Without this, rows v=2 and v=3 would read stale/overwritten values.
+        vec3 baseVerts[4];
+        vec3 extrudedVerts[4];
+        for (uint i = 0u; i < 4u; i++) {
+            baseVerts[i]     = controlCage[i];
+            extrudedVerts[i] = controlCage[8u + i];
+        }
+
+        // Reconstruct full 4×4 grid by interpolating along the extrusion axis:
+        //   row 0 (v=0) → base layer
+        //   row 3 (v=3) → extruded layer
+        for (uint v = 0u; v < 4u; v++) {
+            float tV = float(v) / 3.0;
+            for (uint u = 0u; u < 4u; u++) {
+                controlCage[v * 4u + u] = mix(baseVerts[u], extrudedVerts[u], tV);
+            }
+        }
+    }
+
+    barrier();
+
+    // =========================================================================
+    // Step 2: Write 16 cage vertices (debug — no primitives yet)
+    // =========================================================================
+
+    if (localId < 16u) {
+        mat4 mvp = viewUBO.projection * viewUBO.view * push.model;
+        gl_MeshVerticesEXT[localId].gl_Position = mvp * vec4(controlCage[localId], 1.0);
+    }
 }

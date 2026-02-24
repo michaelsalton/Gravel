@@ -249,15 +249,24 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     pushConstants.enableLod = enableLod ? 1u : 0u;
     pushConstants.lodFactor = lodFactor;
 
-    vkCmdPushConstants(cmd, activeLayout,
-                        VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
-                        VK_SHADER_STAGE_FRAGMENT_BIT,
-                        0, sizeof(PushConstants), &pushConstants);
-
     if (renderMode == RENDER_MODE_PARAMETRIC) {
+        vkCmdPushConstants(cmd, activeLayout,
+                            VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
+                            VK_SHADER_STAGE_FRAGMENT_BIT,
+                            0, sizeof(PushConstants), &pushConstants);
         uint32_t totalTasks = heMeshUploaded ? (heNbFaces + heNbVertices) : 1;
         pfnCmdDrawMeshTasksEXT(cmd, totalTasks, 1, 1);
     } else {
+        PebblePushConstants pebblePC{};
+        pebblePC.model             = pushConstants.model;
+        pebblePC.nbFaces           = heNbFaces;
+        pebblePC.subdivisionLevel  = pebbleConfig.subdivisionLevel;
+        pebblePC.extrusionAmount   = pebbleConfig.extrusionAmount;
+        pebblePC.roundness         = pebbleConfig.roundness;
+        vkCmdPushConstants(cmd, activeLayout,
+                            VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
+                            VK_SHADER_STAGE_FRAGMENT_BIT,
+                            0, sizeof(PebblePushConstants), &pebblePC);
         uint32_t faceTasks = heMeshUploaded ? heNbFaces : 0;
         pfnCmdDrawMeshTasksEXT(cmd, faceTasks, 1, 1);
     }
