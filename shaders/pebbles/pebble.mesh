@@ -23,11 +23,16 @@ layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
     float farPlane;
 } viewUBO;
 
-// Per-vertex outputs for lighting
+// Per-vertex outputs — UV packed into w components (matches parametric layout)
 layout(location = 0) out PerVertexData {
-    vec3 worldPos;
-    vec3 normal;
+    vec4 worldPosU;  // xyz = world position, w = u patch coord
+    vec4 normalV;    // xyz = world normal,    w = v patch coord
 } vOut[];
+
+// Per-primitive output: faceId for debug colour (flat, no interpolation needed)
+layout(location = 2) perprimitiveEXT out PerPrimitiveData {
+    flat uvec4 data;  // x = faceId
+} pOut[];
 
 // Hash for per-face random variation
 float hash(uint n) {
@@ -178,8 +183,8 @@ void main() {
         vec3 worldPos = vec3(push.model * vec4(localPos, 1.0));
 
         gl_MeshVerticesEXT[i].gl_Position = mvp * vec4(localPos, 1.0);
-        vOut[i].worldPos = worldPos;
-        vOut[i].normal   = normalize(normalMat * localNormal);
+        vOut[i].worldPosU = vec4(worldPos, uv.x);
+        vOut[i].normalV   = vec4(normalize(normalMat * localNormal), uv.y);
     }
 
     // =========================================================================
@@ -198,5 +203,9 @@ void main() {
 
         gl_PrimitiveTriangleIndicesEXT[2u * q    ] = uvec3(v00, v10, v11);
         gl_PrimitiveTriangleIndicesEXT[2u * q + 1u] = uvec3(v00, v11, v01);
+
+        // Tag both triangles with this face's ID for debug visualisation
+        pOut[2u * q    ].data = uvec4(payload.faceId, 0u, 0u, 0u);
+        pOut[2u * q + 1u].data = uvec4(payload.faceId, 0u, 0u, 0u);
     }
 }

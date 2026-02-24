@@ -17,7 +17,12 @@ struct PebblePushConstants {
     uint32_t  subdivisionLevel = 0;     // offset  72
     float     extrusionAmount  = 0.f;   // offset  76
     float     roundness        = 0.f;   // offset  80
-    uint32_t  _pad[9]          = {};    // offset  84 — pad to 120 bytes
+    uint32_t  _pad1            = 0;     // offset  84
+    uint32_t  _pad2            = 0;     // offset  88
+    uint32_t  _pad3            = 0;     // offset  92
+    uint32_t  _pad4            = 0;     // offset  96
+    uint32_t  debugMode        = 0;     // offset 100 — matches parametric layout
+    uint32_t  _pad5[4]         = {};    // offset 104 — pad to 120 bytes
 };
 static_assert(sizeof(PebblePushConstants) == 120, "PebblePushConstants must be 120 bytes");
 

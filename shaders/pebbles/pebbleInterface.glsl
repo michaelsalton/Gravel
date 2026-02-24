@@ -12,8 +12,9 @@ struct PebblePayload {
 };
 
 // Push constants layout for pebble shaders
-// Matches the same 120-byte range as the parametric pipeline,
-// mapping pebble params onto the same offsets.
+// Matches the same 120-byte range as the parametric pipeline.
+// debugMode sits at offset 100, identical to the parametric push constants,
+// so the same ImGui debug selector drives both pipelines.
 layout(push_constant) uniform PebblePushConstants {
     mat4  model;              // offset   0 — 64 bytes
     uint  nbFaces;            // offset  64
@@ -21,7 +22,11 @@ layout(push_constant) uniform PebblePushConstants {
     uint  subdivisionLevel;   // offset  72
     float extrusionAmount;    // offset  76
     float roundness;          // offset  80
-    // remaining offsets unused by pebble shaders
+    uint  _pad1;              // offset  84
+    uint  _pad2;              // offset  88
+    uint  _pad3;              // offset  92
+    uint  _pad4;              // offset  96
+    uint  debugMode;          // offset 100 — matches parametric layout
 } push;
 
 #endif

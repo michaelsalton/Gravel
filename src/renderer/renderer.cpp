@@ -327,6 +327,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         pebblePC.subdivisionLevel  = pebbleConfig.subdivisionLevel;
         pebblePC.extrusionAmount   = pebbleConfig.extrusionAmount;
         pebblePC.roundness         = pebbleConfig.roundness;
+        pebblePC.debugMode         = debugMode;
         vkCmdPushConstants(cmd, activeLayout,
                             VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
                             VK_SHADER_STAGE_FRAGMENT_BIT,
