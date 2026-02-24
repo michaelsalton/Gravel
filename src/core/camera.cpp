@@ -1,5 +1,5 @@
-#include "camera.h"
-#include "window.h"
+#include "core/camera.h"
+#include "core/window.h"
 #include "imgui.h"
 
 #define GLFW_INCLUDE_VULKAN

@@ -9,10 +9,10 @@
 #include <limits>
 #include <array>
 
-#include "vkHelper.h"
+#include "vulkan/vkHelper.h"
 #include "loaders/LUTLoader.h"
-#include "camera.h"
-#include "renderer_init.h"
+#include "core/camera.h"
+#include "renderer/renderer_init.h"
 
 class Window;
 struct HalfEdgeMesh;

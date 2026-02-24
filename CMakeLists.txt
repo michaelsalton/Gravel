@@ -57,16 +57,16 @@ endif()
 # Source files (will be populated during implementation)
 set(SOURCES
     src/main.cpp
-    src/window.cpp
-    src/camera.cpp
-    src/renderer.cpp
-    src/renderer_init.cpp
-    src/renderer_mesh.cpp
-    src/renderer_imgui.cpp
+    src/core/window.cpp
+    src/core/camera.cpp
+    src/renderer/renderer.cpp
+    src/renderer/renderer_init.cpp
+    src/renderer/renderer_mesh.cpp
+    src/renderer/renderer_imgui.cpp
     src/loaders/ObjLoader.cpp
     src/loaders/LUTLoader.cpp
-    src/HalfEdge.cpp
-    src/vkHelper.cpp
+    src/geometry/HalfEdge.cpp
+    src/vulkan/vkHelper.cpp
     ${IMGUI_SOURCES}
     # src/AppResources.cpp
 )

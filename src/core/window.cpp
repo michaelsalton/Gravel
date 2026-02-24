@@ -1,4 +1,4 @@
-#include "window.h"
+#include "core/window.h"
 #include <stdexcept>
 #include <iostream>
 

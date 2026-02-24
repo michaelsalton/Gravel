@@ -1,4 +1,4 @@
-#include "HalfEdge.h"
+#include "geometry/HalfEdge.h"
 #include "loaders/ObjLoader.h"
 #include <map>
 #include <iostream>

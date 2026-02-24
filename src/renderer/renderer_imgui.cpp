@@ -1,6 +1,6 @@
-#include "renderer.h"
-#include "renderer_imgui.h"
-#include "window.h"
+#include "renderer/renderer.h"
+#include "renderer/renderer_imgui.h"
+#include "core/window.h"
 #include <stdexcept>
 #include <iostream>
 #include <algorithm>

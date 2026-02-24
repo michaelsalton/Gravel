@@ -1,7 +1,7 @@
-#include "renderer.h"
-#include "renderer_mesh.h"
-#include "HalfEdge.h"
-#include "window.h"
+#include "renderer/renderer.h"
+#include "renderer/renderer_mesh.h"
+#include "geometry/HalfEdge.h"
+#include "core/window.h"
 #include <iostream>
 #include <cstring>
 #include <stdexcept>
