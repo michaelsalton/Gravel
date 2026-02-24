@@ -109,6 +109,13 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         if (selectedMesh != prev)
             loadMesh(meshPaths[selectedMesh]);
         ImGui::Checkbox("Show Base Mesh", &showBaseMesh);
+        if (showBaseMesh) {
+            ImGui::Indent();
+            ImGui::RadioButton("Solid",     &baseMeshMode, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton("Wireframe", &baseMeshMode, 1);
+            ImGui::Unindent();
+        }
     }
     ImGui::Separator();
 

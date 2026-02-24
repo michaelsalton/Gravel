@@ -27,16 +27,9 @@ VkShaderModule BaseMeshPipeline::createModule(VkDevice device, const std::vector
     return mod;
 }
 
-void BaseMeshPipeline::create(VkDevice device, VkRenderPass renderPass,
-                               VkDescriptorSetLayout sceneLayout,
-                               VkDescriptorSetLayout halfEdgeLayout,
-                               VkDescriptorSetLayout perObjectLayout) {
-    auto meshCode = readSpv(std::string(SHADER_DIR) + "basemesh.mesh.spv");
-    auto fragCode = readSpv(std::string(SHADER_DIR) + "basemesh.frag.spv");
-
-    VkShaderModule meshMod = createModule(device, meshCode);
-    VkShaderModule fragMod = createModule(device, fragCode);
-
+VkPipeline BaseMeshPipeline::buildPipeline(VkDevice device, VkRenderPass renderPass,
+                                            VkShaderModule meshMod, VkShaderModule fragMod,
+                                            bool wireframe) {
     std::array<VkPipelineShaderStageCreateInfo, 2> stages{};
     stages[0].sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stages[0].stage  = VK_SHADER_STAGE_MESH_BIT_EXT;
@@ -48,26 +41,6 @@ void BaseMeshPipeline::create(VkDevice device, VkRenderPass renderPass,
     stages[1].module = fragMod;
     stages[1].pName  = "main";
 
-    // Same push constant range as pebble pipeline (120 bytes)
-    VkPushConstantRange pc{};
-    pc.stageFlags = VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    pc.offset = 0;
-    pc.size   = sizeof(glm::mat4) + 14 * sizeof(uint32_t);  // 120 bytes
-
-    std::array<VkDescriptorSetLayout, 3> setLayouts = {
-        sceneLayout, halfEdgeLayout, perObjectLayout
-    };
-
-    VkPipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutInfo.setLayoutCount         = static_cast<uint32_t>(setLayouts.size());
-    layoutInfo.pSetLayouts            = setLayouts.data();
-    layoutInfo.pushConstantRangeCount = 1;
-    layoutInfo.pPushConstantRanges    = &pc;
-
-    if (vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
-        throw std::runtime_error("BaseMeshPipeline: failed to create pipeline layout");
-
     VkPipelineViewportStateCreateInfo viewportState{};
     viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
     viewportState.viewportCount = 1;
@@ -77,8 +50,8 @@ void BaseMeshPipeline::create(VkDevice device, VkRenderPass renderPass,
     rasterizer.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizer.depthClampEnable        = VK_FALSE;
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
-    rasterizer.polygonMode             = VK_POLYGON_MODE_FILL;
-    rasterizer.lineWidth               = 1.0f;
+    rasterizer.polygonMode             = wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
+    rasterizer.lineWidth               = wireframe ? 2.0f : 1.0f;
     rasterizer.cullMode                = VK_CULL_MODE_NONE;
     rasterizer.frontFace               = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable         = VK_FALSE;
@@ -132,17 +105,57 @@ void BaseMeshPipeline::create(VkDevice device, VkRenderPass renderPass,
     pipelineInfo.renderPass          = renderPass;
     pipelineInfo.subpass             = 0;
 
+    VkPipeline result = VK_NULL_HANDLE;
     if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo,
-                                   nullptr, &pipeline) != VK_SUCCESS)
+                                   nullptr, &result) != VK_SUCCESS)
         throw std::runtime_error("BaseMeshPipeline: failed to create graphics pipeline");
+    return result;
+}
+
+void BaseMeshPipeline::create(VkDevice device, VkRenderPass renderPass,
+                               VkDescriptorSetLayout sceneLayout,
+                               VkDescriptorSetLayout halfEdgeLayout,
+                               VkDescriptorSetLayout perObjectLayout) {
+    auto meshCode = readSpv(std::string(SHADER_DIR) + "basemesh.mesh.spv");
+    auto fragCode = readSpv(std::string(SHADER_DIR) + "basemesh.frag.spv");
+
+    VkShaderModule meshMod = createModule(device, meshCode);
+    VkShaderModule fragMod = createModule(device, fragCode);
+
+    // Push constant range — same 120-byte layout as pebble pipeline
+    VkPushConstantRange pc{};
+    pc.stageFlags = VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    pc.offset = 0;
+    pc.size   = sizeof(glm::mat4) + 14 * sizeof(uint32_t);  // 120 bytes
+
+    std::array<VkDescriptorSetLayout, 3> setLayouts = {
+        sceneLayout, halfEdgeLayout, perObjectLayout
+    };
+
+    VkPipelineLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layoutInfo.setLayoutCount         = static_cast<uint32_t>(setLayouts.size());
+    layoutInfo.pSetLayouts            = setLayouts.data();
+    layoutInfo.pushConstantRangeCount = 1;
+    layoutInfo.pPushConstantRanges    = &pc;
+
+    if (vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
+        throw std::runtime_error("BaseMeshPipeline: failed to create pipeline layout");
+
+    pipeline          = buildPipeline(device, renderPass, meshMod, fragMod, false);
+    wireframePipeline = buildPipeline(device, renderPass, meshMod, fragMod, true);
 
     vkDestroyShaderModule(device, fragMod, nullptr);
     vkDestroyShaderModule(device, meshMod, nullptr);
 
-    std::cout << "Base mesh pipeline created" << std::endl;
+    std::cout << "Base mesh pipeline created (solid + wireframe)" << std::endl;
 }
 
 void BaseMeshPipeline::destroy(VkDevice device) {
+    if (wireframePipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(device, wireframePipeline, nullptr);
+        wireframePipeline = VK_NULL_HANDLE;
+    }
     if (pipeline != VK_NULL_HANDLE) {
         vkDestroyPipeline(device, pipeline, nullptr);
         pipeline = VK_NULL_HANDLE;

@@ -256,7 +256,10 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
             PebblePushConstants basePC{};
             basePC.model   = pushConstants.model;
             basePC.nbFaces = heNbFaces;
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, baseMeshPipeline.pipeline);
+            VkPipeline bmPipeline = (baseMeshMode == 1)
+                ? baseMeshPipeline.wireframePipeline
+                : baseMeshPipeline.pipeline;
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, bmPipeline);
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                      baseMeshPipeline.pipelineLayout, 0, 1,
                                      &sceneDescriptorSets[currentFrame], 0, nullptr);
@@ -294,7 +297,10 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
             PebblePushConstants basePC{};
             basePC.model   = pushConstants.model;
             basePC.nbFaces = heNbFaces;
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, baseMeshPipeline.pipeline);
+            VkPipeline bmPipeline = (baseMeshMode == 1)
+                ? baseMeshPipeline.wireframePipeline
+                : baseMeshPipeline.pipeline;
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, bmPipeline);
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                      baseMeshPipeline.pipelineLayout, 0, 1,
                                      &sceneDescriptorSets[currentFrame], 0, nullptr);

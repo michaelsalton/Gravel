@@ -192,6 +192,7 @@ private:
     PebbleConfig     pebbleConfig;
     RenderMode       renderMode     = RENDER_MODE_PARAMETRIC;
     bool             showBaseMesh   = false;
+    int              baseMeshMode   = 0;  // 0 = solid, 1 = wireframe
     int              selectedMesh   = 0;  // 0 = cube, 1 = plane
 
     // Mesh shader function pointer

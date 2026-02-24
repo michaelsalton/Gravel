@@ -5,8 +5,9 @@
 
 class BaseMeshPipeline {
 public:
-    VkPipeline       pipeline       = VK_NULL_HANDLE;
-    VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+    VkPipeline       pipeline          = VK_NULL_HANDLE;  // solid fill
+    VkPipeline       wireframePipeline = VK_NULL_HANDLE;  // line edges
+    VkPipelineLayout pipelineLayout    = VK_NULL_HANDLE;
 
     void create(VkDevice device, VkRenderPass renderPass,
                 VkDescriptorSetLayout sceneLayout,
@@ -17,4 +18,7 @@ public:
 private:
     static std::vector<char> readSpv(const std::string& path);
     static VkShaderModule    createModule(VkDevice device, const std::vector<char>& code);
+    VkPipeline buildPipeline(VkDevice device, VkRenderPass renderPass,
+                              VkShaderModule meshMod, VkShaderModule fragMod,
+                              bool wireframe);
 };

@@ -104,8 +104,8 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 - [x] 6.2 Pebble Task Shader (2-3h)
 - [x] 6.3 Procedural Control Cage Construction (3-4h)
 - [x] 6.4 Pebble B-Spline Evaluation (2-3h)
-- [ ] 6.5 Procedural Noise (2-3h)
-- [ ] 6.6 Pebble LOD and Fragment Shader (2h)
+- [x] 6.5 Procedural Noise (2-3h)
+- [x] 6.6 Pebble LOD and Fragment Shader (2h)
 
 **Milestone**: Organic pebble/rock surfaces with noise, cobblestone appearance
 
@@ -116,7 +116,7 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 
 - [ ] 7.1 Control Map Texture Loading (2-3h)
 - [ ] 7.2 Control Map Sampling and Element Type Selection (2-3h)
-- [ ] 7.3 Base Mesh Rendering (3-4h)
+- [x] 7.3 Base Mesh Rendering (3-4h)
 - [ ] 7.4 UI Organization and Presets (2-3h)
 - [ ] 7.5 Debug Visualization Modes (2h)
 - [ ] 7.6 Skeletal Animation (4-5h) **[OPTIONAL]**
