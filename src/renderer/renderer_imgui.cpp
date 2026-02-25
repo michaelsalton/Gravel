@@ -88,16 +88,17 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                 1000.0f / ImGui::GetIO().Framerate);
     ImGui::Separator();
 
-    const char* meshNames[] = { "Cube", "Plane (3x3)", "Plane (5x5)", "Sphere", "Sphere HD", "Dragon 8K" };
+    const char* meshNames[] = { "Cube", "Plane (3x3)", "Plane (5x5)", "Sphere", "Sphere HD", "Icosphere", "Dragon 8K" };
     const char* meshPaths[] = {
         ASSETS_DIR "cube.obj",
         ASSETS_DIR "plane.obj",
         ASSETS_DIR "plane5x5.obj",
         ASSETS_DIR "sphere.obj",
         ASSETS_DIR "sphere_hd.obj",
+        ASSETS_DIR "icosphere.obj",
         ASSETS_DIR "dragon_8k.obj"
     };
-    constexpr int meshCount = 6;
+    constexpr int meshCount = 7;
 
     // Base mesh selector
     if (ImGui::CollapsingHeader("Base Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
