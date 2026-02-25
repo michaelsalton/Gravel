@@ -849,24 +849,17 @@ void Renderer::createDescriptorSetLayouts() {
 
     // Set 2: PerObject
     // Binding 0: ResurfacingUBO (task + mesh stages)
-    // Binding 2: LUT SSBO - control cage control points (mesh stage)
-    std::array<VkDescriptorSetLayoutBinding, 2> objBindings{};
-
-    objBindings[0].binding = 0;  // BINDING_CONFIG_UBO
-    objBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    objBindings[0].descriptorCount = 1;
-    objBindings[0].stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
-                                 VK_SHADER_STAGE_MESH_BIT_EXT;
-
-    objBindings[1].binding = 2;  // BINDING_LUT_BUFFER
-    objBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    objBindings[1].descriptorCount = 1;
-    objBindings[1].stageFlags = VK_SHADER_STAGE_MESH_BIT_EXT;
+    VkDescriptorSetLayoutBinding objBinding{};
+    objBinding.binding = 0;  // BINDING_CONFIG_UBO
+    objBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    objBinding.descriptorCount = 1;
+    objBinding.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
+                             VK_SHADER_STAGE_MESH_BIT_EXT;
 
     VkDescriptorSetLayoutCreateInfo objLayoutInfo{};
     objLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    objLayoutInfo.bindingCount = static_cast<uint32_t>(objBindings.size());
-    objLayoutInfo.pBindings = objBindings.data();
+    objLayoutInfo.bindingCount = 1;
+    objLayoutInfo.pBindings = &objBinding;
 
     if (vkCreateDescriptorSetLayout(device, &objLayoutInfo, nullptr,
                                      &perObjectSetLayout) != VK_SUCCESS) {
@@ -974,9 +967,9 @@ void Renderer::createDescriptorPool() {
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2 + 1);
 
-    // SSBOs: 17 for HE buffers + 1 for LUT
+    // SSBOs: 17 for HE buffers
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[1].descriptorCount = 18;
+    poolSizes[1].descriptorCount = 17;
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1065,20 +1058,7 @@ void Renderer::createDescriptorSets() {
         throw std::runtime_error("Failed to allocate per-object descriptor set!");
     }
 
-    // Create 1-element dummy LUT SSBO (placeholder until a real cage is loaded)
-    lutSSBOSize = sizeof(glm::vec4);
-    createBuffer(lutSSBOSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                 lutSSBOBuffer, lutSSBOMemory);
-    {
-        glm::vec4 zero{0.0f};
-        void* mapped;
-        vkMapMemory(device, lutSSBOMemory, 0, lutSSBOSize, 0, &mapped);
-        memcpy(mapped, &zero, lutSSBOSize);
-        vkUnmapMemory(device, lutSSBOMemory);
-    }
-
-    // Write both bindings to the per-object descriptor set
+    // Write binding to the per-object descriptor set
     updatePerObjectDescriptorSet();
 
     std::cout << "Descriptor sets allocated and written" << std::endl;

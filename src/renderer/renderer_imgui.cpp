@@ -88,16 +88,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                 1000.0f / ImGui::GetIO().Framerate);
     ImGui::Separator();
 
-    // Render mode selector
-    {
-        const char* modes[] = {"Parametric Surfaces", "Pebble Generation"};
-        int mode = static_cast<int>(renderMode);
-        if (ImGui::Combo("Render Mode", &mode, modes, 2))
-            renderMode = static_cast<RenderMode>(mode);
-    }
-    ImGui::Separator();
-
-    // Base mesh — always visible regardless of render mode
+    // Base mesh selector
     if (ImGui::CollapsingHeader("Base Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
         const char* meshNames[] = { "Cube", "Plane (3x3)", "Plane (5x5)" };
         const char* meshPaths[] = {
@@ -109,67 +100,15 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::Combo("Mesh", &selectedMesh, meshNames, 3);
         if (selectedMesh != prev)
             loadMesh(meshPaths[selectedMesh]);
-        ImGui::Checkbox("Show Base Mesh", &showBaseMesh);
-        if (showBaseMesh) {
-            ImGui::Indent();
-            ImGui::RadioButton("Solid",     &baseMeshMode, 0);
-            ImGui::SameLine();
-            ImGui::RadioButton("Wireframe", &baseMeshMode, 1);
-            ImGui::Unindent();
-        }
     }
     ImGui::Separator();
 
-    // Camera controls
-    if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
-        camera.renderImGuiControls();
-    }
-
-    if (renderMode == RENDER_MODE_PARAMETRIC) {
-
     // Resurfacing controls
     if (ImGui::CollapsingHeader("Resurfacing", ImGuiTreeNodeFlags_DefaultOpen)) {
-        const char* surfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder",
-                                      "B-Spline (LUT)", "Bezier (LUT)"};
+        const char* surfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder"};
         int currentType = static_cast<int>(elementType);
-        if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 6)) {
+        if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 4)) {
             elementType = static_cast<uint32_t>(currentType);
-        }
-
-        // Inline controls for LUT-based surfaces
-        if (elementType == 4 || elementType == 5) {
-            ImGui::Indent();
-            if (!lutLoaded) {
-                ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f),
-                                   "No LUT loaded! Use Control Cage section.");
-            } else {
-                ImGui::Text("Cage: %s (%ux%u)", lutFilename.c_str(),
-                            currentLut.Nx, currentLut.Ny);
-                if (elementType == 4) {
-                    // B-Spline boundary modes
-                    bool prevCyclicU = cyclicU, prevCyclicV = cyclicV;
-                    ImGui::Checkbox("Cyclic U", &cyclicU);
-                    ImGui::SameLine();
-                    ImGui::Checkbox("Cyclic V", &cyclicV);
-                    if (cyclicU != prevCyclicU || cyclicV != prevCyclicV) {
-                        ResurfacingUBO* d = static_cast<ResurfacingUBO*>(resurfacingUBOMapped);
-                        d->cyclicU = cyclicU ? 1u : 0u;
-                        d->cyclicV = cyclicV ? 1u : 0u;
-                    }
-                } else {
-                    // Bezier degree
-                    int prevDegree = bezierDegree;
-                    ImGui::SliderInt("Degree", &bezierDegree, 1, 3);
-                    const char* degreeNames[] = {"", "Bilinear", "Biquadratic", "Bicubic"};
-                    ImGui::SameLine();
-                    ImGui::TextDisabled("(%s)", degreeNames[bezierDegree]);
-                    if (bezierDegree != prevDegree) {
-                        ResurfacingUBO* d = static_cast<ResurfacingUBO*>(resurfacingUBOMapped);
-                        d->bezierDegree = static_cast<uint32_t>(bezierDegree);
-                    }
-                }
-            }
-            ImGui::Unindent();
         }
 
         ImGui::SliderFloat("Global Scale", &userScaling, 0.01f, 3.0f);
@@ -227,7 +166,11 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::Separator();
 
         // Chainmail mode
-        ImGui::Checkbox("Chainmail Mode", &chainmailMode);
+        {
+            bool prev = chainmailMode;
+            ImGui::Checkbox("Chainmail Mode", &chainmailMode);
+            if (chainmailMode && !prev) applyPresetChainMail();
+        }
         if (chainmailMode) {
             ImGui::Indent();
             ImGui::SliderFloat("Lean Amount", &chainmailTiltAngle, 0.0f, 1.0f, "%.2f");
@@ -243,136 +186,8 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::Text("Total mesh tasks: %u", totalElements * totalTiles);
     }
 
-    // Culling controls
-    if (ImGui::CollapsingHeader("Culling")) {
-        ImGui::Checkbox("Frustum Culling", &enableFrustumCulling);
-        ImGui::Checkbox("Back-Face Culling", &enableBackfaceCulling);
-        if (enableBackfaceCulling) {
-            ImGui::SliderFloat("Threshold", &cullingThreshold, -1.0f, 1.0f, "%.2f");
-            ImGui::SameLine();
-            if (ImGui::Button("Reset##threshold")) cullingThreshold = 0.0f;
-        }
-    }
-
-    // Statistics
-    if (ImGui::CollapsingHeader("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
-        uint32_t totalElements = heNbFaces + heNbVertices;
-        uint32_t visibleElements = totalElements;
-
-        if (heMeshUploaded && (enableFrustumCulling || enableBackfaceCulling)) {
-            // Mirror task shader culling on CPU to count visible elements
-            float aspect = static_cast<float>(swapChainExtent.width) /
-                           static_cast<float>(swapChainExtent.height);
-            glm::mat4 mvp = camera.getProjectionMatrix(aspect) * camera.getViewMatrix();
-
-            visibleElements = 0;
-            auto testElement = [&](glm::vec3 pos, glm::vec3 normal, float area) -> bool {
-                float radius = std::sqrt(area) * userScaling * 2.0f; // matches computeBoundingRadius
-
-                if (enableFrustumCulling) {
-                    glm::vec4 clip = mvp * glm::vec4(pos, 1.0f);
-                    if (clip.w <= 0.0f) return false;
-                    float cr = radius / clip.w * 2.0f * 1.1f; // margin = 0.1
-                    glm::vec3 ndc = glm::vec3(clip) / clip.w;
-                    if (ndc.x + cr < -1.0f || ndc.x - cr > 1.0f) return false;
-                    if (ndc.y + cr < -1.0f || ndc.y - cr > 1.0f) return false;
-                    if (ndc.z + cr <  0.0f || ndc.z - cr > 1.0f) return false;
-                }
-                if (enableBackfaceCulling) {
-                    glm::vec3 viewDir = glm::normalize(camera.position - pos);
-                    if (glm::dot(viewDir, normal) <= cullingThreshold) return false;
-                }
-                return true;
-            };
-
-            for (uint32_t i = 0; i < heNbFaces; i++)
-                if (testElement(cpuFaceCenters[i], cpuFaceNormals[i], cpuFaceAreas[i]))
-                    visibleElements++;
-            for (uint32_t i = 0; i < heNbVertices; i++)
-                if (testElement(cpuVertexPositions[i], cpuVertexNormals[i], cpuVertexFaceAreas[i]))
-                    visibleElements++;
-        }
-
-        uint32_t culledElements  = totalElements - visibleElements;
-        uint32_t trisPerElement  = resolutionM * resolutionN * 2;
-        uint32_t totalTris       = visibleElements * trisPerElement;
-
-        ImGui::Text("Elements:  %u visible / %u total", visibleElements, totalElements);
-        if (totalElements > 0) {
-            float pct = 100.0f * culledElements / totalElements;
-            ImGui::Text("Culled:    %u (%.1f%%)", culledElements, pct);
-        }
-        ImGui::Text("Triangles: %u  (%u per element)", totalTris, trisPerElement);
-    }
-
-    // LOD controls
-    if (ImGui::CollapsingHeader("Level of Detail (LOD)")) {
-        ImGui::Checkbox("Adaptive LOD", &enableLod);
-        if (enableLod) {
-            ImGui::SliderFloat("LOD Factor", &lodFactor, 0.1f, 5.0f, "%.2f");
-            ImGui::TextDisabled("Base res (M/N above) = target at screen-fill");
-            ImGui::TextDisabled("< 1.0 = performance  |  > 1.0 = quality");
-        }
-    }
-
-    // Control Cage (LUT)
-    if (ImGui::CollapsingHeader("Control Cage", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::Text("File: %s", lutFilename.c_str());
-
-        if (lutLoaded) {
-            ImGui::Text("Grid: %ux%u (%zu pts)",
-                        currentLut.Nx, currentLut.Ny, currentLut.controlPoints.size());
-            ImGui::Text("BB min: (%.2f, %.2f, %.2f)",
-                        currentLut.bbMin.x, currentLut.bbMin.y, currentLut.bbMin.z);
-            ImGui::Text("BB max: (%.2f, %.2f, %.2f)",
-                        currentLut.bbMax.x, currentLut.bbMax.y, currentLut.bbMax.z);
-
-        } else {
-            ImGui::TextDisabled("No cage loaded.");
-        }
-
-        ImGui::Separator();
-
-        if (ImGui::Button("Load scale_4x4.obj")) {
-            loadControlCage(std::string(ASSETS_DIR) + "parametric_luts/scale_4x4.obj");
-        }
-    }
-
-    } else { // RENDER_MODE_PEBBLES
-
-    if (ImGui::CollapsingHeader("Pebble Generation", ImGuiTreeNodeFlags_DefaultOpen)) {
-        int subdiv = static_cast<int>(pebbleConfig.subdivisionLevel);
-        if (ImGui::SliderInt("Subdivision Level", &subdiv, 0, 3))
-            pebbleConfig.subdivisionLevel = static_cast<uint32_t>(subdiv);
-        ImGui::Text("  Resolution: %ux%u", 1u << subdiv, 1u << subdiv);
-        ImGui::SliderFloat("Extrusion", &pebbleConfig.extrusionAmount, 0.05f, 0.5f);
-        ImGui::SliderFloat("Roundness", &pebbleConfig.roundness, 1.0f, 3.0f);
-        ImGui::Checkbox("Adaptive LOD", reinterpret_cast<bool*>(&pebbleConfig.enableLod));
-        if (pebbleConfig.enableLod) {
-            ImGui::SameLine();
-            ImGui::TextDisabled("(max level: %u)", pebbleConfig.subdivisionLevel);
-        }
-        ImGui::Separator();
-        ImGui::Checkbox("Enable Noise", reinterpret_cast<bool*>(&pebbleConfig.doNoise));
-        if (pebbleConfig.doNoise) {
-            ImGui::SliderFloat("Amplitude", &pebbleConfig.noiseAmplitude, 0.001f, 0.3f);
-            ImGui::SliderFloat("Frequency", &pebbleConfig.noiseFrequency, 0.5f, 20.0f);
-        }
-    }
-
-    } // end render mode sections
-
-    // Display / VSync
-    if (ImGui::CollapsingHeader("Display")) {
-        bool prevVsync = vsync;
-        ImGui::Checkbox("VSync", &vsync);
-        if (vsync != prevVsync) {
-            pendingSwapChainRecreation = true;
-        }
-    }
-
     // Lighting controls
-    if (ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (ImGui::CollapsingHeader("Lighting")) {
         ImGui::DragFloat3("Light Position", &lightPosition.x, 0.1f, -20.0f, 20.0f);
         ImGui::ColorEdit3("Ambient Color", &ambientColor.x);
         ImGui::SliderFloat("Ambient Intensity", &ambientIntensity, 0.0f, 1.0f);
@@ -409,24 +224,97 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                     ImGui::TextDisabled("Unique color per surface element");
                     break;
                 case 4:
-                    if (renderMode == RENDER_MODE_PARAMETRIC) {
-                        ImGui::TextDisabled("Red = Vertex, Blue = Face");
-                    } else {
-                        ImGui::TextDisabled("Blue->Green->Yellow->Red (LOD 0->3)");
-                    }
+                    ImGui::TextDisabled("Red = Vertex, Blue = Face");
                     break;
             }
             ImGui::Unindent();
         }
     }
 
-    // Presets
-    if (ImGui::CollapsingHeader("Presets")) {
-        if (ImGui::Button("Chain Mail"))    applyPresetChainMail();
-        ImGui::SameLine();
-        if (ImGui::Button("Dragon Scales")) applyPresetDragonScales();
-        ImGui::SameLine();
-        if (ImGui::Button("Cobblestone"))   applyPresetCobblestone();
+    // Camera controls
+    if (ImGui::CollapsingHeader("Camera")) {
+        camera.renderImGuiControls();
+    }
+
+    // Advanced: Culling, LOD, Display, Statistics
+    if (ImGui::CollapsingHeader("Advanced")) {
+        // Display
+        bool prevVsync = vsync;
+        ImGui::Checkbox("VSync", &vsync);
+        if (vsync != prevVsync) {
+            pendingSwapChainRecreation = true;
+        }
+
+        ImGui::Separator();
+
+        // Culling
+        ImGui::Checkbox("Frustum Culling", &enableFrustumCulling);
+        ImGui::Checkbox("Back-Face Culling", &enableBackfaceCulling);
+        if (enableBackfaceCulling) {
+            ImGui::SliderFloat("Threshold", &cullingThreshold, -1.0f, 1.0f, "%.2f");
+            ImGui::SameLine();
+            if (ImGui::Button("Reset##threshold")) cullingThreshold = 0.0f;
+        }
+
+        ImGui::Separator();
+
+        // LOD
+        ImGui::Checkbox("Adaptive LOD", &enableLod);
+        if (enableLod) {
+            ImGui::SliderFloat("LOD Factor", &lodFactor, 0.1f, 5.0f, "%.2f");
+            ImGui::TextDisabled("< 1.0 = performance  |  > 1.0 = quality");
+        }
+
+        ImGui::Separator();
+
+        // Statistics
+        {
+            uint32_t totalElements = heNbFaces + heNbVertices;
+            uint32_t visibleElements = totalElements;
+
+            if (heMeshUploaded && (enableFrustumCulling || enableBackfaceCulling)) {
+                float aspect = static_cast<float>(swapChainExtent.width) /
+                               static_cast<float>(swapChainExtent.height);
+                glm::mat4 mvp = camera.getProjectionMatrix(aspect) * camera.getViewMatrix();
+
+                visibleElements = 0;
+                auto testElement = [&](glm::vec3 pos, glm::vec3 normal, float area) -> bool {
+                    float radius = std::sqrt(area) * userScaling * 2.0f;
+                    if (enableFrustumCulling) {
+                        glm::vec4 clip = mvp * glm::vec4(pos, 1.0f);
+                        if (clip.w <= 0.0f) return false;
+                        float cr = radius / clip.w * 2.0f * 1.1f;
+                        glm::vec3 ndc = glm::vec3(clip) / clip.w;
+                        if (ndc.x + cr < -1.0f || ndc.x - cr > 1.0f) return false;
+                        if (ndc.y + cr < -1.0f || ndc.y - cr > 1.0f) return false;
+                        if (ndc.z + cr <  0.0f || ndc.z - cr > 1.0f) return false;
+                    }
+                    if (enableBackfaceCulling) {
+                        glm::vec3 viewDir = glm::normalize(camera.position - pos);
+                        if (glm::dot(viewDir, normal) <= cullingThreshold) return false;
+                    }
+                    return true;
+                };
+
+                for (uint32_t i = 0; i < heNbFaces; i++)
+                    if (testElement(cpuFaceCenters[i], cpuFaceNormals[i], cpuFaceAreas[i]))
+                        visibleElements++;
+                for (uint32_t i = 0; i < heNbVertices; i++)
+                    if (testElement(cpuVertexPositions[i], cpuVertexNormals[i], cpuVertexFaceAreas[i]))
+                        visibleElements++;
+            }
+
+            uint32_t culledElements = totalElements - visibleElements;
+            uint32_t trisPerElement = resolutionM * resolutionN * 2;
+            uint32_t totalTris = visibleElements * trisPerElement;
+
+            ImGui::Text("Elements:  %u visible / %u total", visibleElements, totalElements);
+            if (totalElements > 0) {
+                float pct = 100.0f * culledElements / totalElements;
+                ImGui::Text("Culled:    %u (%.1f%%)", culledElements, pct);
+            }
+            ImGui::Text("Triangles: %u  (%u per element)", totalTris, trisPerElement);
+        }
     }
 
     ImGui::End();
@@ -436,7 +324,6 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 }
 
 void Renderer::applyPresetChainMail() {
-    renderMode         = RENDER_MODE_PARAMETRIC;
     elementType        = 0;       // Torus
     torusMajorR        = 1.0f;
     torusMinorR        = 0.15f;   // Thin tube for clean interlocking
@@ -447,22 +334,3 @@ void Renderer::applyPresetChainMail() {
     chainmailTiltAngle = 1.0f;    // Full lean (reference project default)
 }
 
-void Renderer::applyPresetDragonScales() {
-    renderMode                    = RENDER_MODE_PEBBLES;
-    pebbleConfig.subdivisionLevel = 3;
-    pebbleConfig.extrusionAmount  = 0.2f;
-    pebbleConfig.roundness        = 2.0f;
-    pebbleConfig.doNoise          = 1;
-    pebbleConfig.noiseAmplitude   = 0.08f;
-    pebbleConfig.noiseFrequency   = 4.0f;
-}
-
-void Renderer::applyPresetCobblestone() {
-    renderMode                    = RENDER_MODE_PEBBLES;
-    pebbleConfig.subdivisionLevel = 2;
-    pebbleConfig.extrusionAmount  = 0.1f;
-    pebbleConfig.roundness        = 2.0f;
-    pebbleConfig.doNoise          = 1;
-    pebbleConfig.noiseAmplitude   = 0.05f;
-    pebbleConfig.noiseFrequency   = 6.0f;
-}

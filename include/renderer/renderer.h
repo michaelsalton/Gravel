@@ -10,12 +10,8 @@
 #include <array>
 
 #include "vulkan/vkHelper.h"
-#include "loaders/LUTLoader.h"
 #include "core/camera.h"
 #include "renderer/renderer_init.h"
-#include "pebble/PebblePipeline.h"
-#include "pebble/BaseMeshPipeline.h"
-#include "pebble/PebbleConfig.h"
 
 class Window;
 struct HalfEdgeMesh;
@@ -39,21 +35,12 @@ struct ResurfacingUBO {
     float    torusMajorR   = 1.0f;
     float    torusMinorR   = 0.3f;
     float    sphereRadius  = 0.5f;
-    uint32_t bezierDegree  = 3u;
+    uint32_t padding0      = 0;
 
     uint32_t doLod         = 0;
     float    lodFactor     = 1.0f;
     uint32_t doCulling     = 0;
     float    cullingThreshold = 0.0f;
-
-    // LUT (control cage) metadata
-    uint32_t lutNx    = 0;
-    uint32_t lutNy    = 0;
-    uint32_t cyclicU  = 0;
-    uint32_t cyclicV  = 0;
-
-    glm::vec4 lutBBMin{0.0f};
-    glm::vec4 lutBBMax{0.0f};
 };
 
 struct GlobalShadingUBO {
@@ -81,7 +68,6 @@ public:
 
     bool isFrameStarted() const { return frameStarted; }
 
-    void loadControlCage(const std::string& filepath);
     void loadMesh(const std::string& path);
     void processInput(Window& window, float deltaTime);
 
@@ -114,8 +100,6 @@ private:
     size_t calculateVRAM() const;
 
     void applyPresetChainMail();
-    void applyPresetDragonScales();
-    void applyPresetCobblestone();
 
     void initImGui();
     void cleanupImGui();
@@ -190,13 +174,6 @@ private:
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     VkPipeline graphicsPipeline = VK_NULL_HANDLE;
 
-    // Pebble pipeline
-    PebblePipeline   pebblePipeline;
-    BaseMeshPipeline baseMeshPipeline;
-    PebbleConfig     pebbleConfig;
-    RenderMode       renderMode     = RENDER_MODE_PARAMETRIC;
-    bool             showBaseMesh   = false;
-    int              baseMeshMode   = 0;  // 0 = solid, 1 = wireframe
     int              selectedMesh   = 0;  // 0 = cube, 1 = plane
 
     // Mesh shader function pointer
@@ -256,19 +233,6 @@ private:
     VkBuffer resurfacingUBOBuffer = VK_NULL_HANDLE;
     VkDeviceMemory resurfacingUBOMemory = VK_NULL_HANDLE;
     void* resurfacingUBOMapped = nullptr;
-
-    // LUT SSBO (set 2, binding 2)
-    VkBuffer lutSSBOBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory lutSSBOMemory = VK_NULL_HANDLE;
-    VkDeviceSize lutSSBOSize = 0;
-
-    // LUT state
-    LutData currentLut;
-    bool lutLoaded = false;
-    std::string lutFilename = "None";
-    bool cyclicU = false;
-    bool cyclicV = false;
-    int bezierDegree = 3;  // 1=bilinear, 2=biquadratic, 3=bicubic
 
     // CPU-side mesh data for stats computation
     std::vector<glm::vec3> cpuFaceCenters;

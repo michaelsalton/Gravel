@@ -8,23 +8,11 @@
 // Bounding Box Computation
 // ============================================================================
 
-// LUT-based element types (B-Spline and Bézier use the pre-computed cage AABB)
-#define LOD_ELEMENT_BSPLINE 4u
-#define LOD_ELEMENT_BEZIER  5u
-
 // Compute AABB for a parametric surface in local space.
-// For LUT surfaces uses the pre-computed cage bounding box; for analytical
-// surfaces samples 9 UV points (4 corners + 4 edge midpoints + center).
+// Samples 9 UV points (4 corners + 4 edge midpoints + center).
 void parametricBoundingBox(vec3 elementPos, vec3 elementNormal, float faceArea, float userScaling,
                            uint elementType, float torusMajorR, float torusMinorR, float sphereRadius,
                            out vec3 minLocal, out vec3 maxLocal) {
-    // LUT surfaces: use exact bounding box stored in the ResurfacingUBO
-    if (elementType == LOD_ELEMENT_BSPLINE || elementType == LOD_ELEMENT_BEZIER) {
-        minLocal = resurfacingUBO.lutBBMin.xyz;
-        maxLocal = resurfacingUBO.lutBBMax.xyz;
-        return;
-    }
-
     minLocal = vec3( 1e10);
     maxLocal = vec3(-1e10);
 

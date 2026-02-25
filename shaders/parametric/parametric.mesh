@@ -5,10 +5,6 @@
 #include "shaderInterface.h"
 #include "common.glsl"
 #include "parametricSurfaces.glsl"
-#include "parametricGrids.glsl"
-
-#define ELEMENT_BSPLINE 4u
-#define ELEMENT_BEZIER  5u
 
 // 32 threads for parallel vertex/primitive generation
 layout(local_size_x = 32) in;
@@ -109,18 +105,8 @@ void main() {
 
         // Evaluate parametric surface in local space
         vec3 localPos, localNormal;
-        if (payload.elementType == ELEMENT_BSPLINE) {
-            parametricBSpline(uv, localPos, localNormal,
-                              resurfacingUBO.lutNx, resurfacingUBO.lutNy,
-                              resurfacingUBO.cyclicU != 0u, resurfacingUBO.cyclicV != 0u);
-        } else if (payload.elementType == ELEMENT_BEZIER) {
-            parametricBezier(uv, localPos, localNormal,
-                             resurfacingUBO.lutNx, resurfacingUBO.lutNy,
-                             resurfacingUBO.bezierDegree);
-        } else {
-            evaluateParametricSurface(uv, localPos, localNormal, payload.elementType,
-                                      push.torusMajorR, push.torusMinorR, push.sphereRadius);
-        }
+        evaluateParametricSurface(uv, localPos, localNormal, payload.elementType,
+                                  push.torusMajorR, push.torusMinorR, push.sphereRadius);
 
         // Transform to world space
         vec3 worldPos, worldNormal;

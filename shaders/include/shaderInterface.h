@@ -52,11 +52,9 @@ struct MeshInfoUBO {
 // ============================================================================
 
 #define BINDING_CONFIG_UBO 0
-#define BINDING_SHADING_UBO_PER_OBJECT 1
-#define BINDING_LUT_BUFFER 2
 
 struct ResurfacingUBO {
-    uint elementType;      // 0-10 (torus, sphere, ..., B-spline, Bezier)
+    uint elementType;      // 0=torus, 1=sphere, 2=cone, 3=cylinder
     float userScaling;     // global scale multiplier
     uint resolutionM;      // U direction resolution
     uint resolutionN;      // V direction resolution
@@ -64,21 +62,12 @@ struct ResurfacingUBO {
     float torusMajorR;
     float torusMinorR;
     float sphereRadius;
-    uint bezierDegree;     // Bézier degree: 1=linear, 2=quadratic, 3=cubic
+    uint padding0;
 
     uint doLod;            // enable LOD
     float lodFactor;       // LOD multiplier
     uint doCulling;        // enable culling
     float cullingThreshold;
-
-    // LUT (control cage) metadata
-    uint lutNx;            // grid width  (U direction)
-    uint lutNy;            // grid height (V direction)
-    uint cyclicU;          // 0 = clamp, 1 = wrap in U
-    uint cyclicV;          // 0 = clamp, 1 = wrap in V
-
-    vec4 lutBBMin;         // bounding box minimum (w unused)
-    vec4 lutBBMax;         // bounding box maximum (w unused)
 };
 
 // ============================================================================
@@ -202,28 +191,12 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
     float torusMajorR;
     float torusMinorR;
     float sphereRadius;
-    uint  bezierDegree;
+    uint  padding0;
     uint  doLod;
     float lodFactor;
     uint  doCulling;
     float cullingThreshold;
-    uint  lutNx;
-    uint  lutNy;
-    uint  cyclicU;
-    uint  cyclicV;
-    vec4  lutBBMin;
-    vec4  lutBBMax;
 } resurfacingUBO;
-
-// --- LUT (control cage) SSBO ---
-
-LAYOUT_STD430(SET_PER_OBJECT, BINDING_LUT_BUFFER) readonly buffer LUTBuffer {
-    vec4 controlPoints[];  // Nx * Ny entries, w = 1.0 padding
-} lutBuffer;
-
-vec3 sampleLUT(uint index) {
-    return lutBuffer.controlPoints[index].xyz;
-}
 
 // --- Constants ---
 

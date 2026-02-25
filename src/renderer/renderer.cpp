@@ -26,15 +26,11 @@ Renderer::Renderer(Window& window) : window(window) {
     createDescriptorPool();
     createDescriptorSets();
     createGraphicsPipeline();
-    pebblePipeline.create(device, renderPass, sceneSetLayout, halfEdgeSetLayout, perObjectSetLayout);
-    baseMeshPipeline.create(device, renderPass, sceneSetLayout, halfEdgeSetLayout, perObjectSetLayout);
     initImGui();
 }
 
 Renderer::~Renderer() {
     cleanupImGui();
-    baseMeshPipeline.destroy(device);
-    pebblePipeline.destroy(device);
     vkDestroyPipeline(device, graphicsPipeline, nullptr);
 
     // Cleanup half-edge SSBO buffers (StorageBuffer destructors handle their own cleanup)
@@ -58,11 +54,6 @@ Renderer::~Renderer() {
     if (resurfacingUBOBuffer != VK_NULL_HANDLE) {
         vkDestroyBuffer(device, resurfacingUBOBuffer, nullptr);
         vkFreeMemory(device, resurfacingUBOMemory, nullptr);
-    }
-
-    if (lutSSBOBuffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(device, lutSSBOBuffer, nullptr);
-        vkFreeMemory(device, lutSSBOMemory, nullptr);
     }
 
     vkDestroyDescriptorPool(device, descriptorPool, nullptr);
@@ -168,29 +159,22 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     scissor.extent = swapChainExtent;
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
-    VkPipeline       activePipeline = (renderMode == RENDER_MODE_PARAMETRIC)
-                                        ? graphicsPipeline
-                                        : pebblePipeline.pipeline;
-    VkPipelineLayout activeLayout   = (renderMode == RENDER_MODE_PARAMETRIC)
-                                        ? pipelineLayout
-                                        : pebblePipeline.pipelineLayout;
-
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, activePipeline);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                             activeLayout, 0, 1,
+                             pipelineLayout, 0, 1,
                              &sceneDescriptorSets[currentFrame],
                              0, nullptr);
 
     if (heMeshUploaded) {
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                 activeLayout, 1, 1,
+                                 pipelineLayout, 1, 1,
                                  &heDescriptorSet,
                                  0, nullptr);
     }
 
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                             activeLayout, 2, 1,
+                             pipelineLayout, 2, 1,
                              &perObjectDescriptorSet,
                              0, nullptr);
 
@@ -255,102 +239,14 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     pushConstants.chainmailMode = chainmailMode ? 1u : 0u;
     pushConstants.chainmailTiltAngle = chainmailTiltAngle;
 
-    if (renderMode == RENDER_MODE_PARAMETRIC) {
-        if (showBaseMesh && heMeshUploaded) {
-            PebblePushConstants basePC{};
-            basePC.model   = pushConstants.model;
-            basePC.nbFaces = heNbFaces;
-            VkPipeline bmPipeline = (baseMeshMode == 1)
-                ? baseMeshPipeline.wireframePipeline
-                : baseMeshPipeline.pipeline;
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, bmPipeline);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                     baseMeshPipeline.pipelineLayout, 0, 1,
-                                     &sceneDescriptorSets[currentFrame], 0, nullptr);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                     baseMeshPipeline.pipelineLayout, 1, 1,
-                                     &heDescriptorSet, 0, nullptr);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                     baseMeshPipeline.pipelineLayout, 2, 1,
-                                     &perObjectDescriptorSet, 0, nullptr);
-            vkCmdPushConstants(cmd, baseMeshPipeline.pipelineLayout,
-                                VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                                0, sizeof(PebblePushConstants), &basePC);
-            pfnCmdDrawMeshTasksEXT(cmd, heNbFaces, 1, 1);
-            // Restore parametric pipeline
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                     pipelineLayout, 0, 1,
-                                     &sceneDescriptorSets[currentFrame], 0, nullptr);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                     pipelineLayout, 1, 1,
-                                     &heDescriptorSet, 0, nullptr);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                     pipelineLayout, 2, 1,
-                                     &perObjectDescriptorSet, 0, nullptr);
-        }
-        vkCmdPushConstants(cmd, activeLayout,
-                            VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
-                            VK_SHADER_STAGE_FRAGMENT_BIT,
-                            0, sizeof(PushConstants), &pushConstants);
-        uint32_t totalTasks = heMeshUploaded
-            ? (heNbFaces + heNbVertices)
-            : 1;
-        pfnCmdDrawMeshTasksEXT(cmd, totalTasks, 1, 1);
-    } else {
-        // Draw base mesh first (dark fill) so pebbles naturally occlude it
-        if (showBaseMesh && heMeshUploaded) {
-            PebblePushConstants basePC{};
-            basePC.model   = pushConstants.model;
-            basePC.nbFaces = heNbFaces;
-            VkPipeline bmPipeline = (baseMeshMode == 1)
-                ? baseMeshPipeline.wireframePipeline
-                : baseMeshPipeline.pipeline;
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, bmPipeline);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                     baseMeshPipeline.pipelineLayout, 0, 1,
-                                     &sceneDescriptorSets[currentFrame], 0, nullptr);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                     baseMeshPipeline.pipelineLayout, 1, 1,
-                                     &heDescriptorSet, 0, nullptr);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                     baseMeshPipeline.pipelineLayout, 2, 1,
-                                     &perObjectDescriptorSet, 0, nullptr);
-            vkCmdPushConstants(cmd, baseMeshPipeline.pipelineLayout,
-                                VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                                0, sizeof(PebblePushConstants), &basePC);
-            pfnCmdDrawMeshTasksEXT(cmd, heNbFaces, 1, 1);
-            // Re-bind pebble pipeline for subsequent draw
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pebblePipeline.pipeline);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                     pebblePipeline.pipelineLayout, 0, 1,
-                                     &sceneDescriptorSets[currentFrame], 0, nullptr);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                     pebblePipeline.pipelineLayout, 1, 1,
-                                     &heDescriptorSet, 0, nullptr);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                     pebblePipeline.pipelineLayout, 2, 1,
-                                     &perObjectDescriptorSet, 0, nullptr);
-        }
-
-        PebblePushConstants pebblePC{};
-        pebblePC.model             = pushConstants.model;
-        pebblePC.nbFaces           = heNbFaces;
-        pebblePC.subdivisionLevel  = pebbleConfig.subdivisionLevel;
-        pebblePC.extrusionAmount   = pebbleConfig.extrusionAmount;
-        pebblePC.roundness         = pebbleConfig.roundness;
-        pebblePC.enableLod         = pebbleConfig.enableLod;
-        pebblePC.debugMode         = debugMode;
-        pebblePC.doNoise           = pebbleConfig.doNoise;
-        pebblePC.noiseAmplitude    = pebbleConfig.noiseAmplitude;
-        pebblePC.noiseFrequency    = pebbleConfig.noiseFrequency;
-        vkCmdPushConstants(cmd, activeLayout,
-                            VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
-                            VK_SHADER_STAGE_FRAGMENT_BIT,
-                            0, sizeof(PebblePushConstants), &pebblePC);
-        uint32_t faceTasks = heMeshUploaded ? heNbFaces : 0;
-        pfnCmdDrawMeshTasksEXT(cmd, faceTasks, 1, 1);
-    }
+    vkCmdPushConstants(cmd, pipelineLayout,
+                        VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
+                        VK_SHADER_STAGE_FRAGMENT_BIT,
+                        0, sizeof(PushConstants), &pushConstants);
+    uint32_t totalTasks = heMeshUploaded
+        ? (heNbFaces + heNbVertices)
+        : 1;
+    pfnCmdDrawMeshTasksEXT(cmd, totalTasks, 1, 1);
 
     // Draw ImGui on top
     renderImGui(cmd);

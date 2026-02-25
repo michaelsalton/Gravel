@@ -190,89 +190,20 @@ void Renderer::updatePerObjectDescriptorSet() {
     uboInfo.offset = 0;
     uboInfo.range = sizeof(ResurfacingUBO);
 
-    VkDescriptorBufferInfo ssboInfo{};
-    ssboInfo.buffer = lutSSBOBuffer;
-    ssboInfo.offset = 0;
-    ssboInfo.range = VK_WHOLE_SIZE;
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = perObjectDescriptorSet;
+    write.dstBinding = 0;  // BINDING_CONFIG_UBO
+    write.dstArrayElement = 0;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    write.descriptorCount = 1;
+    write.pBufferInfo = &uboInfo;
 
-    std::array<VkWriteDescriptorSet, 2> writes{};
-
-    writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[0].dstSet = perObjectDescriptorSet;
-    writes[0].dstBinding = 0;  // BINDING_CONFIG_UBO
-    writes[0].dstArrayElement = 0;
-    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    writes[0].descriptorCount = 1;
-    writes[0].pBufferInfo = &uboInfo;
-
-    writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    writes[1].dstSet = perObjectDescriptorSet;
-    writes[1].dstBinding = 2;  // BINDING_LUT_BUFFER
-    writes[1].dstArrayElement = 0;
-    writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    writes[1].descriptorCount = 1;
-    writes[1].pBufferInfo = &ssboInfo;
-
-    vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
-                           writes.data(), 0, nullptr);
+    vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
 }
 
 void Renderer::processInput(Window& win, float deltaTime) {
     camera.processInput(win, deltaTime);
-}
-
-void Renderer::loadControlCage(const std::string& filepath) {
-    LutData lut = LUTLoader::loadControlCage(filepath);
-    if (!lut.isValid) {
-        std::cerr << "LUT: failed to load " << filepath << std::endl;
-        return;
-    }
-
-    // Wait for GPU to finish using the old LUT buffer before replacing it
-    vkDeviceWaitIdle(device);
-
-    // Destroy old LUT SSBO
-    if (lutSSBOBuffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(device, lutSSBOBuffer, nullptr);
-        vkFreeMemory(device, lutSSBOMemory, nullptr);
-        lutSSBOBuffer = VK_NULL_HANDLE;
-        lutSSBOMemory = VK_NULL_HANDLE;
-    }
-
-    // Upload control points as vec4 array (w = 1.0 padding)
-    std::vector<glm::vec4> data;
-    data.reserve(lut.controlPoints.size());
-    for (const auto& p : lut.controlPoints)
-        data.push_back(glm::vec4(p, 1.0f));
-
-    lutSSBOSize = data.size() * sizeof(glm::vec4);
-    createBuffer(lutSSBOSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                 lutSSBOBuffer, lutSSBOMemory);
-
-    void* mapped;
-    vkMapMemory(device, lutSSBOMemory, 0, lutSSBOSize, 0, &mapped);
-    memcpy(mapped, data.data(), lutSSBOSize);
-    vkUnmapMemory(device, lutSSBOMemory);
-
-    // Update ResurfacingUBO with LUT metadata
-    ResurfacingUBO* resurfData = static_cast<ResurfacingUBO*>(resurfacingUBOMapped);
-    resurfData->lutNx    = lut.Nx;
-    resurfData->lutNy    = lut.Ny;
-    resurfData->cyclicU  = cyclicU ? 1u : 0u;
-    resurfData->cyclicV  = cyclicV ? 1u : 0u;
-    resurfData->lutBBMin = glm::vec4(lut.bbMin, 0.0f);
-    resurfData->lutBBMax = glm::vec4(lut.bbMax, 0.0f);
-
-    currentLut  = lut;
-    lutLoaded   = true;
-    lutFilename = filepath;
-
-    // Rebind descriptor set with new SSBO
-    updatePerObjectDescriptorSet();
-
-    std::cout << "LUT loaded and uploaded: " << lut.controlPoints.size()
-              << " control points (" << lut.Nx << "x" << lut.Ny << ")" << std::endl;
 }
 
 size_t Renderer::calculateVRAM() const {
