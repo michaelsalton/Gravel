@@ -73,10 +73,13 @@ void main() {
         if (resurfacingUBO.doSkinning != 0u) {
             vec4 j = jointIndices[uint(vertId)];
             vec4 w = jointWeights[uint(vertId)];
-            mat4 skinMat = w.x * boneMatrices[int(j.x)] + w.y * boneMatrices[int(j.y)]
-                         + w.z * boneMatrices[int(j.z)] + w.w * boneMatrices[int(j.w)];
-            pos = (skinMat * vec4(pos, 1.0)).xyz;
-            norm = normalize((skinMat * vec4(norm, 0.0)).xyz);
+            float wSum = w.x + w.y + w.z + w.w;
+            if (wSum > 0.001) {
+                mat4 skinMat = w.x * boneMatrices[int(j.x)] + w.y * boneMatrices[int(j.y)]
+                             + w.z * boneMatrices[int(j.z)] + w.w * boneMatrices[int(j.w)];
+                pos = (skinMat * vec4(pos, 1.0)).xyz;
+                norm = normalize((skinMat * vec4(norm, 0.0)).xyz);
+            }
         }
 
         gl_MeshVerticesEXT[i].gl_Position = mvp * vec4(pos, 1.0);

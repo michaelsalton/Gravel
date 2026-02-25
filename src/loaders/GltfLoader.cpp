@@ -346,31 +346,20 @@ void GltfLoader::matchBoneDataToObjMesh(const tinygltf::Model& model,
     jointIndices.assign(objVertCount, glm::vec4(0.0f));
     jointWeights.assign(objVertCount, glm::vec4(0.0f));
 
-    uint32_t matchedCount = 0;
-    const float epsilon = 1e-5f;
-    const float cellSize = 1e-3f;  // 100x epsilon for spatial hashing
-
-    // Build spatial hash map from OBJ positions for O(1) lookups
-    struct CellKey {
-        int x, y, z;
-        bool operator==(const CellKey& o) const { return x == o.x && y == o.y && z == o.z; }
+    // Collect all glTF positions first for adaptive epsilon detection
+    struct GltfVertData {
+        glm::vec3 pos;
+        size_t primitiveIdx;   // which primitive this came from
+        size_t vertexIdx;      // index within primitive
     };
-    struct CellHash {
-        size_t operator()(const CellKey& k) const {
-            return size_t(k.x * 73856093) ^ size_t(k.y * 19349663) ^ size_t(k.z * 83492791);
-        }
-    };
+    std::vector<GltfVertData> gltfVerts;
 
-    auto toCell = [cellSize](const glm::vec3& p) -> CellKey {
-        return { static_cast<int>(std::floor(p.x / cellSize)),
-                 static_cast<int>(std::floor(p.y / cellSize)),
-                 static_cast<int>(std::floor(p.z / cellSize)) };
+    struct PrimitiveData {
+        const uint8_t* jointData;
+        const float* weightData;
+        int jointComponentType;
     };
-
-    std::unordered_map<CellKey, std::vector<size_t>, CellHash> grid;
-    for (size_t j = 0; j < objVertCount; ++j) {
-        grid[toCell(objPositions[j])].push_back(j);
-    }
+    std::vector<PrimitiveData> primitives;
 
     for (const auto& mesh : model.meshes) {
         for (const auto& primitive : mesh.primitives) {
@@ -394,52 +383,141 @@ void GltfLoader::matchBoneDataToObjMesh(const tinygltf::Model& model,
             const tinygltf::BufferView& weightBV = model.bufferViews[weightAccessor.bufferView];
             const tinygltf::BufferView& posBV = model.bufferViews[posAccessor.bufferView];
 
-            const uint8_t* jointData = reinterpret_cast<const uint8_t*>(
+            const uint8_t* jointRaw = reinterpret_cast<const uint8_t*>(
                 &model.buffers[jointBV.buffer].data[jointAccessor.byteOffset + jointBV.byteOffset]);
             const float* weightData = reinterpret_cast<const float*>(
                 &model.buffers[weightBV.buffer].data[weightAccessor.byteOffset + weightBV.byteOffset]);
             const float* posData = reinterpret_cast<const float*>(
                 &model.buffers[posBV.buffer].data[posAccessor.byteOffset + posBV.byteOffset]);
 
+            size_t primIdx = primitives.size();
+            primitives.push_back({ jointRaw, weightData, jointAccessor.componentType });
+
             size_t gltfVertCount = posAccessor.count;
-
-            // Spatial hash lookup: for each glTF vertex, find matching OBJ vertex
             for (size_t i = 0; i < gltfVertCount; ++i) {
-                glm::vec3 gltfPos(posData[i * 3 + 0], posData[i * 3 + 1], posData[i * 3 + 2]);
-                CellKey cell = toCell(gltfPos);
+                gltfVerts.push_back({
+                    glm::vec3(posData[i * 3 + 0], posData[i * 3 + 1], posData[i * 3 + 2]),
+                    primIdx, i
+                });
+            }
+        }
+    }
 
-                bool found = false;
-                // Check current cell and 26 neighbors (handles cell boundary cases)
-                for (int dx = -1; dx <= 1 && !found; ++dx) {
-                    for (int dy = -1; dy <= 1 && !found; ++dy) {
-                        for (int dz = -1; dz <= 1 && !found; ++dz) {
-                            CellKey neighbor = { cell.x + dx, cell.y + dy, cell.z + dz };
-                            auto it = grid.find(neighbor);
-                            if (it == grid.end()) continue;
+    if (gltfVerts.empty()) {
+        std::cerr << "  No glTF vertices found for bone matching." << std::endl;
+        return;
+    }
 
-                            for (size_t j : it->second) {
-                                if (glm::distance(gltfPos, objPositions[j]) < epsilon) {
-                                    jointIndices[j] = glm::vec4(
-                                        static_cast<float>(jointData[i * 4 + 0]),
-                                        static_cast<float>(jointData[i * 4 + 1]),
-                                        static_cast<float>(jointData[i * 4 + 2]),
-                                        static_cast<float>(jointData[i * 4 + 3]));
+    // Auto-detect matching epsilon by sampling nearest-neighbor distances.
+    // This handles OBJ/glTF exports with slightly different vertex positions.
+    float epsilon = 1e-5f;
+    {
+        size_t sampleCount = std::min(size_t(200), gltfVerts.size());
+        size_t step = std::max(size_t(1), gltfVerts.size() / sampleCount);
+        std::vector<float> nnDists;
+        nnDists.reserve(sampleCount);
 
-                                    jointWeights[j] = glm::vec4(
-                                        weightData[i * 4 + 0],
-                                        weightData[i * 4 + 1],
-                                        weightData[i * 4 + 2],
-                                        weightData[i * 4 + 3]);
+        for (size_t s = 0; s < gltfVerts.size() && nnDists.size() < sampleCount; s += step) {
+            float bestDist = std::numeric_limits<float>::max();
+            for (size_t j = 0; j < objVertCount; ++j) {
+                float d = glm::distance(gltfVerts[s].pos, objPositions[j]);
+                if (d < bestDist) bestDist = d;
+            }
+            if (bestDist < 1.0f) {  // ignore outliers (unmatched vertices)
+                nnDists.push_back(bestDist);
+            }
+        }
 
-                                    matchedCount++;
-                                    found = true;
-                                    break;
-                                }
-                            }
+        if (!nnDists.empty()) {
+            std::sort(nnDists.begin(), nnDists.end());
+            float median = nnDists[nnDists.size() / 2];
+            // Use 3x median as epsilon, with a floor of 1e-5 and ceiling of 0.1
+            epsilon = std::clamp(median * 3.0f, 1e-5f, 0.1f);
+        }
+
+        std::cout << "  Bone matching epsilon: " << epsilon << std::endl;
+    }
+
+    float cellSize = epsilon * 3.0f;
+
+    // Build spatial hash map from OBJ positions for O(1) lookups
+    struct CellKey {
+        int x, y, z;
+        bool operator==(const CellKey& o) const { return x == o.x && y == o.y && z == o.z; }
+    };
+    struct CellHash {
+        size_t operator()(const CellKey& k) const {
+            return size_t(k.x * 73856093) ^ size_t(k.y * 19349663) ^ size_t(k.z * 83492791);
+        }
+    };
+
+    auto toCell = [cellSize](const glm::vec3& p) -> CellKey {
+        return { static_cast<int>(std::floor(p.x / cellSize)),
+                 static_cast<int>(std::floor(p.y / cellSize)),
+                 static_cast<int>(std::floor(p.z / cellSize)) };
+    };
+
+    std::unordered_map<CellKey, std::vector<size_t>, CellHash> grid;
+    for (size_t j = 0; j < objVertCount; ++j) {
+        grid[toCell(objPositions[j])].push_back(j);
+    }
+
+    // Match each glTF vertex to closest OBJ vertex within epsilon
+    uint32_t matchedCount = 0;
+    for (const auto& gv : gltfVerts) {
+        CellKey cell = toCell(gv.pos);
+
+        float bestDist = epsilon;
+        size_t bestIdx = SIZE_MAX;
+
+        // Check current cell and 26 neighbors
+        for (int dx = -1; dx <= 1; ++dx) {
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dz = -1; dz <= 1; ++dz) {
+                    CellKey neighbor = { cell.x + dx, cell.y + dy, cell.z + dz };
+                    auto it = grid.find(neighbor);
+                    if (it == grid.end()) continue;
+
+                    for (size_t j : it->second) {
+                        float d = glm::distance(gv.pos, objPositions[j]);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            bestIdx = j;
                         }
                     }
                 }
             }
+        }
+
+        if (bestIdx != SIZE_MAX) {
+            const auto& prim = primitives[gv.primitiveIdx];
+            size_t i = gv.vertexIdx;
+
+            // Read joint indices (handle both UNSIGNED_BYTE and UNSIGNED_SHORT)
+            glm::vec4 joints;
+            if (prim.jointComponentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
+                const uint16_t* jointData16 = reinterpret_cast<const uint16_t*>(prim.jointData);
+                joints = glm::vec4(
+                    static_cast<float>(jointData16[i * 4 + 0]),
+                    static_cast<float>(jointData16[i * 4 + 1]),
+                    static_cast<float>(jointData16[i * 4 + 2]),
+                    static_cast<float>(jointData16[i * 4 + 3]));
+            } else {
+                joints = glm::vec4(
+                    static_cast<float>(prim.jointData[i * 4 + 0]),
+                    static_cast<float>(prim.jointData[i * 4 + 1]),
+                    static_cast<float>(prim.jointData[i * 4 + 2]),
+                    static_cast<float>(prim.jointData[i * 4 + 3]));
+            }
+
+            jointIndices[bestIdx] = joints;
+            jointWeights[bestIdx] = glm::vec4(
+                prim.weightData[i * 4 + 0],
+                prim.weightData[i * 4 + 1],
+                prim.weightData[i * 4 + 2],
+                prim.weightData[i * 4 + 3]);
+
+            matchedCount++;
         }
     }
 

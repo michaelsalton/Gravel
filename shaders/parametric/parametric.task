@@ -180,10 +180,13 @@ void main() {
         uint skinVertId = isVertex ? vertId : uint(getHalfEdgeVertex(uint(readFaceEdge(faceId))));
         vec4 j = jointIndices[skinVertId];
         vec4 w = jointWeights[skinVertId];
-        mat4 skinMat = w.x * boneMatrices[int(j.x)] + w.y * boneMatrices[int(j.y)]
-                     + w.z * boneMatrices[int(j.z)] + w.w * boneMatrices[int(j.w)];
-        payload.position = (skinMat * vec4(payload.position, 1.0)).xyz;
-        payload.normal = normalize((skinMat * vec4(payload.normal, 0.0)).xyz);
+        float wSum = w.x + w.y + w.z + w.w;
+        if (wSum > 0.001) {
+            mat4 skinMat = w.x * boneMatrices[int(j.x)] + w.y * boneMatrices[int(j.y)]
+                         + w.z * boneMatrices[int(j.z)] + w.w * boneMatrices[int(j.w)];
+            payload.position = (skinMat * vec4(payload.position, 1.0)).xyz;
+            payload.normal = normalize((skinMat * vec4(payload.normal, 0.0)).xyz);
+        }
     }
 
     payload.taskId = globalId;
