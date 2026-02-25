@@ -24,9 +24,10 @@ struct Skeleton {
         glm::vec3 animScale = glm::vec3(1.0f);
     };
     std::vector<Bone> bones;
-    glm::mat4 armatureTransform = glm::mat4(1.0f);  // Skeleton root node transform
-    glm::mat4 objAlignTransform = glm::mat4(1.0f);  // glTF mesh-local → OBJ space
-    glm::mat4 objAlignInverse = glm::mat4(1.0f);    // OBJ → glTF mesh-local space
+    glm::mat4 armatureTransform = glm::mat4(1.0f);     // Skeleton root node transform
+    glm::mat4 skinNodeGlobalInverse = glm::mat4(1.0f); // inverse(mesh node global transform)
+    glm::mat4 objAlignTransform = glm::mat4(1.0f);     // glTF mesh-local → OBJ space
+    glm::mat4 objAlignInverse = glm::mat4(1.0f);       // OBJ → glTF mesh-local space
 };
 
 struct KeyFrame {
@@ -81,4 +82,10 @@ public:
                                        Skeleton& skeleton,
                                        std::vector<glm::vec4>& jointIndices,
                                        std::vector<glm::vec4>& jointWeights);
+
+    // Extract TEXCOORD_0 from glTF and match to OBJ vertex positions
+    static void matchUVsToObjMesh(const tinygltf::Model& model,
+                                   const std::vector<glm::vec3>& objPositions,
+                                   const Skeleton& skeleton,
+                                   std::vector<glm::vec2>& outUVs);
 };

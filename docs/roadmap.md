@@ -21,6 +21,8 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 | [Epic 7: Control Maps & Polish](#epic-7-control-maps-and-polish) | 5+1 | 11-15h (+4-5h) | Not Started |
 | [Epic 8: Performance Analysis](#epic-8-performance-analysis) | 6+1 | 14-18h (+4-5h) | Not Started |
 | [Epic 9: Chainmail Generation](#epic-9-chainmail-generation) | 3 | 5-7h | In Progress |
+| [Epic 10: Textures, Skeleton & Skinning](#epic-10-textures-skeleton--skinning) | 5 | 10-15h | In Progress |
+| [Epic 11: Per-Face Mask Texture](#epic-11-per-face-mask-texture) | 3 | 3-5h | Planned |
 
 ---
 
@@ -149,6 +151,30 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 - [ ] 9.3 Chainmail UI and Presets (1-2h)
 
 **Milestone**: European 4-in-1 chainmail look via alternating torus tilt, tunable via ImGui
+
+---
+
+## Epic 10: Textures, Skeleton & Skinning
+**Details**: [docs/10/epic-10-textures-skeleton-skinning.md](10/epic-10-textures-skeleton-skinning.md)
+
+- [x] 10.1 Image Loading & Texture Infrastructure (2-3h)
+- [x] 10.2 Expand PerObject Descriptor Set (2-3h)
+- [x] 10.3 AO Texture & Element Type Map (2-3h)
+- [x] 10.4 glTF Loader & Skeleton Data (2-3h)
+- [ ] 10.5 GPU Bone Skinning & Animation (2-3h)
+
+**Milestone**: Textures drive per-face element types and AO shading, skeleton animates via GPU skinning
+
+---
+
+## Epic 11: Per-Face Mask Texture
+**Details**: [docs/11/epic-11-mask-texture.md](11/epic-11-mask-texture.md)
+
+- [ ] 11.1 Load Mask Texture & Extend Descriptors (1-2h)
+- [ ] 11.2 Task Shader Mask Sampling (1-2h)
+- [ ] 11.3 ImGui Toggle (0.5h)
+
+**Milestone**: Painted mask texture controls which mesh faces generate procedural geometry
 
 ---
 

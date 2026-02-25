@@ -203,6 +203,13 @@ void main() {
         payload.elementType = mappedType;
     }
 
+    // Mask texture culling (applies to both face and vertex elements)
+    if (resurfacingUBO.hasMaskTexture != 0u) {
+        // DEBUG: force-cull everything to verify flag reaches shader
+        EmitMeshTasksEXT(0, 0, 1);
+        return;
+    }
+
     // MVP needed for both frustum culling and LOD
     mat4 mvp = viewUBO.projection * viewUBO.view * push.model;
 

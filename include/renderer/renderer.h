@@ -46,7 +46,7 @@ struct ResurfacingUBO {
     uint32_t doSkinning            = 0;
     uint32_t hasElementTypeTexture = 0;
     uint32_t hasAOTexture          = 0;
-    uint32_t padding1              = 0;
+    uint32_t hasMaskTexture        = 0;
 };
 
 struct GlobalShadingUBO {
@@ -262,8 +262,10 @@ private:
     // Textures (loaded per-mesh)
     VulkanTexture aoTexture;
     VulkanTexture elementTypeTexture;
+    VulkanTexture maskTexture;
     bool aoTextureLoaded = false;
     bool elementTypeTextureLoaded = false;
+    bool maskTextureLoaded = false;
 
     // Skeleton buffers (loaded per-mesh)
     StorageBuffer jointIndicesBuffer;
@@ -321,6 +323,7 @@ private:
     bool triangulateMesh = false;
     bool useElementTypeTexture = false;
     bool useAOTexture = false;
+    bool useMaskTexture = false;
     bool doSkinning = false;
     bool animationPlaying = false;
     float animationTime = 0.0f;
@@ -328,6 +331,7 @@ private:
     float lastDeltaTime = 0.0f;
     bool vsync = false;
     bool pendingSwapChainRecreation = false;
+    std::string pendingMeshLoad;  // deferred mesh load (set by ImGui, processed between frames)
 
     // Camera
     Camera camera;

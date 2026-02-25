@@ -261,6 +261,23 @@ void Renderer::writeTextureDescriptors() {
         writes.push_back(texWrite);
     }
 
+    // If mask texture is loaded, write slot 2
+    VkDescriptorImageInfo maskInfo{};
+    if (maskTextureLoaded) {
+        maskInfo.imageView = maskTexture.getImageView();
+        maskInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkWriteDescriptorSet texWrite{};
+        texWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        texWrite.dstSet = perObjectDescriptorSet;
+        texWrite.dstBinding = 5;  // BINDING_TEXTURES
+        texWrite.dstArrayElement = 2;  // MASK_TEXTURE index
+        texWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        texWrite.descriptorCount = 1;
+        texWrite.pImageInfo = &maskInfo;
+        writes.push_back(texWrite);
+    }
+
     vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
                            writes.data(), 0, nullptr);
 }
@@ -279,6 +296,7 @@ size_t Renderer::calculateVRAM() const {
     total += sizeof(MeshInfoUBO);
     if (aoTextureLoaded) total += aoTexture.getMemorySize();
     if (elementTypeTextureLoaded) total += elementTypeTexture.getMemorySize();
+    if (maskTextureLoaded) total += maskTexture.getMemorySize();
     if (skeletonLoaded) {
         total += jointIndicesBuffer.getSize();
         total += jointWeightsBuffer.getSize();
@@ -299,10 +317,13 @@ size_t Renderer::calculateVRAM() const {
 void Renderer::cleanupMeshTextures() {
     aoTexture.destroy();
     elementTypeTexture.destroy();
+    maskTexture.destroy();
     aoTextureLoaded = false;
     elementTypeTextureLoaded = false;
+    maskTextureLoaded = false;
     useElementTypeTexture = false;
     useAOTexture = false;
+    useMaskTexture = false;
 }
 
 void Renderer::cleanupMeshSkeleton() {
@@ -690,8 +711,12 @@ void Renderer::loadMesh(const std::string& path) {
     loadAndUploadTexture(dir + "dragon_element_type_map_2k.png", elementTypeTexture,
                          VK_FORMAT_R8G8B8A8_UNORM, elementTypeTextureLoaded);
 
+    // Mask texture (per-face generation mask)
+    loadAndUploadTexture(dir + "mask.png", maskTexture,
+                         VK_FORMAT_R8G8B8A8_UNORM, maskTextureLoaded);
+
     // Write sampler and texture descriptors if any textures were loaded
-    if (aoTextureLoaded || elementTypeTextureLoaded) {
+    if (aoTextureLoaded || elementTypeTextureLoaded || maskTextureLoaded) {
         writeTextureDescriptors();
     }
 
@@ -724,6 +749,40 @@ void Renderer::loadMesh(const std::string& path) {
             GltfLoader::matchBoneDataToObjMesh(gltfModel, ngon.positions,
                                                 skeleton, jointIndicesData, jointWeightsData);
             std::cout << "  Bone matching done" << std::endl;
+
+            // Extract UVs from glTF and re-upload to GPU (OBJ has no UVs)
+            std::vector<glm::vec2> gltfUVs;
+            GltfLoader::matchUVsToObjMesh(gltfModel, ngon.positions, skeleton, gltfUVs);
+            bool hasUVs = false;
+            for (const auto& uv : gltfUVs) {
+                if (uv.x != 0.0f || uv.y != 0.0f) { hasUVs = true; break; }
+            }
+            if (hasUVs) {
+                // Debug: print UV range and sample values
+                glm::vec2 uvMin(std::numeric_limits<float>::max());
+                glm::vec2 uvMax(std::numeric_limits<float>::lowest());
+                uint32_t nonZeroCount = 0;
+                for (size_t i = 0; i < gltfUVs.size(); ++i) {
+                    if (gltfUVs[i].x != 0.0f || gltfUVs[i].y != 0.0f) {
+                        nonZeroCount++;
+                        uvMin = glm::min(uvMin, gltfUVs[i]);
+                        uvMax = glm::max(uvMax, gltfUVs[i]);
+                    }
+                }
+                std::cout << "  UV debug: " << nonZeroCount << "/" << gltfUVs.size()
+                          << " non-zero, range=(" << uvMin.x << "," << uvMin.y
+                          << ") to (" << uvMax.x << "," << uvMax.y << ")" << std::endl;
+                // Print first 10 UV values
+                for (size_t i = 0; i < std::min(size_t(10), gltfUVs.size()); ++i) {
+                    std::cout << "    UV[" << i << "] = (" << gltfUVs[i].x << ", " << gltfUVs[i].y << ")" << std::endl;
+                }
+
+                heVec2Buffers[0].destroy();
+                heVec2Buffers[0].create(device, physicalDevice,
+                    gltfUVs.size() * sizeof(glm::vec2), gltfUVs.data());
+                updateHEDescriptorSet();
+                std::cout << "  UV buffer re-uploaded from glTF data" << std::endl;
+            }
 
             boneCount = static_cast<uint32_t>(skeleton.bones.size());
             std::cout << "  boneCount=" << boneCount

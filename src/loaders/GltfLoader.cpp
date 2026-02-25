@@ -163,6 +163,41 @@ void GltfLoader::extractSkeleton(const tinygltf::Model& model, Skeleton& skeleto
         foundArmature:;
     }
 
+    // Compute inverse of the skinned mesh node's global transform.
+    // glTF spec: jointMatrix = inverse(meshNodeGlobal) * jointGlobal * IBM
+    // Find the node that references skin 0, then walk up the scene graph.
+    {
+        // Build parent map for all nodes
+        std::unordered_map<int, int> parentMap;
+        for (size_t p = 0; p < model.nodes.size(); ++p) {
+            for (int child : model.nodes[p].children) {
+                parentMap[child] = static_cast<int>(p);
+            }
+        }
+
+        // Find the node with skin == 0
+        int skinNodeIdx = -1;
+        for (size_t n = 0; n < model.nodes.size(); ++n) {
+            if (model.nodes[n].skin == 0) {
+                skinNodeIdx = static_cast<int>(n);
+                break;
+            }
+        }
+
+        if (skinNodeIdx >= 0) {
+            // Compute global transform by walking up to the root
+            glm::mat4 globalT = getNodeTransform(model.nodes[skinNodeIdx]);
+            int current = skinNodeIdx;
+            while (parentMap.count(current)) {
+                current = parentMap[current];
+                globalT = getNodeTransform(model.nodes[current]) * globalT;
+            }
+            skeleton.skinNodeGlobalInverse = glm::inverse(globalT);
+            std::cout << "  Skin node: " << model.nodes[skinNodeIdx].name
+                      << " (global transform has scale/rotation from armature)" << std::endl;
+        }
+    }
+
     std::cout << "  Skeleton: " << skeleton.bones.size() << " bones" << std::endl;
     for (size_t i = 0; i < skeleton.bones.size(); ++i) {
         std::cout << "    [" << i << "] " << skeleton.bones[i].name
@@ -294,6 +329,24 @@ void GltfLoader::extractAnimations(const tinygltf::Model& model,
         std::cout << "  Animation: \"" << animation.name << "\" duration="
                   << animation.duration << "s, " << animation.channels.size()
                   << " channels" << std::endl;
+
+        // Debug: dump first bone's rotation channel keyframes
+        for (const auto& ch : animation.channels) {
+            if (ch.boneIndex == 0 && ch.path == "rotation" && !ch.keyframes.empty()) {
+                auto& kf0 = ch.keyframes.front();
+                auto& kfN = ch.keyframes.back();
+                std::cout << "    Hips rotation: " << ch.keyframes.size() << " keyframes"
+                          << " first=(" << kf0.rotation.w << "," << kf0.rotation.x << "," << kf0.rotation.y << "," << kf0.rotation.z << ")"
+                          << " last=(" << kfN.rotation.w << "," << kfN.rotation.x << "," << kfN.rotation.y << "," << kfN.rotation.z << ")"
+                          << std::endl;
+                // Check if any keyframe differs from the first
+                bool allSame = true;
+                for (size_t k = 1; k < ch.keyframes.size(); ++k) {
+                    if (ch.keyframes[k].rotation != kf0.rotation) { allSame = false; break; }
+                }
+                std::cout << "    All same? " << (allSame ? "YES (no animation!)" : "NO (has variation)") << std::endl;
+            }
+        }
     }
 }
 
@@ -625,5 +678,236 @@ void GltfLoader::matchBoneDataToObjMesh(const tinygltf::Model& model,
     }
 
     std::cout << "  Bone data matched: " << matchedCount << " / " << objVertCount
+              << " vertices" << std::endl;
+}
+
+void GltfLoader::matchUVsToObjMesh(const tinygltf::Model& model,
+                                    const std::vector<glm::vec3>& objPositions,
+                                    const Skeleton& skeleton,
+                                    std::vector<glm::vec2>& outUVs) {
+    size_t objVertCount = objPositions.size();
+    outUVs.assign(objVertCount, glm::vec2(0.0f));
+
+    // Collect glTF vertex positions and UVs
+    struct GltfVertUV {
+        glm::vec3 pos;
+        glm::vec2 uv;
+    };
+    std::vector<GltfVertUV> gltfVerts;
+
+    for (const auto& mesh : model.meshes) {
+        for (const auto& primitive : mesh.primitives) {
+            auto posIt = primitive.attributes.find("POSITION");
+            auto uvIt = primitive.attributes.find("TEXCOORD_0");
+            if (posIt == primitive.attributes.end() || uvIt == primitive.attributes.end())
+                continue;
+
+            const tinygltf::Accessor& posAcc = model.accessors[posIt->second];
+            const tinygltf::BufferView& posBV = model.bufferViews[posAcc.bufferView];
+            const float* posData = reinterpret_cast<const float*>(
+                &model.buffers[posBV.buffer].data[posAcc.byteOffset + posBV.byteOffset]);
+
+            const tinygltf::Accessor& uvAcc = model.accessors[uvIt->second];
+            const tinygltf::BufferView& uvBV = model.bufferViews[uvAcc.bufferView];
+            const float* uvData = reinterpret_cast<const float*>(
+                &model.buffers[uvBV.buffer].data[uvAcc.byteOffset + uvBV.byteOffset]);
+
+            size_t count = posAcc.count;
+            for (size_t i = 0; i < count; ++i) {
+                gltfVerts.push_back({
+                    glm::vec3(posData[i * 3 + 0], posData[i * 3 + 1], posData[i * 3 + 2]),
+                    glm::vec2(uvData[i * 2 + 0], uvData[i * 2 + 1])
+                });
+            }
+        }
+    }
+
+    if (gltfVerts.empty()) {
+        std::cerr << "  No TEXCOORD_0 found in glTF mesh." << std::endl;
+        return;
+    }
+
+    std::cout << "  UV matching: " << gltfVerts.size() << " glTF verts -> "
+              << objVertCount << " OBJ verts" << std::endl;
+
+    // Compute alignment from AABBs (glTF mesh-local -> OBJ space)
+    // Reuse skeleton alignment if already computed by matchBoneDataToObjMesh
+    glm::vec3 alignScale(1.0f);
+    glm::vec3 alignOffset(0.0f);
+
+    if (skeleton.objAlignTransform != glm::mat4(1.0f)) {
+        // Extract uniform scale and offset from the skeleton's alignment matrix
+        alignScale = glm::vec3(skeleton.objAlignTransform[0][0]);
+        alignOffset = glm::vec3(skeleton.objAlignTransform[3]);
+    } else {
+        // Compute from AABBs
+        glm::vec3 objMin(std::numeric_limits<float>::max());
+        glm::vec3 objMax(std::numeric_limits<float>::lowest());
+        for (const auto& p : objPositions) {
+            objMin = glm::min(objMin, p);
+            objMax = glm::max(objMax, p);
+        }
+        glm::vec3 gltfMin(std::numeric_limits<float>::max());
+        glm::vec3 gltfMax(std::numeric_limits<float>::lowest());
+        for (const auto& gv : gltfVerts) {
+            gltfMin = glm::min(gltfMin, gv.pos);
+            gltfMax = glm::max(gltfMax, gv.pos);
+        }
+
+        glm::vec3 objExtent = objMax - objMin;
+        glm::vec3 gltfExtent = gltfMax - gltfMin;
+        glm::vec3 objCenter = (objMin + objMax) * 0.5f;
+        glm::vec3 gltfCenter = (gltfMin + gltfMax) * 0.5f;
+
+        int bestAxis = 0;
+        for (int a = 1; a < 3; ++a) {
+            if (gltfExtent[a] > gltfExtent[bestAxis]) bestAxis = a;
+        }
+        float s = 1.0f;
+        if (gltfExtent[bestAxis] > 1e-6f)
+            s = objExtent[bestAxis] / gltfExtent[bestAxis];
+
+        alignScale = glm::vec3(s);
+        alignOffset = objCenter - s * gltfCenter;
+    }
+
+    // Transform glTF positions to OBJ space
+    std::vector<glm::vec3> alignedPos(gltfVerts.size());
+    for (size_t i = 0; i < gltfVerts.size(); ++i) {
+        alignedPos[i] = alignScale * gltfVerts[i].pos + alignOffset;
+    }
+
+    // Compute OBJ bounding box for epsilon computation
+    glm::vec3 objMin(std::numeric_limits<float>::max());
+    glm::vec3 objMax(std::numeric_limits<float>::lowest());
+    for (const auto& p : objPositions) {
+        objMin = glm::min(objMin, p);
+        objMax = glm::max(objMax, p);
+    }
+    glm::vec3 objExtent = objMax - objMin;
+    int bestAxis = 0;
+    for (int a = 1; a < 3; ++a) {
+        if (objExtent[a] > objExtent[bestAxis]) bestAxis = a;
+    }
+
+    // Adaptive epsilon from sampled nearest-neighbor distances
+    float epsilon = 1e-5f;
+    {
+        size_t sampleCount = std::min(size_t(200), gltfVerts.size());
+        size_t step = std::max(size_t(1), gltfVerts.size() / sampleCount);
+        std::vector<float> nnDists;
+        nnDists.reserve(sampleCount);
+
+        for (size_t s = 0; s < gltfVerts.size() && nnDists.size() < sampleCount; s += step) {
+            float bestDist = std::numeric_limits<float>::max();
+            for (size_t j = 0; j < objVertCount; ++j) {
+                float d = glm::distance(alignedPos[s], objPositions[j]);
+                if (d < bestDist) bestDist = d;
+            }
+            float maxReasonable = objExtent[bestAxis] * 0.1f;
+            if (bestDist < maxReasonable) {
+                nnDists.push_back(bestDist);
+            }
+        }
+
+        if (!nnDists.empty()) {
+            std::sort(nnDists.begin(), nnDists.end());
+            float median = nnDists[nnDists.size() / 2];
+            epsilon = std::clamp(median * 3.0f, 1e-5f, objExtent[bestAxis] * 0.02f);
+        }
+    }
+
+    float cellSize = std::max(epsilon * 3.0f, 1e-4f);
+
+    // Spatial hash
+    struct CellKey {
+        int x, y, z;
+        bool operator==(const CellKey& o) const { return x == o.x && y == o.y && z == o.z; }
+    };
+    struct CellHash {
+        size_t operator()(const CellKey& k) const {
+            return size_t(k.x * 73856093) ^ size_t(k.y * 19349663) ^ size_t(k.z * 83492791);
+        }
+    };
+
+    auto toCell = [cellSize](const glm::vec3& p) -> CellKey {
+        return { static_cast<int>(std::floor(p.x / cellSize)),
+                 static_cast<int>(std::floor(p.y / cellSize)),
+                 static_cast<int>(std::floor(p.z / cellSize)) };
+    };
+
+    // Build spatial hash from OBJ positions
+    std::unordered_map<CellKey, std::vector<size_t>, CellHash> grid;
+    for (size_t j = 0; j < objVertCount; ++j) {
+        grid[toCell(objPositions[j])].push_back(j);
+    }
+
+    // Match each glTF vertex to closest OBJ vertex and transfer UV
+    std::vector<bool> objMatched(objVertCount, false);
+    std::vector<float> objBestDist(objVertCount, std::numeric_limits<float>::max());
+    uint32_t matchedCount = 0;
+
+    for (size_t gi = 0; gi < gltfVerts.size(); ++gi) {
+        CellKey cell = toCell(alignedPos[gi]);
+
+        float bestDist = epsilon;
+        size_t bestIdx = SIZE_MAX;
+
+        for (int dx = -1; dx <= 1; ++dx) {
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dz = -1; dz <= 1; ++dz) {
+                    CellKey neighbor = { cell.x + dx, cell.y + dy, cell.z + dz };
+                    auto it = grid.find(neighbor);
+                    if (it == grid.end()) continue;
+
+                    for (size_t j : it->second) {
+                        float d = glm::distance(alignedPos[gi], objPositions[j]);
+                        if (d < bestDist) {
+                            bestDist = d;
+                            bestIdx = j;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (bestIdx != SIZE_MAX) {
+            // Only overwrite if this is a closer match than any previous one
+            if (bestDist < objBestDist[bestIdx]) {
+                objBestDist[bestIdx] = bestDist;
+                outUVs[bestIdx] = gltfVerts[gi].uv;
+            }
+            if (!objMatched[bestIdx]) {
+                objMatched[bestIdx] = true;
+                matchedCount++;
+            }
+        }
+    }
+
+    // Fallback: brute-force for unmatched OBJ vertices
+    uint32_t unmatchedCount = static_cast<uint32_t>(objVertCount) - matchedCount;
+    if (unmatchedCount > 0 && unmatchedCount < objVertCount) {
+        uint32_t fallbackMatched = 0;
+        for (size_t j = 0; j < objVertCount; ++j) {
+            if (objMatched[j]) continue;
+
+            float bestDist = std::numeric_limits<float>::max();
+            size_t bestGi = SIZE_MAX;
+            for (size_t gi = 0; gi < gltfVerts.size(); ++gi) {
+                float d = glm::distance(objPositions[j], alignedPos[gi]);
+                if (d < bestDist) { bestDist = d; bestGi = gi; }
+            }
+
+            if (bestGi != SIZE_MAX) {
+                outUVs[j] = gltfVerts[bestGi].uv;
+                fallbackMatched++;
+            }
+        }
+        std::cout << "  UV fallback: " << fallbackMatched << " / "
+                  << unmatchedCount << " remaining vertices" << std::endl;
+        matchedCount += fallbackMatched;
+    }
+
+    std::cout << "  UV data matched: " << matchedCount << " / " << objVertCount
               << " vertices" << std::endl;
 }

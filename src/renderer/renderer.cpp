@@ -112,6 +112,14 @@ Renderer::~Renderer() {
 }
 
 void Renderer::beginFrame() {
+    // Process deferred mesh load between frames (before recording command buffers)
+    // to avoid updating descriptor sets while a command buffer is being recorded
+    if (!pendingMeshLoad.empty()) {
+        std::string path = std::move(pendingMeshLoad);
+        pendingMeshLoad.clear();
+        loadMesh(path);
+    }
+
     vkWaitForFences(device, 1, &inFlightFences[currentFrame],
                     VK_TRUE, UINT64_MAX);
 
@@ -227,6 +235,19 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         GltfLoader::computeBoneMatrices(skeleton, boneMatrices);
         boneMatricesBuffer.update(boneMatrices.data(),
                                   boneMatrices.size() * sizeof(glm::mat4));
+
+        // Debug: print once per second
+        static float debugTimer = 0.0f;
+        debugTimer += lastDeltaTime;
+        if (debugTimer > 1.0f) {
+            debugTimer = 0.0f;
+            auto& hips = skeleton.bones[0];
+            std::cout << "  Anim t=" << animationTime
+                      << " dt=" << lastDeltaTime
+                      << " hips T=(" << hips.animTranslation.x << "," << hips.animTranslation.y << "," << hips.animTranslation.z << ")"
+                      << " bone0 mat[3]=(" << boneMatrices[0][3][0] << "," << boneMatrices[0][3][1] << "," << boneMatrices[0][3][2] << ")"
+                      << std::endl;
+        }
     }
 
     // Update ResurfacingUBO with current state
@@ -246,6 +267,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         resurfData.doSkinning            = (skeletonLoaded && doSkinning) ? 1u : 0u;
         resurfData.hasElementTypeTexture = (useElementTypeTexture && elementTypeTextureLoaded) ? 1u : 0u;
         resurfData.hasAOTexture          = (useAOTexture && aoTextureLoaded) ? 1u : 0u;
+        resurfData.hasMaskTexture        = (useMaskTexture && maskTextureLoaded) ? 1u : 0u;
         memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
     }
 

@@ -110,7 +110,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         bool prevTri = triangulateMesh;
         ImGui::Checkbox("Triangulate", &triangulateMesh);
         if (selectedMesh != prev || triangulateMesh != prevTri)
-            loadMesh(meshPaths[selectedMesh]);
+            pendingMeshLoad = meshPaths[selectedMesh];
         const char* baseMeshModes[] = { "Off", "Wireframe", "Solid", "Both" };
         ImGui::Combo("Display", &baseMeshMode, baseMeshModes, 4);
     }
@@ -128,6 +128,8 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             ImGui::Checkbox("Use Element Type Map", &useElementTypeTexture);
         if (aoTextureLoaded)
             ImGui::Checkbox("Use AO Texture", &useAOTexture);
+        if (maskTextureLoaded)
+            ImGui::Checkbox("Use Mask Texture", &useMaskTexture);
 
         ImGui::SliderFloat("Global Scale", &userScaling, 0.01f, 3.0f);
 
@@ -191,7 +193,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                 applyPresetChainMail();
                 if (triangulateMesh) {
                     triangulateMesh = false;
-                    loadMesh(meshPaths[selectedMesh]);
+                    pendingMeshLoad = meshPaths[selectedMesh];
                 }
             }
         }

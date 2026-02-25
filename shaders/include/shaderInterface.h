@@ -61,10 +61,11 @@ struct MeshInfoUBO {
 // Texture/sampler array indices
 #define AO_TEXTURE             0
 #define ELEMENT_TYPE_TEXTURE   1
+#define MASK_TEXTURE           2
 #define LINEAR_SAMPLER         0
 #define NEAREST_SAMPLER        1
 #define SAMPLER_COUNT          2
-#define TEXTURE_COUNT          2
+#define TEXTURE_COUNT          3
 
 struct ResurfacingUBO {
     uint elementType;      // 0=torus, 1=sphere, 2=cone, 3=cylinder
@@ -85,7 +86,7 @@ struct ResurfacingUBO {
     uint doSkinning;            // 0 = off, 1 = apply bone transforms
     uint hasElementTypeTexture; // 0 = use uniform elementType, 1 = sample texture
     uint hasAOTexture;          // 0 = no AO, 1 = sample AO texture
-    uint padding1;
+    uint hasMaskTexture;        // 0 = no mask, 1 = sample mask texture for face culling
 };
 
 // ============================================================================
@@ -217,7 +218,7 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
     uint  doSkinning;
     uint  hasElementTypeTexture;
     uint  hasAOTexture;
-    uint  padding1;
+    uint  hasMaskTexture;
 } resurfacingUBO;
 
 // --- Skinning SSBOs (set 2, bindings 1-3) ---
