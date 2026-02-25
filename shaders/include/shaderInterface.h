@@ -62,10 +62,11 @@ struct MeshInfoUBO {
 #define AO_TEXTURE             0
 #define ELEMENT_TYPE_TEXTURE   1
 #define MASK_TEXTURE           2
+#define SKIN_TEXTURE           3
 #define LINEAR_SAMPLER         0
 #define NEAREST_SAMPLER        1
 #define SAMPLER_COUNT          2
-#define TEXTURE_COUNT          3
+#define TEXTURE_COUNT          4
 
 struct ResurfacingUBO {
     uint elementType;      // 0=torus, 1=sphere, 2=cone, 3=cylinder

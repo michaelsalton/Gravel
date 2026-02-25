@@ -57,6 +57,31 @@ void main() {
         return;
     }
 
+    // Skin texture preview: debugMode == 101 (Skin display mode)
+    if (push.debugMode == 101u) {
+        vec3 skinColor = texture(
+            sampler2D(textures[SKIN_TEXTURE], samplers[LINEAR_SAMPLER]),
+            inUV
+        ).rgb;
+
+        vec3 worldPos = (push.model * vec4(gl_FragCoord.xyz, 1.0)).xyz;
+        vec3 L = normalize(shadingUBO.lightPosition.xyz);
+        vec3 V = normalize(viewUBO.cameraPosition.xyz - worldPos);
+        vec3 H = normalize(L + V);
+
+        float NdotL = max(dot(N, L), 0.0);
+        float NdotH = max(dot(N, H), 0.0);
+
+        vec3 ambient = shadingUBO.ambient.rgb * shadingUBO.ambient.a;
+        vec3 diffuse = vec3(shadingUBO.diffuse) * NdotL;
+        float spec = pow(NdotH, shadingUBO.shininess);
+        vec3 specular = vec3(shadingUBO.specular) * spec;
+
+        vec3 color = skinColor * (ambient + diffuse) + specular;
+        outColor = vec4(color, 1.0);
+        return;
+    }
+
     // Use face-ID color with flat shading
     vec3 baseColor = getDebugColor(inFaceId);
 

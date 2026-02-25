@@ -365,7 +365,11 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
             pfnCmdDrawMeshTasksEXT(cmd, heNbFaces, 1, 1);
         };
 
-        if (baseMeshMode == 4) {
+        if (baseMeshMode == 5) {
+            pushConstants.debugMode = 101;  // signal skin texture to frag shader
+            drawBaseMesh(baseMeshSolidPipeline);
+            pushConstants.debugMode = debugMode;  // restore
+        } else if (baseMeshMode == 4) {
             pushConstants.debugMode = 100;  // signal mask preview to frag shader
             drawBaseMesh(baseMeshSolidPipeline);
             pushConstants.debugMode = debugMode;  // restore

@@ -893,10 +893,10 @@ void Renderer::createDescriptorSetLayouts() {
     objBindings[4].descriptorCount = 2;
     objBindings[4].stageFlags = taskMeshFrag;
 
-    // Binding 5: Textures [AO, element type map, mask]
+    // Binding 5: Textures [AO, element type map, mask, skin]
     objBindings[5].binding = 5;
     objBindings[5].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    objBindings[5].descriptorCount = 3;
+    objBindings[5].descriptorCount = 4;
     objBindings[5].stageFlags = taskMeshFrag;
 
     // Partial binding: bindings 1-5 may remain unwritten for non-dragon meshes
@@ -1034,9 +1034,9 @@ void Renderer::createDescriptorPool() {
     poolSizes[2].type = VK_DESCRIPTOR_TYPE_SAMPLER;
     poolSizes[2].descriptorCount = 4;
 
-    // Sampled images: 3 primary + 3 secondary
+    // Sampled images: 4 primary + 4 secondary
     poolSizes[3].type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    poolSizes[3].descriptorCount = 6;
+    poolSizes[3].descriptorCount = 8;
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;

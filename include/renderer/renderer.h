@@ -263,9 +263,11 @@ private:
     VulkanTexture aoTexture;
     VulkanTexture elementTypeTexture;
     VulkanTexture maskTexture;
+    VulkanTexture skinTexture;
     bool aoTextureLoaded = false;
     bool elementTypeTextureLoaded = false;
     bool maskTextureLoaded = false;
+    bool skinTextureLoaded = false;
 
     // Skeleton buffers (loaded per-mesh)
     StorageBuffer jointIndicesBuffer;

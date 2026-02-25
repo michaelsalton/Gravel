@@ -278,6 +278,23 @@ void Renderer::writeTextureDescriptors() {
         writes.push_back(texWrite);
     }
 
+    // If skin texture is loaded, write slot 3
+    VkDescriptorImageInfo skinInfo{};
+    if (skinTextureLoaded) {
+        skinInfo.imageView = skinTexture.getImageView();
+        skinInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkWriteDescriptorSet texWrite{};
+        texWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        texWrite.dstSet = perObjectDescriptorSet;
+        texWrite.dstBinding = 5;  // BINDING_TEXTURES
+        texWrite.dstArrayElement = 3;  // SKIN_TEXTURE index
+        texWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        texWrite.descriptorCount = 1;
+        texWrite.pImageInfo = &skinInfo;
+        writes.push_back(texWrite);
+    }
+
     vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
                            writes.data(), 0, nullptr);
 }
@@ -297,6 +314,7 @@ size_t Renderer::calculateVRAM() const {
     if (aoTextureLoaded) total += aoTexture.getMemorySize();
     if (elementTypeTextureLoaded) total += elementTypeTexture.getMemorySize();
     if (maskTextureLoaded) total += maskTexture.getMemorySize();
+    if (skinTextureLoaded) total += skinTexture.getMemorySize();
     if (skeletonLoaded) {
         total += jointIndicesBuffer.getSize();
         total += jointWeightsBuffer.getSize();
@@ -318,9 +336,11 @@ void Renderer::cleanupMeshTextures() {
     aoTexture.destroy();
     elementTypeTexture.destroy();
     maskTexture.destroy();
+    skinTexture.destroy();
     aoTextureLoaded = false;
     elementTypeTextureLoaded = false;
     maskTextureLoaded = false;
+    skinTextureLoaded = false;
     useElementTypeTexture = false;
     useAOTexture = false;
     useMaskTexture = false;
@@ -716,8 +736,12 @@ void Renderer::loadMesh(const std::string& path) {
                          VK_FORMAT_R8G8B8A8_UNORM, maskTextureLoaded);
     if (maskTextureLoaded) useMaskTexture = true;  // auto-enable
 
+    // Skin diffuse texture
+    loadAndUploadTexture(dir + "skin.png", skinTexture,
+                         VK_FORMAT_R8G8B8A8_SRGB, skinTextureLoaded);
+
     // Write sampler and texture descriptors if any textures were loaded
-    if (aoTextureLoaded || elementTypeTextureLoaded || maskTextureLoaded) {
+    if (aoTextureLoaded || elementTypeTextureLoaded || maskTextureLoaded || skinTextureLoaded) {
         writeTextureDescriptors();
     }
 

@@ -111,8 +111,11 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::Checkbox("Triangulate", &triangulateMesh);
         if (selectedMesh != prev || triangulateMesh != prevTri)
             pendingMeshLoad = meshPaths[selectedMesh];
-        const char* baseMeshModes[] = { "Off", "Wireframe", "Solid", "Both", "Mask" };
-        ImGui::Combo("Display", &baseMeshMode, baseMeshModes, maskTextureLoaded ? 5 : 4);
+        const char* baseMeshModes[] = { "Off", "Wireframe", "Solid", "Both", "Mask", "Skin" };
+        int modeCount = 4;
+        if (maskTextureLoaded) modeCount = 5;
+        if (skinTextureLoaded) modeCount = 6;
+        ImGui::Combo("Display", &baseMeshMode, baseMeshModes, modeCount);
     }
     ImGui::Separator();
 
