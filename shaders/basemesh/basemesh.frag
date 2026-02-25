@@ -6,7 +6,8 @@
 #include "shading.glsl"
 
 layout(location = 0) in vec3 inNormal;
-layout(location = 1) perprimitiveEXT in flat uint inFaceId;
+layout(location = 1) in vec2 inUV;
+layout(location = 2) perprimitiveEXT in flat uint inFaceId;
 
 layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
     mat4 view;
@@ -35,6 +36,17 @@ layout(location = 0) out vec4 outColor;
 
 void main() {
     vec3 N = normalize(inNormal);
+
+    // Mask preview mode: show raw mask texture (black/white)
+    if (resurfacingUBO.hasMaskTexture != 0u) {
+        vec2 maskUV = inUV;
+        float maskVal = texture(
+            sampler2D(textures[MASK_TEXTURE], samplers[NEAREST_SAMPLER]),
+            maskUV
+        ).r;
+        outColor = vec4(vec3(maskVal), 1.0);
+        return;
+    }
 
     // Use face-ID color with flat shading
     vec3 baseColor = getDebugColor(inFaceId);

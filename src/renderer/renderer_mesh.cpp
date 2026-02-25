@@ -714,6 +714,7 @@ void Renderer::loadMesh(const std::string& path) {
     // Mask texture (per-face generation mask)
     loadAndUploadTexture(dir + "mask.png", maskTexture,
                          VK_FORMAT_R8G8B8A8_UNORM, maskTextureLoaded);
+    if (maskTextureLoaded) useMaskTexture = true;  // auto-enable
 
     // Write sampler and texture descriptors if any textures were loaded
     if (aoTextureLoaded || elementTypeTextureLoaded || maskTextureLoaded) {

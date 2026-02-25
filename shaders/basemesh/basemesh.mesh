@@ -12,9 +12,10 @@ layout(max_vertices = 8, max_primitives = 6, triangles) out;
 
 // Per-vertex output: face normal for flat shading
 layout(location = 0) out vec3 outNormal[];
+layout(location = 1) out vec2 outUV[];
 
 // Per-primitive output: face ID for debug coloring
-layout(location = 1) perprimitiveEXT out flat uint outFaceId[];
+layout(location = 2) perprimitiveEXT out flat uint outFaceId[];
 
 layout(push_constant) uniform PushConstants {
     mat4 model;
@@ -84,6 +85,7 @@ void main() {
 
         gl_MeshVerticesEXT[i].gl_Position = mvp * vec4(pos, 1.0);
         outNormal[i] = norm;
+        outUV[i] = getVertexTexCoord(uint(vertId));
     }
 
     // Fan triangulation from vertex 0

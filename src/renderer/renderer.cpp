@@ -268,6 +268,17 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         resurfData.hasElementTypeTexture = (useElementTypeTexture && elementTypeTextureLoaded) ? 1u : 0u;
         resurfData.hasAOTexture          = (useAOTexture && aoTextureLoaded) ? 1u : 0u;
         resurfData.hasMaskTexture        = (useMaskTexture && maskTextureLoaded) ? 1u : 0u;
+        // DEBUG: print once when mask state changes
+        {
+            static uint32_t lastMaskVal = 999;
+            if (resurfData.hasMaskTexture != lastMaskVal) {
+                std::cout << "[UBO DEBUG] hasMaskTexture=" << resurfData.hasMaskTexture
+                          << " useMaskTexture=" << useMaskTexture
+                          << " maskTextureLoaded=" << maskTextureLoaded
+                          << " sizeof(ResurfacingUBO)=" << sizeof(ResurfacingUBO) << std::endl;
+                lastMaskVal = resurfData.hasMaskTexture;
+            }
+        }
         memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
     }
 
@@ -302,7 +313,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     pushConstants.resolutionM = resolutionM;
     pushConstants.resolutionN = resolutionN;
     pushConstants.debugMode = debugMode;
-    pushConstants.enableCulling = (enableFrustumCulling ? 1u : 0u) | (enableBackfaceCulling ? 2u : 0u);
+    pushConstants.enableCulling = (enableFrustumCulling ? 1u : 0u) | (enableBackfaceCulling ? 2u : 0u)
+                                | 4u;  // DEBUG: always set mask bit
     pushConstants.cullingThreshold = cullingThreshold;
     pushConstants.enableLod = enableLod ? 1u : 0u;
     pushConstants.lodFactor = lodFactor;
@@ -364,7 +376,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
             pfnCmdDrawMeshTasksEXT(cmd, heNbFaces, 1, 1);
         };
 
-        if (baseMeshMode == 2 || baseMeshMode == 3)
+        if (baseMeshMode == 2 || baseMeshMode == 3 || baseMeshMode == 4)
             drawBaseMesh(baseMeshSolidPipeline);
         if (baseMeshMode == 1 || baseMeshMode == 3)
             drawBaseMesh(baseMeshPipeline);
