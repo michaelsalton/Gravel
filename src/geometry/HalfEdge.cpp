@@ -221,19 +221,22 @@ void HalfEdgeBuilder::validateTopology(const HalfEdgeMesh& mesh) {
         std::cout << "  Warning: " << twinErrors << " twin errors (non-manifold edges)" << std::endl;
     }
 
-    // Test 3: Every vertex has a valid outgoing edge
+    // Test 3: Every referenced vertex has a valid outgoing edge
+    int isolatedVertices = 0;
     for (uint32_t v = 0; v < mesh.nbVertices; ++v) {
         int edge = mesh.vertexEdges[v];
         if (edge == -1) {
-            throw std::runtime_error(
-                "Invalid topology: vertex " + std::to_string(v) +
-                " has no outgoing edge");
+            isolatedVertices++;
+            continue;
         }
         if (mesh.heVertex[edge] != static_cast<int>(v)) {
             throw std::runtime_error(
                 "Invalid topology: vertex " + std::to_string(v) +
                 " edge points to wrong vertex");
         }
+    }
+    if (isolatedVertices > 0) {
+        std::cout << "  Warning: " << isolatedVertices << " isolated vertices (not referenced by any face)" << std::endl;
     }
 
     std::cout << "  Topology validation passed" << std::endl;

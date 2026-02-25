@@ -91,12 +91,23 @@ NGonMesh ObjLoader::load(const std::string& filepath) {
         }
     }
 
-    // Fill defaults for missing attributes
-    if (mesh.normals.empty()) {
-        mesh.normals.resize(mesh.positions.size(), glm::vec3(0.0f, 0.0f, 1.0f));
-    }
-    if (mesh.texCoords.empty()) {
-        mesh.texCoords.resize(mesh.positions.size(), glm::vec2(0.0f));
+    // Remap normals and texcoords from OBJ indices to per-vertex arrays
+    // OBJ can have different counts for v/vn/vt, indexed independently per face
+    std::vector<glm::vec3> rawNormals = std::move(mesh.normals);
+    std::vector<glm::vec2> rawTexCoords = std::move(mesh.texCoords);
+    mesh.normals.resize(mesh.positions.size(), glm::vec3(0.0f, 0.0f, 1.0f));
+    mesh.texCoords.resize(mesh.positions.size(), glm::vec2(0.0f));
+
+    for (const auto& face : mesh.faces) {
+        for (uint32_t i = 0; i < face.vertexIndices.size(); ++i) {
+            uint32_t vIdx = face.vertexIndices[i];
+            if (i < face.normalIndices.size() && face.normalIndices[i] < rawNormals.size()) {
+                mesh.normals[vIdx] = rawNormals[face.normalIndices[i]];
+            }
+            if (i < face.texCoordIndices.size() && face.texCoordIndices[i] < rawTexCoords.size()) {
+                mesh.texCoords[vIdx] = rawTexCoords[face.texCoordIndices[i]];
+            }
+        }
     }
     mesh.colors.resize(mesh.positions.size(), glm::vec3(1.0f));
 
