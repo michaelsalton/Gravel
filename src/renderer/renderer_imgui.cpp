@@ -369,9 +369,9 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
 void Renderer::applyPresetChainMail() {
     elementType        = 0;       // Torus
-    torusMajorR        = 0.693f;
-    torusMinorR        = 0.185f;
-    userScaling        = 1.219f;
+    torusMajorR        = 0.814f;
+    torusMinorR        = 0.158f;
+    userScaling        = 0.602f;
     resolutionM        = 24;
     resolutionN        = 6;
     chainmailMode      = true;

@@ -284,6 +284,15 @@ size_t Renderer::calculateVRAM() const {
         total += jointWeightsBuffer.getSize();
         total += boneMatricesBuffer.getSize();
     }
+    if (dualMeshActive) {
+        for (const auto& buf : secondaryHeVec4Buffers) total += buf.getSize();
+        for (const auto& buf : secondaryHeVec2Buffers) total += buf.getSize();
+        for (const auto& buf : secondaryHeIntBuffers) total += buf.getSize();
+        for (const auto& buf : secondaryHeFloatBuffers) total += buf.getSize();
+        total += sizeof(MeshInfoUBO);
+        total += secondaryJointIndicesBuffer.getSize();
+        total += secondaryJointWeightsBuffer.getSize();
+    }
     return total;
 }
 
@@ -309,6 +318,271 @@ void Renderer::cleanupMeshSkeleton() {
     animations.clear();
     jointIndicesData.clear();
     jointWeightsData.clear();
+}
+
+void Renderer::cleanupSecondaryMesh() {
+    for (auto& buf : secondaryHeVec4Buffers) buf.destroy();
+    for (auto& buf : secondaryHeVec2Buffers) buf.destroy();
+    for (auto& buf : secondaryHeIntBuffers) buf.destroy();
+    for (auto& buf : secondaryHeFloatBuffers) buf.destroy();
+    secondaryHeVec4Buffers.clear();
+    secondaryHeVec2Buffers.clear();
+    secondaryHeIntBuffers.clear();
+    secondaryHeFloatBuffers.clear();
+    if (secondaryMeshInfoBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, secondaryMeshInfoBuffer, nullptr);
+        vkFreeMemory(device, secondaryMeshInfoMemory, nullptr);
+        secondaryMeshInfoBuffer = VK_NULL_HANDLE;
+        secondaryMeshInfoMemory = VK_NULL_HANDLE;
+    }
+    secondaryJointIndicesBuffer.destroy();
+    secondaryJointWeightsBuffer.destroy();
+    secondaryHeDescriptorSet = VK_NULL_HANDLE;
+    secondaryPerObjectDescriptorSet = VK_NULL_HANDLE;
+    secondaryHeNbFaces = 0;
+    secondaryHeNbVertices = 0;
+    dualMeshActive = false;
+}
+
+void Renderer::loadSecondaryMesh(const std::string& path) {
+    std::cout << "  Loading secondary mesh: " << path << std::endl;
+
+    NGonMesh ngon = ObjLoader::load(path);
+    HalfEdgeMesh mesh = HalfEdgeBuilder::build(ngon);
+    computeFace2Coloring(mesh);
+
+    secondaryHeNbFaces = mesh.nbFaces;
+    secondaryHeNbVertices = mesh.nbVertices;
+
+    // Upload half-edge buffers (mirrors uploadHalfEdgeMesh)
+    secondaryHeVec4Buffers.resize(5);
+    secondaryHeVec2Buffers.resize(1);
+    secondaryHeIntBuffers.resize(10);
+    secondaryHeFloatBuffers.resize(1);
+
+    secondaryHeVec4Buffers[0].create(device, physicalDevice,
+        mesh.vertexPositions.size() * sizeof(glm::vec4), mesh.vertexPositions.data());
+    secondaryHeVec4Buffers[1].create(device, physicalDevice,
+        mesh.vertexColors.size() * sizeof(glm::vec4), mesh.vertexColors.data());
+    secondaryHeVec4Buffers[2].create(device, physicalDevice,
+        mesh.vertexNormals.size() * sizeof(glm::vec4), mesh.vertexNormals.data());
+    secondaryHeVec4Buffers[3].create(device, physicalDevice,
+        mesh.faceNormals.size() * sizeof(glm::vec4), mesh.faceNormals.data());
+    secondaryHeVec4Buffers[4].create(device, physicalDevice,
+        mesh.faceCenters.size() * sizeof(glm::vec4), mesh.faceCenters.data());
+
+    secondaryHeVec2Buffers[0].create(device, physicalDevice,
+        mesh.vertexTexCoords.size() * sizeof(glm::vec2), mesh.vertexTexCoords.data());
+
+    secondaryHeIntBuffers[0].create(device, physicalDevice,
+        mesh.vertexEdges.size() * sizeof(int), mesh.vertexEdges.data());
+    secondaryHeIntBuffers[1].create(device, physicalDevice,
+        mesh.faceEdges.size() * sizeof(int), mesh.faceEdges.data());
+    secondaryHeIntBuffers[2].create(device, physicalDevice,
+        mesh.faceVertCounts.size() * sizeof(int), mesh.faceVertCounts.data());
+    secondaryHeIntBuffers[3].create(device, physicalDevice,
+        mesh.faceOffsets.size() * sizeof(int), mesh.faceOffsets.data());
+    secondaryHeIntBuffers[4].create(device, physicalDevice,
+        mesh.heVertex.size() * sizeof(int), mesh.heVertex.data());
+    secondaryHeIntBuffers[5].create(device, physicalDevice,
+        mesh.heFace.size() * sizeof(int), mesh.heFace.data());
+    secondaryHeIntBuffers[6].create(device, physicalDevice,
+        mesh.heNext.size() * sizeof(int), mesh.heNext.data());
+    secondaryHeIntBuffers[7].create(device, physicalDevice,
+        mesh.hePrev.size() * sizeof(int), mesh.hePrev.data());
+    secondaryHeIntBuffers[8].create(device, physicalDevice,
+        mesh.heTwin.size() * sizeof(int), mesh.heTwin.data());
+    secondaryHeIntBuffers[9].create(device, physicalDevice,
+        mesh.vertexFaceIndices.size() * sizeof(int), mesh.vertexFaceIndices.data());
+
+    secondaryHeFloatBuffers[0].create(device, physicalDevice,
+        mesh.faceAreas.size() * sizeof(float), mesh.faceAreas.data());
+
+    // MeshInfo UBO for secondary mesh
+    MeshInfoUBO meshInfo{};
+    meshInfo.nbVertices = mesh.nbVertices;
+    meshInfo.nbFaces = mesh.nbFaces;
+    meshInfo.nbHalfEdges = mesh.nbHalfEdges;
+    meshInfo.padding = 0;
+
+    createBuffer(sizeof(MeshInfoUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 secondaryMeshInfoBuffer, secondaryMeshInfoMemory);
+
+    void* data;
+    vkMapMemory(device, secondaryMeshInfoMemory, 0, sizeof(MeshInfoUBO), 0, &data);
+    memcpy(data, &meshInfo, sizeof(MeshInfoUBO));
+    vkUnmapMemory(device, secondaryMeshInfoMemory);
+
+    // Allocate secondary HE descriptor set (Set 1 layout)
+    VkDescriptorSetAllocateInfo heAllocInfo{};
+    heAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    heAllocInfo.descriptorPool = descriptorPool;
+    heAllocInfo.descriptorSetCount = 1;
+    heAllocInfo.pSetLayouts = &halfEdgeSetLayout;
+    if (vkAllocateDescriptorSets(device, &heAllocInfo, &secondaryHeDescriptorSet) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate secondary HE descriptor set!");
+    }
+
+    // Write secondary HE descriptor set (same pattern as updateHEDescriptorSet)
+    {
+        std::vector<VkWriteDescriptorSet> writes;
+
+        std::vector<VkDescriptorBufferInfo> vec4Infos(5);
+        for (int i = 0; i < 5; ++i) {
+            vec4Infos[i].buffer = secondaryHeVec4Buffers[i].getBuffer();
+            vec4Infos[i].offset = 0;
+            vec4Infos[i].range = secondaryHeVec4Buffers[i].getSize();
+        }
+        VkWriteDescriptorSet w{};
+        w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w.dstSet = secondaryHeDescriptorSet;
+        w.dstBinding = 0; w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        w.descriptorCount = 5; w.pBufferInfo = vec4Infos.data();
+        writes.push_back(w);
+
+        VkDescriptorBufferInfo vec2Info{};
+        vec2Info.buffer = secondaryHeVec2Buffers[0].getBuffer();
+        vec2Info.offset = 0; vec2Info.range = secondaryHeVec2Buffers[0].getSize();
+        w = {}; w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w.dstSet = secondaryHeDescriptorSet;
+        w.dstBinding = 1; w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        w.descriptorCount = 1; w.pBufferInfo = &vec2Info;
+        writes.push_back(w);
+
+        std::vector<VkDescriptorBufferInfo> intInfos(10);
+        for (int i = 0; i < 10; ++i) {
+            intInfos[i].buffer = secondaryHeIntBuffers[i].getBuffer();
+            intInfos[i].offset = 0;
+            intInfos[i].range = secondaryHeIntBuffers[i].getSize();
+        }
+        w = {}; w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w.dstSet = secondaryHeDescriptorSet;
+        w.dstBinding = 2; w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        w.descriptorCount = 10; w.pBufferInfo = intInfos.data();
+        writes.push_back(w);
+
+        VkDescriptorBufferInfo floatInfo{};
+        floatInfo.buffer = secondaryHeFloatBuffers[0].getBuffer();
+        floatInfo.offset = 0; floatInfo.range = secondaryHeFloatBuffers[0].getSize();
+        w = {}; w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w.dstSet = secondaryHeDescriptorSet;
+        w.dstBinding = 3; w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        w.descriptorCount = 1; w.pBufferInfo = &floatInfo;
+        writes.push_back(w);
+
+        vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
+                               writes.data(), 0, nullptr);
+    }
+
+    // Allocate secondary per-object descriptor set (Set 2 layout)
+    VkDescriptorSetAllocateInfo objAllocInfo{};
+    objAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    objAllocInfo.descriptorPool = descriptorPool;
+    objAllocInfo.descriptorSetCount = 1;
+    objAllocInfo.pSetLayouts = &perObjectSetLayout;
+    if (vkAllocateDescriptorSets(device, &objAllocInfo, &secondaryPerObjectDescriptorSet) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate secondary per-object descriptor set!");
+    }
+
+    // Write binding 0: shared ResurfacingUBO
+    {
+        VkDescriptorBufferInfo uboInfo{};
+        uboInfo.buffer = resurfacingUBOBuffer;
+        uboInfo.offset = 0;
+        uboInfo.range = sizeof(ResurfacingUBO);
+
+        VkWriteDescriptorSet w{};
+        w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w.dstSet = secondaryPerObjectDescriptorSet;
+        w.dstBinding = 0;
+        w.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        w.descriptorCount = 1;
+        w.pBufferInfo = &uboInfo;
+        vkUpdateDescriptorSets(device, 1, &w, 0, nullptr);
+    }
+
+    // Match bone data for secondary mesh vertices (if skeleton loaded)
+    if (skeletonLoaded) {
+        // Re-use the already-loaded glTF model to match bone data to secondary mesh
+        std::string baseName = path.substr(0, path.find_last_of('.'));
+        std::string gltfPath = baseName + ".gltf";
+        if (std::filesystem::exists(gltfPath)) {
+            try {
+                tinygltf::Model gltfModel = GltfLoader::loadModel(gltfPath);
+                std::vector<glm::vec4> secJointIndices, secJointWeights;
+                GltfLoader::matchBoneDataToObjMesh(gltfModel, ngon.positions,
+                                                    secJointIndices, secJointWeights);
+
+                if (!secJointIndices.empty()) {
+                    secondaryJointIndicesBuffer.create(device, physicalDevice,
+                        secJointIndices.size() * sizeof(glm::vec4), secJointIndices.data());
+                    secondaryJointWeightsBuffer.create(device, physicalDevice,
+                        secJointWeights.size() * sizeof(glm::vec4), secJointWeights.data());
+
+                    // Write skeleton bindings to secondary per-object descriptor set
+                    std::vector<VkWriteDescriptorSet> writes;
+
+                    VkDescriptorBufferInfo jointsInfo{};
+                    jointsInfo.buffer = secondaryJointIndicesBuffer.getBuffer();
+                    jointsInfo.offset = 0; jointsInfo.range = secondaryJointIndicesBuffer.getSize();
+                    VkWriteDescriptorSet w{};
+                    w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                    w.dstSet = secondaryPerObjectDescriptorSet;
+                    w.dstBinding = 1; w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                    w.descriptorCount = 1; w.pBufferInfo = &jointsInfo;
+                    writes.push_back(w);
+
+                    VkDescriptorBufferInfo weightsInfo{};
+                    weightsInfo.buffer = secondaryJointWeightsBuffer.getBuffer();
+                    weightsInfo.offset = 0; weightsInfo.range = secondaryJointWeightsBuffer.getSize();
+                    w = {}; w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                    w.dstSet = secondaryPerObjectDescriptorSet;
+                    w.dstBinding = 2; w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                    w.descriptorCount = 1; w.pBufferInfo = &weightsInfo;
+                    writes.push_back(w);
+
+                    // Shared bone matrices buffer
+                    VkDescriptorBufferInfo bonesInfo{};
+                    bonesInfo.buffer = boneMatricesBuffer.getBuffer();
+                    bonesInfo.offset = 0; bonesInfo.range = boneMatricesBuffer.getSize();
+                    w = {}; w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                    w.dstSet = secondaryPerObjectDescriptorSet;
+                    w.dstBinding = 3; w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                    w.descriptorCount = 1; w.pBufferInfo = &bonesInfo;
+                    writes.push_back(w);
+
+                    vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
+                                           writes.data(), 0, nullptr);
+
+                    std::cout << "  Secondary mesh bone data matched: "
+                              << secJointIndices.size() << " vertices" << std::endl;
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "  Secondary mesh glTF error: " << e.what() << std::endl;
+            }
+        }
+    }
+
+    // Write samplers to secondary per-object descriptor set (shared with primary)
+    if (linearSampler != VK_NULL_HANDLE) {
+        VkDescriptorImageInfo samplerInfos[2] = {};
+        samplerInfos[0].sampler = linearSampler;
+        samplerInfos[1].sampler = nearestSampler;
+
+        VkWriteDescriptorSet w{};
+        w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w.dstSet = secondaryPerObjectDescriptorSet;
+        w.dstBinding = 4;
+        w.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+        w.descriptorCount = 2;
+        w.pImageInfo = samplerInfos;
+        vkUpdateDescriptorSets(device, 1, &w, 0, nullptr);
+    }
+
+    dualMeshActive = true;
+    std::cout << "  Secondary mesh uploaded: " << mesh.nbFaces << " faces, "
+              << mesh.nbVertices << " vertices" << std::endl;
 }
 
 void Renderer::writeSkeletonDescriptors() {
@@ -386,6 +660,7 @@ void Renderer::loadMesh(const std::string& path) {
     vkDeviceWaitIdle(device);
 
     // Cleanup previous mesh resources
+    cleanupSecondaryMesh();
     cleanupMeshTextures();
     cleanupMeshSkeleton();
 
@@ -460,5 +735,10 @@ void Renderer::loadMesh(const std::string& path) {
         } catch (const std::exception& e) {
             std::cerr << "  glTF loading error: " << e.what() << std::endl;
         }
+    }
+
+    // Dragon Coat: also load base dragon mesh for solid rendering underneath
+    if (filename.find("dragon_coat") != std::string::npos) {
+        loadSecondaryMesh(dir + "dragon_8k.obj");
     }
 }

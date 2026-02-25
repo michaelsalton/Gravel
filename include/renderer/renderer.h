@@ -112,6 +112,8 @@ private:
     void writeSkeletonDescriptors();
     void cleanupMeshTextures();
     void cleanupMeshSkeleton();
+    void loadSecondaryMesh(const std::string& path);
+    void cleanupSecondaryMesh();
     void loadAndUploadTexture(const std::string& path, VulkanTexture& texture,
                                VkFormat format, bool& loadedFlag);
     size_t calculateVRAM() const;
@@ -268,6 +270,21 @@ private:
     StorageBuffer jointWeightsBuffer;
     StorageBuffer boneMatricesBuffer;
     bool skeletonLoaded = false;
+
+    // Secondary mesh (base dragon rendered under coat)
+    std::vector<StorageBuffer> secondaryHeVec4Buffers;
+    std::vector<StorageBuffer> secondaryHeVec2Buffers;
+    std::vector<StorageBuffer> secondaryHeIntBuffers;
+    std::vector<StorageBuffer> secondaryHeFloatBuffers;
+    VkBuffer secondaryMeshInfoBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory secondaryMeshInfoMemory = VK_NULL_HANDLE;
+    VkDescriptorSet secondaryHeDescriptorSet = VK_NULL_HANDLE;
+    VkDescriptorSet secondaryPerObjectDescriptorSet = VK_NULL_HANDLE;
+    StorageBuffer secondaryJointIndicesBuffer;
+    StorageBuffer secondaryJointWeightsBuffer;
+    uint32_t secondaryHeNbFaces = 0;
+    uint32_t secondaryHeNbVertices = 0;
+    bool dualMeshActive = false;
 
     // Skeleton & animation data (CPU-side)
     Skeleton skeleton;

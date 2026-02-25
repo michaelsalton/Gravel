@@ -296,6 +296,29 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         : 1;
     pfnCmdDrawMeshTasksEXT(cmd, totalTasks, 1, 1);
 
+    // Dual-mesh: render secondary mesh as solid base under coat
+    if (dualMeshActive && heMeshUploaded) {
+        PushConstants basePush = pushConstants;
+        basePush.nbFaces = secondaryHeNbFaces;
+        basePush.nbVertices = secondaryHeNbVertices;
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, baseMeshSolidPipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 0, 1,
+                                 &sceneDescriptorSets[currentFrame], 0, nullptr);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 1, 1,
+                                 &secondaryHeDescriptorSet, 0, nullptr);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 2, 1,
+                                 &secondaryPerObjectDescriptorSet, 0, nullptr);
+        vkCmdPushConstants(cmd, pipelineLayout,
+                            VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
+                            VK_SHADER_STAGE_FRAGMENT_BIT,
+                            0, sizeof(PushConstants), &basePush);
+        pfnCmdDrawMeshTasksEXT(cmd, secondaryHeNbFaces, 1, 1);
+    }
+
     // Base mesh overlay (0=off, 1=wireframe, 2=solid, 3=both)
     if (baseMeshMode > 0 && heMeshUploaded) {
         auto drawBaseMesh = [&](VkPipeline pipeline) {
@@ -307,6 +330,10 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                      pipelineLayout, 1, 1,
                                      &heDescriptorSet,
+                                     0, nullptr);
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                     pipelineLayout, 2, 1,
+                                     &perObjectDescriptorSet,
                                      0, nullptr);
             vkCmdPushConstants(cmd, pipelineLayout,
                                 VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
