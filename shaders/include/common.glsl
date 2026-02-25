@@ -76,15 +76,14 @@ void offsetVertex(vec3 localPos, vec3 localNormal,
     worldNormal = rotatedNormal;
 }
 
-// Chainmail variant (European 4-in-1): face elements and vertex elements
-// lean in opposite directions around the tangent axis.
-// Rings lie mostly flat on the surface with a moderate lean for interlocking.
-// isVertex: 0.0 for face elements, 1.0 for vertex elements.
-// tiltAmount: 0.0 = flat, 1.0 = full lean (~30 degrees).
+// Chainmail variant (European 4-in-1): adjacent faces lean in opposite
+// directions based on face 2-coloring (0.0 or 1.0).
+// faceColor: from BFS 2-coloring, alternates between adjacent faces.
+// tiltAmount: 0.0 = flat, 1.0 = full lean (PI/2 = 90 degrees).
 void offsetVertexChainmail(vec3 localPos, vec3 localNormal,
                            vec3 elementPos, vec3 elementNormal,
                            float faceArea, float userScaling,
-                           float isVertex, float tiltAmount,
+                           float faceColor, float tiltAmount,
                            out vec3 worldPos, out vec3 worldNormal) {
     float scale = sqrt(faceArea) * userScaling;
     vec3 pos = localPos * scale;
@@ -92,9 +91,9 @@ void offsetVertexChainmail(vec3 localPos, vec3 localNormal,
     // Build flat TBN frame aligned to surface normal
     mat3 tbn = alignRotationToVector(elementNormal);
 
-    // Face elements lean one way, vertex elements lean the other
-    float sign = (isVertex > 0.5) ? -1.0 : 1.0;
-    float angle = sign * tiltAmount * 0.52; // ~30° at tiltAmount=1.0
+    // Color 0 -> +angle, color 1 -> -angle
+    float sign = 1.0 - 2.0 * faceColor;
+    float angle = sign * tiltAmount * (3.14159265 / 2.0); // 0..PI/2 at tiltAmount 0..1
 
     // Tilt around tangent axis: rotate bitangent and normal
     float c = cos(angle);

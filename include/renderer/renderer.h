@@ -261,6 +261,7 @@ private:
     int baseMeshMode = 0;  // 0=off, 1=wireframe, 2=solid, 3=both
     bool chainmailMode = false;
     float chainmailTiltAngle = 1.0f;    // Lean blend: 0=flat, 1=full chainmail lean
+    bool triangulateMesh = false;
     bool vsync = false;
     bool pendingSwapChainRecreation = false;
 

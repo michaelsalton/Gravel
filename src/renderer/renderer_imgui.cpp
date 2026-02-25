@@ -88,18 +88,24 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                 1000.0f / ImGui::GetIO().Framerate);
     ImGui::Separator();
 
+    const char* meshNames[] = { "Cube", "Plane (3x3)", "Plane (5x5)", "Sphere", "Sphere HD", "Dragon 8K" };
+    const char* meshPaths[] = {
+        ASSETS_DIR "cube.obj",
+        ASSETS_DIR "plane.obj",
+        ASSETS_DIR "plane5x5.obj",
+        ASSETS_DIR "sphere.obj",
+        ASSETS_DIR "sphere_hd.obj",
+        ASSETS_DIR "dragon_8k.obj"
+    };
+    constexpr int meshCount = 6;
+
     // Base mesh selector
     if (ImGui::CollapsingHeader("Base Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
-        const char* meshNames[] = { "Cube", "Plane (3x3)", "Plane (5x5)", "Sphere" };
-        const char* meshPaths[] = {
-            ASSETS_DIR "cube.obj",
-            ASSETS_DIR "plane.obj",
-            ASSETS_DIR "plane5x5.obj",
-            ASSETS_DIR "sphere.obj"
-        };
         int prev = selectedMesh;
-        ImGui::Combo("Mesh", &selectedMesh, meshNames, 4);
-        if (selectedMesh != prev)
+        ImGui::Combo("Mesh", &selectedMesh, meshNames, meshCount);
+        bool prevTri = triangulateMesh;
+        ImGui::Checkbox("Triangulate", &triangulateMesh);
+        if (selectedMesh != prev || triangulateMesh != prevTri)
             loadMesh(meshPaths[selectedMesh]);
         const char* baseMeshModes[] = { "Off", "Wireframe", "Solid", "Both" };
         ImGui::Combo("Display", &baseMeshMode, baseMeshModes, 4);
@@ -172,7 +178,13 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         {
             bool prev = chainmailMode;
             ImGui::Checkbox("Chainmail Mode", &chainmailMode);
-            if (chainmailMode && !prev) applyPresetChainMail();
+            if (chainmailMode && !prev) {
+                applyPresetChainMail();
+                if (!triangulateMesh) {
+                    triangulateMesh = true;
+                    loadMesh(meshPaths[selectedMesh]);
+                }
+            }
         }
         if (chainmailMode) {
             ImGui::Indent();
@@ -328,12 +340,12 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
 void Renderer::applyPresetChainMail() {
     elementType        = 0;       // Torus
-    torusMajorR        = 1.0f;
-    torusMinorR        = 0.15f;   // Thin tube for clean interlocking
-    userScaling        = 0.85f;   // Large enough for rings to overlap and interlock
-    resolutionM        = 16;      // Higher res for smooth rings
-    resolutionN        = 8;
+    torusMajorR        = 0.693f;
+    torusMinorR        = 0.185f;
+    userScaling        = 1.219f;
+    resolutionM        = 24;
+    resolutionN        = 6;
     chainmailMode      = true;
-    chainmailTiltAngle = 1.0f;    // Full lean (reference project default)
+    chainmailTiltAngle = 0.08f;
 }
 

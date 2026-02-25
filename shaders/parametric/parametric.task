@@ -122,7 +122,8 @@ void main() {
         payload.position = readVertexPosition(vertId);
         payload.normal = readVertexNormal(vertId);
         payload.area = readFaceArea(faceId);
-        payload.faceColor = 0.0;
+        // Vertex elements tilt opposite to their adjacent face
+        payload.faceColor = 1.0 - readFaceColor(faceId);
     } else {
         faceId = globalId;
 

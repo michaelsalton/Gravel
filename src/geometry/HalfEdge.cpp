@@ -218,8 +218,7 @@ void HalfEdgeBuilder::validateTopology(const HalfEdgeMesh& mesh) {
         }
     }
     if (twinErrors > 0) {
-        throw std::runtime_error(
-            "Invalid topology: " + std::to_string(twinErrors) + " twin errors");
+        std::cout << "  Warning: " << twinErrors << " twin errors (non-manifold edges)" << std::endl;
     }
 
     // Test 3: Every vertex has a valid outgoing edge

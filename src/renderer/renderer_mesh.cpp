@@ -219,6 +219,9 @@ size_t Renderer::calculateVRAM() const {
 void Renderer::loadMesh(const std::string& path) {
     vkDeviceWaitIdle(device);
     NGonMesh ngon = ObjLoader::load(path);
+    if (triangulateMesh) {
+        ObjLoader::triangulate(ngon);
+    }
     HalfEdgeMesh heMesh = HalfEdgeBuilder::build(ngon);
     computeFace2Coloring(heMesh);
     uploadHalfEdgeMesh(heMesh);

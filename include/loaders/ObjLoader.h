@@ -32,6 +32,7 @@ struct NGonMesh {
 class ObjLoader {
 public:
     static NGonMesh load(const std::string& filepath);
+    static void triangulate(NGonMesh& mesh);
 
 private:
     static glm::vec3 computeFaceNormal(

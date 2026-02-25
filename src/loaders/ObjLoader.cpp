@@ -120,6 +120,51 @@ NGonMesh ObjLoader::load(const std::string& filepath) {
     return mesh;
 }
 
+void ObjLoader::triangulate(NGonMesh& mesh) {
+    std::vector<NGonFace> newFaces;
+    std::vector<uint32_t> newFaceVertexIndices;
+    uint32_t offset = 0;
+
+    for (const auto& face : mesh.faces) {
+        if (face.count <= 3) {
+            // Already a triangle, keep as-is
+            NGonFace tri = face;
+            tri.offset = offset;
+            for (uint32_t idx : tri.vertexIndices) {
+                newFaceVertexIndices.push_back(idx);
+            }
+            offset += tri.count;
+            newFaces.push_back(tri);
+        } else {
+            // Fan-triangulate: vertex 0, i+1, i+2
+            for (uint32_t i = 0; i < face.count - 2; i++) {
+                NGonFace tri;
+                tri.vertexIndices = {
+                    face.vertexIndices[0],
+                    face.vertexIndices[i + 1],
+                    face.vertexIndices[i + 2]
+                };
+                tri.count = 3;
+                tri.offset = offset;
+                tri.normal = glm::vec4(computeFaceNormal(mesh.positions, tri.vertexIndices), 0.0f);
+                tri.center = glm::vec4(computeFaceCentroid(mesh.positions, tri.vertexIndices), 1.0f);
+                tri.area = computeFaceArea(mesh.positions, tri.vertexIndices);
+                for (uint32_t idx : tri.vertexIndices) {
+                    newFaceVertexIndices.push_back(idx);
+                }
+                offset += 3;
+                newFaces.push_back(tri);
+            }
+        }
+    }
+
+    mesh.faces = std::move(newFaces);
+    mesh.faceVertexIndices = std::move(newFaceVertexIndices);
+    mesh.nbFaces = static_cast<uint32_t>(mesh.faces.size());
+
+    std::cout << "Triangulated: " << mesh.nbFaces << " triangles" << std::endl;
+}
+
 glm::vec3 ObjLoader::computeFaceNormal(
     const std::vector<glm::vec3>& positions,
     const std::vector<uint32_t>& indices) {
