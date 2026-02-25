@@ -42,3 +42,9 @@ public:
 private:
     static void validateTopology(const HalfEdgeMesh& mesh);
 };
+
+/// BFS-based face 2-coloring on the dual graph.
+/// Stores color (0.0 or 1.0) in faceNormals[i].w.
+/// For bipartite graphs (quad meshes), produces a perfect 2-coloring.
+/// For non-bipartite graphs (triangle meshes), uses greedy BFS with conflict tolerance.
+void computeFace2Coloring(HalfEdgeMesh& mesh);

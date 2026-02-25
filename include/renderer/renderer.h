@@ -292,6 +292,8 @@ private:
     float cullingThreshold = 0.0f;  // Back-face dot product threshold [-1, 1]
     bool enableLod = false;
     float lodFactor = 1.0f;
+    bool chainmailMode = false;
+    float chainmailTiltAngle = 0.785f;  // ~45 degrees
     bool vsync = false;
     bool pendingSwapChainRecreation = false;
 

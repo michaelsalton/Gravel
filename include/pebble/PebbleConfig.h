@@ -8,7 +8,7 @@ enum RenderMode {
 };
 
 // GPU push constants for pebble shaders — mirrors pebbleInterface.glsl layout.
-// Occupies the same 120-byte range as the parametric PushConstants, mapping
+// Occupies the same 128-byte range as the parametric PushConstants, mapping
 // pebble-specific params onto the same offsets.
 struct PebblePushConstants {
     glm::mat4 model;                    // offset   0  (64 bytes)
@@ -25,9 +25,11 @@ struct PebblePushConstants {
     uint32_t  doNoise          = 0;     // offset 104
     float     noiseAmplitude   = 0.f;   // offset 108
     float     noiseFrequency   = 0.f;   // offset 112
-    uint32_t  _pad6            = 0;     // offset 116 — pad to 120 bytes
+    uint32_t  _pad6            = 0;     // offset 116
+    uint32_t  _pad7            = 0;     // offset 120 — pad to 128 bytes
+    uint32_t  _pad8            = 0;     // offset 124
 };
-static_assert(sizeof(PebblePushConstants) == 120, "PebblePushConstants must be 120 bytes");
+static_assert(sizeof(PebblePushConstants) == 128, "PebblePushConstants must be 128 bytes");
 
 struct PebbleConfig {
     uint32_t subdivisionLevel = 3;      // 2^level grid per face (also LOD ceiling)

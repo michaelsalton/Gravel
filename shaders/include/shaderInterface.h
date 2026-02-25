@@ -154,6 +154,10 @@ vec3 getFaceNormal(uint faceId) {
     return heVec4Buffer[3].data[faceId].xyz;
 }
 
+float getFaceColor(uint faceId) {
+    return heVec4Buffer[3].data[faceId].w;
+}
+
 vec3 getFaceCenter(uint faceId) {
     return heVec4Buffer[4].data[faceId].xyz;
 }

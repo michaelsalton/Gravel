@@ -27,6 +27,10 @@ float readFaceArea(uint faceId) {
     return getFaceArea(faceId);
 }
 
+float readFaceColor(uint faceId) {
+    return getFaceColor(faceId);
+}
+
 int readVertexEdge(uint vertId) {
     return getVertexEdge(vertId);
 }
@@ -70,6 +74,33 @@ void offsetVertex(vec3 localPos, vec3 localNormal,
     // Translate to element position
     worldPos = elementPos + rotatedPos;
     worldNormal = rotatedNormal;
+}
+
+// Chainmail variant: tilts the ring around the tangent axis based on face color.
+// faceColor 0.0 tilts by +tiltAngle, faceColor 1.0 tilts by -tiltAngle.
+void offsetVertexChainmail(vec3 localPos, vec3 localNormal,
+                           vec3 elementPos, vec3 elementNormal,
+                           float faceArea, float userScaling,
+                           float faceColor, float tiltAngle,
+                           out vec3 worldPos, out vec3 worldNormal) {
+    float scale = sqrt(faceArea) * userScaling;
+    vec3 scaledPos = localPos * scale;
+
+    mat3 rotation = alignRotationToVector(elementNormal);
+
+    // Tilt around tangent (column 0): color 0 -> +angle, color 1 -> -angle
+    float sign = 1.0 - 2.0 * faceColor;
+    float angle = sign * tiltAngle;
+    float c = cos(angle);
+    float s = sin(angle);
+    vec3 T = rotation[0];
+    vec3 B = rotation[1];
+    vec3 N = rotation[2];
+    rotation[1] = c * B + s * N;
+    rotation[2] = -s * B + c * N;
+
+    worldPos = elementPos + rotation * scaledPos;
+    worldNormal = rotation * localNormal;
 }
 
 #endif // COMMON_GLSL

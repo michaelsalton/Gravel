@@ -224,9 +224,26 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                      numTilesU, numTilesV, totalTiles);
 
         ImGui::Separator();
-        uint32_t totalElements = heNbFaces + heNbVertices;
-        ImGui::Text("Elements: %u (%u faces + %u verts)",
-                     totalElements, heNbFaces, heNbVertices);
+
+        // Chainmail mode
+        ImGui::Checkbox("Chainmail Mode", &chainmailMode);
+        if (chainmailMode) {
+            ImGui::Indent();
+            ImGui::SliderFloat("Tilt Angle", &chainmailTiltAngle, 0.0f, 1.5708f, "%.3f rad");
+            float degrees = chainmailTiltAngle * 180.0f / 3.14159265f;
+            ImGui::SameLine();
+            ImGui::Text("(%.1f deg)", degrees);
+            ImGui::Unindent();
+        }
+
+        ImGui::Separator();
+        uint32_t totalElements = chainmailMode ? heNbFaces : (heNbFaces + heNbVertices);
+        if (chainmailMode) {
+            ImGui::Text("Elements: %u (faces only)", totalElements);
+        } else {
+            ImGui::Text("Elements: %u (%u faces + %u verts)",
+                         totalElements, heNbFaces, heNbVertices);
+        }
         ImGui::Text("Total mesh tasks: %u", totalElements * totalTiles);
     }
 
@@ -423,13 +440,15 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 }
 
 void Renderer::applyPresetChainMail() {
-    renderMode  = RENDER_MODE_PARAMETRIC;
-    elementType = 0;      // Torus
-    torusMajorR = 1.0f;
-    torusMinorR = 0.3f;
-    userScaling = 0.15f;
-    resolutionM = 8;
-    resolutionN = 8;
+    renderMode         = RENDER_MODE_PARAMETRIC;
+    elementType        = 0;       // Torus
+    torusMajorR        = 1.0f;
+    torusMinorR        = 0.15f;   // Thinner tube for chainmail look
+    userScaling        = 0.18f;   // Slightly larger for overlap
+    resolutionM        = 12;      // Higher res for smooth rings
+    resolutionN        = 8;
+    chainmailMode      = true;
+    chainmailTiltAngle = 0.785f;  // ~45 degrees
 }
 
 void Renderer::applyPresetDragonScales() {

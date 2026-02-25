@@ -20,6 +20,7 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 | [Epic 6: Pebble Generation](#epic-6-pebble-generation) | 6 | 13-17h | Not Started |
 | [Epic 7: Control Maps & Polish](#epic-7-control-maps-and-polish) | 5+1 | 11-15h (+4-5h) | Not Started |
 | [Epic 8: Performance Analysis](#epic-8-performance-analysis) | 6+1 | 14-18h (+4-5h) | Not Started |
+| [Epic 9: Chainmail Generation](#epic-9-chainmail-generation) | 3 | 5-7h | In Progress |
 
 ---
 
@@ -137,6 +138,17 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 - [ ] 8.7 Comparison Pipelines (4-5h) **[OPTIONAL]**
 
 **Milestone**: Performance validated against paper, benchmarks automated, report generated
+
+---
+
+## Epic 9: Chainmail Generation
+**Details**: [docs/09/epic-09-chainmail-generation.md](09/epic-09-chainmail-generation.md)
+
+- [ ] 9.1 Face 2-Coloring (2h)
+- [ ] 9.2 Chainmail Shader Orientation (2-3h)
+- [ ] 9.3 Chainmail UI and Presets (1-2h)
+
+**Milestone**: European 4-in-1 chainmail look via alternating torus tilt, tunable via ImGui
 
 ---
 

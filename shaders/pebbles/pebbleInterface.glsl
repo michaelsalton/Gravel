@@ -15,7 +15,7 @@ struct PebblePayload {
 };
 
 // Push constants layout for pebble shaders
-// Matches the same 120-byte range as the parametric pipeline.
+// Matches the same 128-byte range as the parametric pipeline.
 // debugMode sits at offset 100, identical to the parametric push constants,
 // so the same ImGui debug selector drives both pipelines.
 layout(push_constant) uniform PebblePushConstants {
@@ -33,7 +33,9 @@ layout(push_constant) uniform PebblePushConstants {
     uint  doNoise;            // offset 104
     float noiseAmplitude;     // offset 108
     float noiseFrequency;     // offset 112
-    uint  _pad6;              // offset 116 — pad to 120 bytes
+    uint  _pad6;              // offset 116
+    uint  _pad7;              // offset 120 — pad to 128 bytes
+    uint  _pad8;              // offset 124
 } push;
 
 #endif

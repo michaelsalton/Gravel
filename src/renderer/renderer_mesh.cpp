@@ -289,5 +289,6 @@ void Renderer::loadMesh(const std::string& path) {
     vkDeviceWaitIdle(device);
     NGonMesh ngon = ObjLoader::load(path);
     HalfEdgeMesh heMesh = HalfEdgeBuilder::build(ngon);
+    computeFace2Coloring(heMesh);
     uploadHalfEdgeMesh(heMesh);
 }

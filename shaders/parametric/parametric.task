@@ -25,6 +25,7 @@ struct TaskPayload {
     uint resolutionN;   // Target N resolution
     uint deltaU;        // Tile size in U direction
     uint deltaV;        // Tile size in V direction
+    float faceColor;    // Face 2-coloring (0.0 or 1.0) for chainmail
 };
 
 taskPayloadSharedEXT TaskPayload payload;
@@ -49,6 +50,8 @@ layout(push_constant) uniform PushConstants {
     float cullingThreshold; // Back-face culling dot product threshold
     uint enableLod;         // 0 = fixed resolution, 1 = adaptive LOD
     float lodFactor;        // LOD quality multiplier (1.0 = balanced)
+    uint chainmailMode;         // 0 = off, 1 = chainmail orientation
+    float chainmailTiltAngle;   // Tilt angle in radians
 } push;
 
 // ============================================================================
@@ -119,12 +122,14 @@ void main() {
         payload.position = readVertexPosition(vertId);
         payload.normal = readVertexNormal(vertId);
         payload.area = readFaceArea(faceId);
+        payload.faceColor = 0.0;
     } else {
         faceId = globalId;
 
         payload.position = readFaceCenter(faceId);
         payload.normal = readFaceNormal(faceId);
         payload.area = readFaceArea(faceId);
+        payload.faceColor = readFaceColor(faceId);
     }
 
     payload.taskId = globalId;

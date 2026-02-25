@@ -882,7 +882,7 @@ void Renderer::createPipelineLayout() {
                                     VK_SHADER_STAGE_MESH_BIT_EXT |
                                     VK_SHADER_STAGE_FRAGMENT_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(glm::mat4) + 14 * sizeof(uint32_t); // 120 bytes
+    pushConstantRange.size = sizeof(glm::mat4) + 16 * sizeof(uint32_t); // 128 bytes
 
     std::array<VkDescriptorSetLayout, 3> setLayouts = {
         sceneSetLayout,

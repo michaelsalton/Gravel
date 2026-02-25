@@ -29,6 +29,7 @@ struct TaskPayload {
     uint resolutionN;
     uint deltaU;
     uint deltaV;
+    float faceColor;
 };
 
 taskPayloadSharedEXT TaskPayload payload;
@@ -60,6 +61,8 @@ layout(push_constant) uniform PushConstants {
     float cullingThreshold;
     uint enableLod;
     float lodFactor;
+    uint chainmailMode;
+    float chainmailTiltAngle;
 } push;
 
 layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
@@ -119,11 +122,19 @@ void main() {
                                       push.torusMajorR, push.torusMinorR, push.sphereRadius);
         }
 
-        // Transform to world space via offsetVertex
+        // Transform to world space
         vec3 worldPos, worldNormal;
-        offsetVertex(localPos, localNormal,
-                     payload.position, payload.normal, payload.area, push.userScaling,
-                     worldPos, worldNormal);
+        if (push.chainmailMode != 0u) {
+            offsetVertexChainmail(localPos, localNormal,
+                                  payload.position, payload.normal,
+                                  payload.area, push.userScaling,
+                                  payload.faceColor, push.chainmailTiltAngle,
+                                  worldPos, worldNormal);
+        } else {
+            offsetVertex(localPos, localNormal,
+                         payload.position, payload.normal, payload.area, push.userScaling,
+                         worldPos, worldNormal);
+        }
 
         vOut[i].worldPosU = vec4(worldPos, uv.x);
         vOut[i].normalV = vec4(worldNormal, uv.y);

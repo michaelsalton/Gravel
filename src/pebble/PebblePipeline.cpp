@@ -62,7 +62,7 @@ void PebblePipeline::create(VkDevice device, VkRenderPass renderPass,
                     VK_SHADER_STAGE_MESH_BIT_EXT  |
                     VK_SHADER_STAGE_FRAGMENT_BIT;
     pc.offset = 0;
-    pc.size   = sizeof(glm::mat4) + 14 * sizeof(uint32_t);  // 120 bytes
+    pc.size   = sizeof(glm::mat4) + 16 * sizeof(uint32_t);  // 128 bytes
 
     std::array<VkDescriptorSetLayout, 3> setLayouts = {
         sceneLayout, halfEdgeLayout, perObjectLayout

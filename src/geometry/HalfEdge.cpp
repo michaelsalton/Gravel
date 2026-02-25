@@ -1,6 +1,7 @@
 #include "geometry/HalfEdge.h"
 #include "loaders/ObjLoader.h"
 #include <map>
+#include <queue>
 #include <iostream>
 #include <stdexcept>
 
@@ -122,6 +123,47 @@ HalfEdgeMesh HalfEdgeBuilder::build(const NGonMesh& ngonMesh) {
     std::cout << "Half-edge structure built successfully" << std::endl;
 
     return mesh;
+}
+
+void computeFace2Coloring(HalfEdgeMesh& mesh) {
+    std::vector<int> color(mesh.nbFaces, -1);
+    int conflicts = 0;
+
+    for (uint32_t startFace = 0; startFace < mesh.nbFaces; ++startFace) {
+        if (color[startFace] != -1) continue;
+
+        color[startFace] = 0;
+        std::queue<uint32_t> q;
+        q.push(startFace);
+
+        while (!q.empty()) {
+            uint32_t face = q.front();
+            q.pop();
+
+            int edge = mesh.faceEdges[face];
+            int start = edge;
+            do {
+                int twin = mesh.heTwin[edge];
+                if (twin != -1) {
+                    uint32_t neighbor = static_cast<uint32_t>(mesh.heFace[twin]);
+                    if (color[neighbor] == -1) {
+                        color[neighbor] = 1 - color[face];
+                        q.push(neighbor);
+                    } else if (color[neighbor] == color[face]) {
+                        conflicts++;
+                    }
+                }
+                edge = mesh.heNext[edge];
+            } while (edge != start);
+        }
+    }
+
+    for (uint32_t i = 0; i < mesh.nbFaces; ++i) {
+        mesh.faceNormals[i].w = static_cast<float>(color[i]);
+    }
+
+    std::cout << "  Face 2-coloring: " << mesh.nbFaces << " faces, "
+              << conflicts << " conflicts" << std::endl;
 }
 
 void HalfEdgeBuilder::validateTopology(const HalfEdgeMesh& mesh) {

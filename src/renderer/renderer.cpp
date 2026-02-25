@@ -233,6 +233,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         float cullingThreshold;
         uint32_t enableLod;
         float lodFactor;
+        uint32_t chainmailMode;
+        float chainmailTiltAngle;
     } pushConstants{};
 
     pushConstants.model = glm::mat4(1.0f);
@@ -250,6 +252,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     pushConstants.cullingThreshold = cullingThreshold;
     pushConstants.enableLod = enableLod ? 1u : 0u;
     pushConstants.lodFactor = lodFactor;
+    pushConstants.chainmailMode = chainmailMode ? 1u : 0u;
+    pushConstants.chainmailTiltAngle = chainmailTiltAngle;
 
     if (renderMode == RENDER_MODE_PARAMETRIC) {
         if (showBaseMesh && heMeshUploaded) {
@@ -289,7 +293,9 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                             VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
                             VK_SHADER_STAGE_FRAGMENT_BIT,
                             0, sizeof(PushConstants), &pushConstants);
-        uint32_t totalTasks = heMeshUploaded ? (heNbFaces + heNbVertices) : 1;
+        uint32_t totalTasks = heMeshUploaded
+            ? (chainmailMode ? heNbFaces : (heNbFaces + heNbVertices))
+            : 1;
         pfnCmdDrawMeshTasksEXT(cmd, totalTasks, 1, 1);
     } else {
         // Draw base mesh first (dark fill) so pebbles naturally occlude it

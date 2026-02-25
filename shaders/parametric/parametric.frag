@@ -51,6 +51,8 @@ layout(push_constant) uniform PushConstants {
     float cullingThreshold;
     uint enableLod;
     float lodFactor;
+    uint chainmailMode;
+    float chainmailTiltAngle;
 } push;
 
 layout(location = 0) out vec4 outColor;
