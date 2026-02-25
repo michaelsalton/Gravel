@@ -78,18 +78,24 @@ void offsetVertex(vec3 localPos, vec3 localNormal,
 
 // Chainmail variant (European 4-in-1): adjacent faces lean in opposite
 // directions based on face 2-coloring (0.0 or 1.0).
+// edgeTangent: tangent derived from mesh edge, gives consistent tilt direction.
 // faceColor: from BFS 2-coloring, alternates between adjacent faces.
 // tiltAmount: 0.0 = flat, 1.0 = full lean (PI/2 = 90 degrees).
 void offsetVertexChainmail(vec3 localPos, vec3 localNormal,
                            vec3 elementPos, vec3 elementNormal,
+                           vec3 edgeTangent,
                            float faceArea, float userScaling,
                            float faceColor, float tiltAmount,
                            out vec3 worldPos, out vec3 worldNormal) {
     float scale = sqrt(faceArea) * userScaling;
     vec3 pos = localPos * scale;
 
-    // Build flat TBN frame aligned to surface normal
-    mat3 tbn = alignRotationToVector(elementNormal);
+    // Build TBN frame from mesh edge tangent (not arbitrary helper vector)
+    // This ensures tilt direction follows mesh structure for organized rows
+    vec3 T = normalize(edgeTangent);
+    vec3 N = normalize(elementNormal);
+    vec3 B = cross(N, T);
+    mat3 tbn = mat3(T, B, N);
 
     // Color 0 -> +angle, color 1 -> -angle
     float sign = 1.0 - 2.0 * faceColor;
@@ -98,10 +104,10 @@ void offsetVertexChainmail(vec3 localPos, vec3 localNormal,
     // Tilt around tangent axis: rotate bitangent and normal
     float c = cos(angle);
     float s = sin(angle);
-    vec3 B = tbn[1];
-    vec3 N = tbn[2];
-    tbn[1] = c * B + s * N;
-    tbn[2] = -s * B + c * N;
+    vec3 Bt = tbn[1];
+    vec3 Nt = tbn[2];
+    tbn[1] = c * Bt + s * Nt;
+    tbn[2] = -s * Bt + c * Nt;
 
     worldPos = elementPos + tbn * pos;
     worldNormal = tbn * localNormal;

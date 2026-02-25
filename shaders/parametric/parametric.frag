@@ -31,7 +31,9 @@ layout(set = SET_SCENE, binding = BINDING_SHADING_UBO) uniform ShadingUBOBlock {
     float diffuse;
     float specular;
     float shininess;
-    float padding;
+    float metalF0;          // base metallic reflectance (Fresnel F0)
+    float envReflection;    // environment reflection strength
+    float metalDiffuse;     // metallic diffuse weight
 } shadingUBO;
 
 // Push constants (must match task/mesh layout)
@@ -69,18 +71,57 @@ void main() {
 
     switch (push.debugMode) {
         case 0: {
-            // Blinn-Phong shading with per-element color tint
-            color = blinnPhong(worldPos, normal,
-                               shadingUBO.lightPosition.xyz,
-                               viewUBO.cameraPosition.xyz,
-                               shadingUBO.ambient,
-                               shadingUBO.diffuse,
-                               shadingUBO.specular,
-                               shadingUBO.shininess);
+            if (push.chainmailMode != 0u) {
+                // Metallic silver chainmail shading
+                vec3 N = normalize(normal);
+                vec3 L = normalize(shadingUBO.lightPosition.xyz - worldPos);
+                vec3 V = normalize(viewUBO.cameraPosition.xyz - worldPos);
+                vec3 H = normalize(L + V);
+                vec3 R = reflect(-V, N);
 
-            // Subtle per-element color variation (20% tint)
-            vec3 elementColor = getDebugColor(taskId);
-            color = mix(color, color * elementColor, 0.2);
+                // Metallic base reflectance from UBO
+                float f0 = shadingUBO.metalF0;
+                vec3 F0 = vec3(f0, f0, f0 * 1.046); // slight cool tint
+
+                // Schlick Fresnel - metals reflect strongly at all angles
+                float NdotV = max(dot(N, V), 0.0);
+                vec3 fresnel = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
+
+                // Diffuse (metals have very little, controlled by metalDiffuse)
+                float NdotL = max(dot(N, L), 0.0);
+                vec3 diffuse = F0 * shadingUBO.diffuse * NdotL * shadingUBO.metalDiffuse;
+
+                // Dual-lobe specular: tight highlight + broad metallic sheen
+                float NdotH = max(dot(N, H), 0.0);
+                float specTight = pow(NdotH, max(shadingUBO.shininess * 4.0, 8.0));
+                float specBroad = pow(NdotH, max(shadingUBO.shininess * 0.5, 2.0));
+                vec3 specular = fresnel * shadingUBO.specular *
+                    (specTight * 0.6 + specBroad * 0.4);
+
+                // Environment reflection (fake sky/ground based on reflected direction)
+                vec3 skyColor = vec3(0.4, 0.45, 0.55);   // cool sky
+                vec3 groundColor = vec3(0.15, 0.12, 0.1); // warm ground
+                float skyBlend = R.y * 0.5 + 0.5; // 0=ground, 1=sky
+                vec3 envColor = mix(groundColor, skyColor, skyBlend);
+                vec3 envRefl = fresnel * envColor * shadingUBO.envReflection;
+
+                // Ambient
+                vec3 ambient = F0 * shadingUBO.ambient.rgb * shadingUBO.ambient.a;
+
+                color = ambient + diffuse + specular + envRefl;
+            } else {
+                // Standard Blinn-Phong with per-element color tint
+                color = blinnPhong(worldPos, normal,
+                                   shadingUBO.lightPosition.xyz,
+                                   viewUBO.cameraPosition.xyz,
+                                   shadingUBO.ambient,
+                                   shadingUBO.diffuse,
+                                   shadingUBO.specular,
+                                   shadingUBO.shininess);
+
+                vec3 elementColor = getDebugColor(taskId);
+                color = mix(color, color * elementColor, 0.2);
+            }
             break;
         }
 

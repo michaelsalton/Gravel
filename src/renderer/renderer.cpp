@@ -201,6 +201,9 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     shadingData.diffuse = diffuseIntensity;
     shadingData.specular = specularIntensity;
     shadingData.shininess = shininess;
+    shadingData.metalF0 = metalF0;
+    shadingData.envReflection = envReflection;
+    shadingData.metalDiffuse = metalDiffuse;
     memcpy(shadingUBOMapped[currentFrame], &shadingData, sizeof(GlobalShadingUBO));
 
     struct PushConstants {

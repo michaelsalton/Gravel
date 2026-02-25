@@ -17,6 +17,7 @@ layout(max_vertices = 256, max_primitives = 256, triangles) out;
 struct TaskPayload {
     vec3 position;
     vec3 normal;
+    vec3 edgeTangent;
     float area;
     uint taskId;
     uint isVertex;
@@ -113,6 +114,7 @@ void main() {
         if (push.chainmailMode != 0u) {
             offsetVertexChainmail(localPos, localNormal,
                                   payload.position, payload.normal,
+                                  payload.edgeTangent,
                                   payload.area, push.userScaling,
                                   payload.faceColor, push.chainmailTiltAngle,
                                   worldPos, worldNormal);

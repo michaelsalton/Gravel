@@ -49,7 +49,11 @@ struct GlobalShadingUBO {
     float diffuse;
     float specular;
     float shininess;
-    float padding;
+    float metalF0;             // base metallic reflectance (Fresnel F0)
+    float envReflection;       // environment reflection strength
+    float metalDiffuse;        // metallic diffuse weight
+    float padding1;
+    float padding2;
 };
 
 class Renderer {
@@ -275,6 +279,9 @@ private:
     float diffuseIntensity = 0.7f;
     float specularIntensity = 0.5f;
     float shininess = 32.0f;
+    float metalF0 = 0.65f;
+    float envReflection = 0.35f;
+    float metalDiffuse = 0.3f;
 
 #ifdef NDEBUG
     const bool enableValidationLayers = false;

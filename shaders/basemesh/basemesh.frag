@@ -22,7 +22,9 @@ layout(set = SET_SCENE, binding = BINDING_SHADING_UBO) uniform ShadingUBOBlock {
     float diffuse;
     float specular;
     float shininess;
-    float padding;
+    float metalF0;
+    float envReflection;
+    float metalDiffuse;
 } shadingUBO;
 
 layout(location = 0) out vec4 outColor;

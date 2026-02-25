@@ -191,6 +191,10 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             ImGui::SliderFloat("Lean Amount", &chainmailTiltAngle, 0.0f, 1.0f, "%.2f");
             ImGui::SameLine();
             ImGui::Text("(0=flat, 1=full)");
+            ImGui::Text("Metallic Shading:");
+            ImGui::SliderFloat("Metal Reflectance", &metalF0, 0.0f, 1.0f, "%.2f");
+            ImGui::SliderFloat("Env Reflection", &envReflection, 0.0f, 1.0f, "%.2f");
+            ImGui::SliderFloat("Metal Diffuse", &metalDiffuse, 0.0f, 1.0f, "%.2f");
             ImGui::Unindent();
         }
 
@@ -347,5 +351,17 @@ void Renderer::applyPresetChainMail() {
     resolutionN        = 6;
     chainmailMode      = true;
     chainmailTiltAngle = 0.08f;
+
+    // Metallic silver lighting
+    ambientColor       = glm::vec3(11.0f/255.0f, 11.0f/255.0f, 11.0f/255.0f);
+    ambientIntensity   = 0.717f;
+    diffuseIntensity   = 0.666f;
+    specularIntensity  = 1.0f;
+    shininess          = 11.237f;
+
+    // Metallic shader params
+    metalF0            = 0.65f;
+    envReflection      = 0.35f;
+    metalDiffuse       = 0.3f;
 }
 

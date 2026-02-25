@@ -17,6 +17,7 @@ layout(local_size_x = 1) in;
 struct TaskPayload {
     vec3 position;      // Face center or vertex position
     vec3 normal;        // Face normal or vertex normal
+    vec3 edgeTangent;   // Tangent derived from mesh edge (for chainmail orientation)
     float area;         // Face area (used for scaling)
     uint taskId;        // Global element ID
     uint isVertex;      // 1 if vertex element, 0 if face element
@@ -124,6 +125,17 @@ void main() {
         payload.area = readFaceArea(faceId);
         // Vertex elements tilt opposite to their adjacent face
         payload.faceColor = 1.0 - readFaceColor(faceId);
+
+        // Edge tangent: use the vertex's outgoing edge direction
+        if (edge >= 0) {
+            int nextHE = getHalfEdgeNext(uint(edge));
+            vec3 v1 = readVertexPosition(uint(getHalfEdgeVertex(uint(nextHE))));
+            vec3 edgeDir = v1 - payload.position;
+            // Project onto tangent plane (remove normal component)
+            payload.edgeTangent = normalize(edgeDir - dot(edgeDir, payload.normal) * payload.normal);
+        } else {
+            payload.edgeTangent = vec3(1, 0, 0);
+        }
     } else {
         faceId = globalId;
 
@@ -131,6 +143,15 @@ void main() {
         payload.normal = readFaceNormal(faceId);
         payload.area = readFaceArea(faceId);
         payload.faceColor = readFaceColor(faceId);
+
+        // Edge tangent: use the face's first edge direction
+        int edge = readFaceEdge(faceId);
+        int v0id = getHalfEdgeVertex(uint(edge));
+        int nextHE = getHalfEdgeNext(uint(edge));
+        int v1id = getHalfEdgeVertex(uint(nextHE));
+        vec3 edgeDir = readVertexPosition(uint(v1id)) - readVertexPosition(uint(v0id));
+        // Project onto tangent plane (remove normal component)
+        payload.edgeTangent = normalize(edgeDir - dot(edgeDir, payload.normal) * payload.normal);
     }
 
     payload.taskId = globalId;
