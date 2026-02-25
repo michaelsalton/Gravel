@@ -512,7 +512,7 @@ void Renderer::loadSecondaryMesh(const std::string& path) {
                 tinygltf::Model gltfModel = GltfLoader::loadModel(gltfPath);
                 std::vector<glm::vec4> secJointIndices, secJointWeights;
                 GltfLoader::matchBoneDataToObjMesh(gltfModel, ngon.positions,
-                                                    secJointIndices, secJointWeights);
+                                                    skeleton, secJointIndices, secJointWeights);
 
                 if (!secJointIndices.empty()) {
                     secondaryJointIndicesBuffer.create(device, physicalDevice,
@@ -695,19 +695,39 @@ void Renderer::loadMesh(const std::string& path) {
         writeTextureDescriptors();
     }
 
-    // Auto-detect glTF skeleton (same name as OBJ, with .gltf extension)
+    // Auto-detect glTF skeleton (same name as OBJ, or any .gltf in same directory)
     std::string baseName = path.substr(0, path.find_last_of('.'));
     std::string gltfPath = baseName + ".gltf";
+    if (!std::filesystem::exists(gltfPath)) {
+        // Fallback: search directory for any .gltf file
+        std::string gltfDir = path.substr(0, path.find_last_of("/\\") + 1);
+        if (!gltfDir.empty()) {
+            for (const auto& entry : std::filesystem::directory_iterator(gltfDir)) {
+                if (entry.path().extension() == ".gltf") {
+                    gltfPath = entry.path().string();
+                    break;
+                }
+            }
+        }
+    }
+    std::cout << "  glTF path check: " << gltfPath
+              << " exists=" << std::filesystem::exists(gltfPath) << std::endl;
     if (std::filesystem::exists(gltfPath)) {
         std::cout << "  Loading glTF skeleton: " << gltfPath << std::endl;
         try {
             tinygltf::Model gltfModel = GltfLoader::loadModel(gltfPath);
+            std::cout << "  glTF model loaded OK" << std::endl;
             GltfLoader::extractSkeleton(gltfModel, skeleton);
+            std::cout << "  Skeleton extracted: " << skeleton.bones.size() << " bones" << std::endl;
             GltfLoader::extractAnimations(gltfModel, skeleton, animations);
+            std::cout << "  Animations extracted: " << animations.size() << std::endl;
             GltfLoader::matchBoneDataToObjMesh(gltfModel, ngon.positions,
-                                                jointIndicesData, jointWeightsData);
+                                                skeleton, jointIndicesData, jointWeightsData);
+            std::cout << "  Bone matching done" << std::endl;
 
             boneCount = static_cast<uint32_t>(skeleton.bones.size());
+            std::cout << "  boneCount=" << boneCount
+                      << " jointIndicesData.size()=" << jointIndicesData.size() << std::endl;
             if (boneCount > 0 && !jointIndicesData.empty()) {
                 // Upload joint indices (device-local, static)
                 jointIndicesBuffer.create(device, physicalDevice,
@@ -734,7 +754,11 @@ void Renderer::loadMesh(const std::string& path) {
             }
         } catch (const std::exception& e) {
             std::cerr << "  glTF loading error: " << e.what() << std::endl;
+        } catch (...) {
+            std::cerr << "  glTF loading: unknown exception" << std::endl;
         }
+    } else {
+        std::cout << "  No glTF file found for skeleton" << std::endl;
     }
 
     // Dragon Coat: also load base dragon mesh for solid rendering underneath

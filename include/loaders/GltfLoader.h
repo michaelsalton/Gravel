@@ -25,6 +25,8 @@ struct Skeleton {
     };
     std::vector<Bone> bones;
     glm::mat4 armatureTransform = glm::mat4(1.0f);  // Skeleton root node transform
+    glm::mat4 objAlignTransform = glm::mat4(1.0f);  // glTF mesh-local → OBJ space
+    glm::mat4 objAlignInverse = glm::mat4(1.0f);    // OBJ → glTF mesh-local space
 };
 
 struct KeyFrame {
@@ -76,6 +78,7 @@ public:
     // and transfer joint indices + weights
     static void matchBoneDataToObjMesh(const tinygltf::Model& model,
                                        const std::vector<glm::vec3>& objPositions,
+                                       Skeleton& skeleton,
                                        std::vector<glm::vec4>& jointIndices,
                                        std::vector<glm::vec4>& jointWeights);
 };
