@@ -280,6 +280,7 @@ void Renderer::createLogicalDevice() {
     VkPhysicalDeviceFeatures2 deviceFeatures2{};
     deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     deviceFeatures2.pNext = &meshShaderFeatures;
+    deviceFeatures2.features.fillModeNonSolid = VK_TRUE;  // wireframe rendering
 
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -1212,6 +1213,114 @@ void Renderer::createGraphicsPipeline() {
     vkDestroyShaderModule(device, taskModule, nullptr);
 
     std::cout << "Graphics pipeline created (task + mesh + fragment)" << std::endl;
+
+    // --- Base mesh wireframe pipeline (mesh + fragment, no task shader) ---
+    auto bmMeshCode = readFile(std::string(SHADER_DIR) + "basemesh.mesh.spv");
+    auto bmWireFragCode = readFile(std::string(SHADER_DIR) + "basemesh_wire.frag.spv");
+
+    VkShaderModule bmMeshModule = createShaderModule(bmMeshCode);
+    VkShaderModule bmFragModule = createShaderModule(bmWireFragCode);
+
+    VkPipelineShaderStageCreateInfo bmMeshStage{};
+    bmMeshStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    bmMeshStage.stage = VK_SHADER_STAGE_MESH_BIT_EXT;
+    bmMeshStage.module = bmMeshModule;
+    bmMeshStage.pName = "main";
+
+    VkPipelineShaderStageCreateInfo bmFragStage{};
+    bmFragStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    bmFragStage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bmFragStage.module = bmFragModule;
+    bmFragStage.pName = "main";
+
+    std::array<VkPipelineShaderStageCreateInfo, 2> bmStages = {
+        bmMeshStage, bmFragStage
+    };
+
+    // Wireframe rasterization
+    VkPipelineRasterizationStateCreateInfo wireRasterizer{};
+    wireRasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    wireRasterizer.depthClampEnable = VK_FALSE;
+    wireRasterizer.rasterizerDiscardEnable = VK_FALSE;
+    wireRasterizer.polygonMode = VK_POLYGON_MODE_LINE;
+    wireRasterizer.lineWidth = 1.0f;
+    wireRasterizer.cullMode = VK_CULL_MODE_NONE;
+    wireRasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    wireRasterizer.depthBiasEnable = VK_TRUE;
+    wireRasterizer.depthBiasConstantFactor = -2.0f;
+    wireRasterizer.depthBiasSlopeFactor = -2.0f;
+
+    // Depth: test on, write off (overlay)
+    VkPipelineDepthStencilStateCreateInfo wireDepth{};
+    wireDepth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    wireDepth.depthTestEnable = VK_TRUE;
+    wireDepth.depthWriteEnable = VK_FALSE;
+    wireDepth.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    wireDepth.depthBoundsTestEnable = VK_FALSE;
+    wireDepth.stencilTestEnable = VK_FALSE;
+
+    VkGraphicsPipelineCreateInfo bmPipelineInfo{};
+    bmPipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    bmPipelineInfo.stageCount = static_cast<uint32_t>(bmStages.size());
+    bmPipelineInfo.pStages = bmStages.data();
+    bmPipelineInfo.pVertexInputState = nullptr;
+    bmPipelineInfo.pInputAssemblyState = nullptr;
+    bmPipelineInfo.pViewportState = &viewportState;
+    bmPipelineInfo.pRasterizationState = &wireRasterizer;
+    bmPipelineInfo.pMultisampleState = &multisampling;
+    bmPipelineInfo.pDepthStencilState = &wireDepth;
+    bmPipelineInfo.pColorBlendState = &colorBlending;
+    bmPipelineInfo.pDynamicState = &dynamicState;
+    bmPipelineInfo.layout = pipelineLayout;
+    bmPipelineInfo.renderPass = renderPass;
+    bmPipelineInfo.subpass = 0;
+
+    if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &bmPipelineInfo,
+                                   nullptr, &baseMeshPipeline) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create base mesh wireframe pipeline!");
+    }
+
+    // --- Base mesh solid pipeline (same shaders, FILL mode) ---
+    VkPipelineRasterizationStateCreateInfo solidRasterizer{};
+    solidRasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    solidRasterizer.depthClampEnable = VK_FALSE;
+    solidRasterizer.rasterizerDiscardEnable = VK_FALSE;
+    solidRasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    solidRasterizer.lineWidth = 1.0f;
+    solidRasterizer.cullMode = VK_CULL_MODE_NONE;
+    solidRasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    solidRasterizer.depthBiasEnable = VK_FALSE;
+
+    // Solid pipeline uses the shaded fragment shader
+    auto bmSolidFragCode = readFile(std::string(SHADER_DIR) + "basemesh.frag.spv");
+    VkShaderModule bmSolidFragModule = createShaderModule(bmSolidFragCode);
+
+    VkPipelineShaderStageCreateInfo bmSolidFragStage{};
+    bmSolidFragStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    bmSolidFragStage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bmSolidFragStage.module = bmSolidFragModule;
+    bmSolidFragStage.pName = "main";
+
+    std::array<VkPipelineShaderStageCreateInfo, 2> bmSolidStages = {
+        bmMeshStage, bmSolidFragStage
+    };
+
+    VkGraphicsPipelineCreateInfo bmSolidInfo = bmPipelineInfo;
+    bmSolidInfo.stageCount = static_cast<uint32_t>(bmSolidStages.size());
+    bmSolidInfo.pStages = bmSolidStages.data();
+    bmSolidInfo.pRasterizationState = &solidRasterizer;
+    bmSolidInfo.pDepthStencilState = &depthStencil;  // normal depth test+write
+
+    if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &bmSolidInfo,
+                                   nullptr, &baseMeshSolidPipeline) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create base mesh solid pipeline!");
+    }
+
+    vkDestroyShaderModule(device, bmSolidFragModule, nullptr);
+    vkDestroyShaderModule(device, bmFragModule, nullptr);
+    vkDestroyShaderModule(device, bmMeshModule, nullptr);
+
+    std::cout << "Base mesh pipelines created (wireframe + solid)" << std::endl;
 }
 
 bool Renderer::checkValidationLayerSupport() {

@@ -90,16 +90,19 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
     // Base mesh selector
     if (ImGui::CollapsingHeader("Base Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
-        const char* meshNames[] = { "Cube", "Plane (3x3)", "Plane (5x5)" };
+        const char* meshNames[] = { "Cube", "Plane (3x3)", "Plane (5x5)", "Sphere" };
         const char* meshPaths[] = {
             ASSETS_DIR "cube.obj",
             ASSETS_DIR "plane.obj",
-            ASSETS_DIR "plane5x5.obj"
+            ASSETS_DIR "plane5x5.obj",
+            ASSETS_DIR "sphere.obj"
         };
         int prev = selectedMesh;
-        ImGui::Combo("Mesh", &selectedMesh, meshNames, 3);
+        ImGui::Combo("Mesh", &selectedMesh, meshNames, 4);
         if (selectedMesh != prev)
             loadMesh(meshPaths[selectedMesh]);
+        const char* baseMeshModes[] = { "Off", "Wireframe", "Solid", "Both" };
+        ImGui::Combo("Display", &baseMeshMode, baseMeshModes, 4);
     }
     ImGui::Separator();
 

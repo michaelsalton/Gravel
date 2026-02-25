@@ -1,0 +1,79 @@
+#version 450
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "shaderInterface.h"
+
+// One workgroup per face (no task shader)
+layout(local_size_x = 1) in;
+
+// Max 8 verts per face (quads=4, support up to octagon), fan yields max 6 tris
+layout(max_vertices = 8, max_primitives = 6, triangles) out;
+
+// Per-vertex output: face normal for flat shading
+layout(location = 0) out vec3 outNormal[];
+
+// Per-primitive output: face ID for debug coloring
+layout(location = 1) perprimitiveEXT out flat uint outFaceId[];
+
+layout(push_constant) uniform PushConstants {
+    mat4 model;
+    uint nbFaces;
+    uint nbVertices;
+    uint elementType;
+    float userScaling;
+    float torusMajorR;
+    float torusMinorR;
+    float sphereRadius;
+    uint resolutionM;
+    uint resolutionN;
+    uint debugMode;
+    uint enableCulling;
+    float cullingThreshold;
+    uint enableLod;
+    float lodFactor;
+    uint chainmailMode;
+    float chainmailTiltAngle;
+} push;
+
+layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
+    mat4 view;
+    mat4 projection;
+    vec4 cameraPosition;
+    float nearPlane;
+    float farPlane;
+} viewUBO;
+
+void main() {
+    uint faceId = gl_WorkGroupID.x;
+
+    if (faceId >= push.nbFaces) {
+        SetMeshOutputsEXT(0, 0);
+        return;
+    }
+
+    int vertCount = getFaceVertCount(faceId);
+    int offset = getFaceOffset(faceId);
+
+    uint numVerts = uint(vertCount);
+    uint numPrims = numVerts - 2;  // fan triangulation
+
+    SetMeshOutputsEXT(numVerts, numPrims);
+
+    mat4 mvp = viewUBO.projection * viewUBO.view * push.model;
+    vec3 faceNorm = getFaceNormal(faceId);
+
+    // Emit vertices
+    for (uint i = 0; i < numVerts; i++) {
+        int vertId = getVertexFaceIndex(int(offset) + int(i));
+        vec3 pos = getVertexPosition(uint(vertId));
+        gl_MeshVerticesEXT[i].gl_Position = mvp * vec4(pos, 1.0);
+        outNormal[i] = faceNorm;
+    }
+
+    // Fan triangulation from vertex 0
+    for (uint i = 0; i < numPrims; i++) {
+        gl_PrimitiveTriangleIndicesEXT[i] = uvec3(0, i + 1, i + 2);
+        outFaceId[i] = faceId;
+    }
+}

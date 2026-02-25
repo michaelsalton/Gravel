@@ -173,6 +173,8 @@ private:
     // Pipeline layout and graphics pipeline
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     VkPipeline graphicsPipeline = VK_NULL_HANDLE;
+    VkPipeline baseMeshPipeline = VK_NULL_HANDLE;       // wireframe
+    VkPipeline baseMeshSolidPipeline = VK_NULL_HANDLE;  // solid fill
 
     int              selectedMesh   = 0;  // 0 = cube, 1 = plane
 
@@ -256,6 +258,7 @@ private:
     float cullingThreshold = 0.0f;  // Back-face dot product threshold [-1, 1]
     bool enableLod = false;
     float lodFactor = 1.0f;
+    int baseMeshMode = 0;  // 0=off, 1=wireframe, 2=solid, 3=both
     bool chainmailMode = false;
     float chainmailTiltAngle = 1.0f;    // Lean blend: 0=flat, 1=full chainmail lean
     bool vsync = false;

@@ -31,6 +31,8 @@ Renderer::Renderer(Window& window) : window(window) {
 
 Renderer::~Renderer() {
     cleanupImGui();
+    vkDestroyPipeline(device, baseMeshSolidPipeline, nullptr);
+    vkDestroyPipeline(device, baseMeshPipeline, nullptr);
     vkDestroyPipeline(device, graphicsPipeline, nullptr);
 
     // Cleanup half-edge SSBO buffers (StorageBuffer destructors handle their own cleanup)
@@ -247,6 +249,31 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         ? (heNbFaces + heNbVertices)
         : 1;
     pfnCmdDrawMeshTasksEXT(cmd, totalTasks, 1, 1);
+
+    // Base mesh overlay (0=off, 1=wireframe, 2=solid, 3=both)
+    if (baseMeshMode > 0 && heMeshUploaded) {
+        auto drawBaseMesh = [&](VkPipeline pipeline) {
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                     pipelineLayout, 0, 1,
+                                     &sceneDescriptorSets[currentFrame],
+                                     0, nullptr);
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                     pipelineLayout, 1, 1,
+                                     &heDescriptorSet,
+                                     0, nullptr);
+            vkCmdPushConstants(cmd, pipelineLayout,
+                                VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
+                                VK_SHADER_STAGE_FRAGMENT_BIT,
+                                0, sizeof(PushConstants), &pushConstants);
+            pfnCmdDrawMeshTasksEXT(cmd, heNbFaces, 1, 1);
+        };
+
+        if (baseMeshMode == 2 || baseMeshMode == 3)
+            drawBaseMesh(baseMeshSolidPipeline);
+        if (baseMeshMode == 1 || baseMeshMode == 3)
+            drawBaseMesh(baseMeshPipeline);
+    }
 
     // Draw ImGui on top
     renderImGui(cmd);
