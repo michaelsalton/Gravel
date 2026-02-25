@@ -28,21 +28,30 @@ layout(set = SET_SCENE, binding = BINDING_SHADING_UBO) uniform ShadingUBOBlock {
     float metalDiffuse;
 } shadingUBO;
 
-layout(location = 0) out vec4 outColor;
+layout(push_constant) uniform PushConstants {
+    mat4 model;
+    uint nbFaces;
+    uint nbVertices;
+    uint elementType;
+    float userScaling;
+    float torusMajorR;
+    float torusMinorR;
+    float sphereRadius;
+    uint resolutionM;
+    uint resolutionN;
+    uint debugMode;
+} push;
 
-// World position reconstructed from gl_FragCoord isn't practical here,
-// so we add it as a vertex output. But for flat shading the face center works.
-// We'll use a simple directional-ish shading from the face normal.
+layout(location = 0) out vec4 outColor;
 
 void main() {
     vec3 N = normalize(inNormal);
 
-    // Mask preview mode: show raw mask texture (black/white)
-    if (resurfacingUBO.hasMaskTexture != 0u) {
-        vec2 maskUV = inUV;
+    // Mask preview: only when debugMode == 100 (Mask display mode)
+    if (push.debugMode == 100u) {
         float maskVal = texture(
             sampler2D(textures[MASK_TEXTURE], samplers[NEAREST_SAMPLER]),
-            maskUV
+            inUV
         ).r;
         outColor = vec4(vec3(maskVal), 1.0);
         return;

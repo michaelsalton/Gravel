@@ -759,25 +759,6 @@ void Renderer::loadMesh(const std::string& path) {
                 if (uv.x != 0.0f || uv.y != 0.0f) { hasUVs = true; break; }
             }
             if (hasUVs) {
-                // Debug: print UV range and sample values
-                glm::vec2 uvMin(std::numeric_limits<float>::max());
-                glm::vec2 uvMax(std::numeric_limits<float>::lowest());
-                uint32_t nonZeroCount = 0;
-                for (size_t i = 0; i < gltfUVs.size(); ++i) {
-                    if (gltfUVs[i].x != 0.0f || gltfUVs[i].y != 0.0f) {
-                        nonZeroCount++;
-                        uvMin = glm::min(uvMin, gltfUVs[i]);
-                        uvMax = glm::max(uvMax, gltfUVs[i]);
-                    }
-                }
-                std::cout << "  UV debug: " << nonZeroCount << "/" << gltfUVs.size()
-                          << " non-zero, range=(" << uvMin.x << "," << uvMin.y
-                          << ") to (" << uvMax.x << "," << uvMax.y << ")" << std::endl;
-                // Print first 10 UV values
-                for (size_t i = 0; i < std::min(size_t(10), gltfUVs.size()); ++i) {
-                    std::cout << "    UV[" << i << "] = (" << gltfUVs[i].x << ", " << gltfUVs[i].y << ")" << std::endl;
-                }
-
                 heVec2Buffers[0].destroy();
                 heVec2Buffers[0].create(device, physicalDevice,
                     gltfUVs.size() * sizeof(glm::vec2), gltfUVs.data());
