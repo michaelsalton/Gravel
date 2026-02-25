@@ -64,6 +64,8 @@ set(SOURCES
     src/renderer/renderer_mesh.cpp
     src/renderer/renderer_imgui.cpp
     src/loaders/ObjLoader.cpp
+    src/loaders/ImageLoader.cpp
+    src/loaders/GltfLoader.cpp
     src/geometry/HalfEdge.cpp
     src/vulkan/vkHelper.cpp
     ${IMGUI_SOURCES}
@@ -78,6 +80,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/src
     ${Vulkan_INCLUDE_DIRS}
+    ${CMAKE_SOURCE_DIR}/libs/stb
+    ${CMAKE_SOURCE_DIR}/libs/tinygltf
     ${IMGUI_DIR}
     ${IMGUI_DIR}/backends
 )

@@ -1,9 +1,11 @@
 #include "renderer/renderer.h"
+#include "loaders/GltfLoader.h"
 #include "core/window.h"
 #include <stdexcept>
 #include <iostream>
 #include <array>
 #include <cstring>
+#include <cmath>
 
 Renderer::Renderer(Window& window) : window(window) {
     createInstance();
@@ -26,6 +28,7 @@ Renderer::Renderer(Window& window) : window(window) {
     createDescriptorPool();
     createDescriptorSets();
     createGraphicsPipeline();
+    createSamplers();
     initImGui();
 }
 
@@ -56,6 +59,13 @@ Renderer::~Renderer() {
     if (resurfacingUBOBuffer != VK_NULL_HANDLE) {
         vkDestroyBuffer(device, resurfacingUBOBuffer, nullptr);
         vkFreeMemory(device, resurfacingUBOMemory, nullptr);
+    }
+
+    if (linearSampler != VK_NULL_HANDLE) {
+        vkDestroySampler(device, linearSampler, nullptr);
+    }
+    if (nearestSampler != VK_NULL_HANDLE) {
+        vkDestroySampler(device, nearestSampler, nullptr);
     }
 
     vkDestroyDescriptorPool(device, descriptorPool, nullptr);
@@ -205,6 +215,39 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     shadingData.envReflection = envReflection;
     shadingData.metalDiffuse = metalDiffuse;
     memcpy(shadingUBOMapped[currentFrame], &shadingData, sizeof(GlobalShadingUBO));
+
+    // Per-frame animation update
+    if (skeletonLoaded && animationPlaying && !animations.empty()) {
+        animationTime += lastDeltaTime * animationSpeed;
+        if (animationTime > animations[0].duration) {
+            animationTime = std::fmod(animationTime, animations[0].duration);
+        }
+        GltfLoader::updateSkeleton(animations[0], animationTime, skeleton);
+        std::vector<glm::mat4> boneMatrices;
+        GltfLoader::computeBoneMatrices(skeleton, boneMatrices);
+        boneMatricesBuffer.update(boneMatrices.data(),
+                                  boneMatrices.size() * sizeof(glm::mat4));
+    }
+
+    // Update ResurfacingUBO with current state
+    {
+        ResurfacingUBO resurfData{};
+        resurfData.elementType      = elementType;
+        resurfData.userScaling      = userScaling;
+        resurfData.resolutionM      = resolutionM;
+        resurfData.resolutionN      = resolutionN;
+        resurfData.torusMajorR      = torusMajorR;
+        resurfData.torusMinorR      = torusMinorR;
+        resurfData.sphereRadius     = sphereRadius;
+        resurfData.doLod            = enableLod ? 1u : 0u;
+        resurfData.lodFactor        = lodFactor;
+        resurfData.doCulling        = (enableFrustumCulling ? 1u : 0u) | (enableBackfaceCulling ? 2u : 0u);
+        resurfData.cullingThreshold = cullingThreshold;
+        resurfData.doSkinning            = (skeletonLoaded && doSkinning) ? 1u : 0u;
+        resurfData.hasElementTypeTexture = (useElementTypeTexture && elementTypeTextureLoaded) ? 1u : 0u;
+        resurfData.hasAOTexture          = (useAOTexture && aoTextureLoaded) ? 1u : 0u;
+        memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
+    }
 
     struct PushConstants {
         glm::mat4 model;

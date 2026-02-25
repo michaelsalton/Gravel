@@ -12,6 +12,7 @@
 #include "vulkan/vkHelper.h"
 #include "core/camera.h"
 #include "renderer/renderer_init.h"
+#include "loaders/GltfLoader.h"
 
 class Window;
 struct HalfEdgeMesh;
@@ -41,6 +42,11 @@ struct ResurfacingUBO {
     float    lodFactor     = 1.0f;
     uint32_t doCulling     = 0;
     float    cullingThreshold = 0.0f;
+
+    uint32_t doSkinning            = 0;
+    uint32_t hasElementTypeTexture = 0;
+    uint32_t hasAOTexture          = 0;
+    uint32_t padding1              = 0;
 };
 
 struct GlobalShadingUBO {
@@ -98,9 +104,16 @@ private:
     void createGraphicsPipeline();
     void loadMeshShaderFunctions();
     void cleanupSwapChain();
+    void createSamplers();
 
     void updateHEDescriptorSet();
     void updatePerObjectDescriptorSet();
+    void writeTextureDescriptors();
+    void writeSkeletonDescriptors();
+    void cleanupMeshTextures();
+    void cleanupMeshSkeleton();
+    void loadAndUploadTexture(const std::string& path, VulkanTexture& texture,
+                               VkFormat format, bool& loadedFlag);
     size_t calculateVRAM() const;
 
     void applyPresetChainMail();
@@ -240,6 +253,29 @@ private:
     VkDeviceMemory resurfacingUBOMemory = VK_NULL_HANDLE;
     void* resurfacingUBOMapped = nullptr;
 
+    // Samplers
+    VkSampler linearSampler = VK_NULL_HANDLE;
+    VkSampler nearestSampler = VK_NULL_HANDLE;
+
+    // Textures (loaded per-mesh)
+    VulkanTexture aoTexture;
+    VulkanTexture elementTypeTexture;
+    bool aoTextureLoaded = false;
+    bool elementTypeTextureLoaded = false;
+
+    // Skeleton buffers (loaded per-mesh)
+    StorageBuffer jointIndicesBuffer;
+    StorageBuffer jointWeightsBuffer;
+    StorageBuffer boneMatricesBuffer;
+    bool skeletonLoaded = false;
+
+    // Skeleton & animation data (CPU-side)
+    Skeleton skeleton;
+    std::vector<Animation> animations;
+    std::vector<glm::vec4> jointIndicesData;
+    std::vector<glm::vec4> jointWeightsData;
+    uint32_t boneCount = 0;
+
     // CPU-side mesh data for stats computation
     std::vector<glm::vec3> cpuFaceCenters;
     std::vector<glm::vec3> cpuFaceNormals;
@@ -266,6 +302,13 @@ private:
     bool chainmailMode = false;
     float chainmailTiltAngle = 1.0f;    // Lean blend: 0=flat, 1=full chainmail lean
     bool triangulateMesh = false;
+    bool useElementTypeTexture = false;
+    bool useAOTexture = false;
+    bool doSkinning = false;
+    bool animationPlaying = false;
+    float animationTime = 0.0f;
+    float animationSpeed = 1.0f;
+    float lastDeltaTime = 0.0f;
     bool vsync = false;
     bool pendingSwapChainRecreation = false;
 

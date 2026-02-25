@@ -51,7 +51,20 @@ struct MeshInfoUBO {
 // Descriptor Bindings - Set 2 (PerObjectSet)
 // ============================================================================
 
-#define BINDING_CONFIG_UBO 0
+#define BINDING_CONFIG_UBO     0
+#define BINDING_SKIN_JOINTS    1
+#define BINDING_SKIN_WEIGHTS   2
+#define BINDING_BONE_MATRICES  3
+#define BINDING_SAMPLERS       4
+#define BINDING_TEXTURES       5
+
+// Texture/sampler array indices
+#define AO_TEXTURE             0
+#define ELEMENT_TYPE_TEXTURE   1
+#define LINEAR_SAMPLER         0
+#define NEAREST_SAMPLER        1
+#define SAMPLER_COUNT          2
+#define TEXTURE_COUNT          2
 
 struct ResurfacingUBO {
     uint elementType;      // 0=torus, 1=sphere, 2=cone, 3=cylinder
@@ -68,6 +81,11 @@ struct ResurfacingUBO {
     float lodFactor;       // LOD multiplier
     uint doCulling;        // enable culling
     float cullingThreshold;
+
+    uint doSkinning;            // 0 = off, 1 = apply bone transforms
+    uint hasElementTypeTexture; // 0 = use uniform elementType, 1 = sample texture
+    uint hasAOTexture;          // 0 = no AO, 1 = sample AO texture
+    uint padding1;
 };
 
 // ============================================================================
@@ -196,7 +214,30 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
     float lodFactor;
     uint  doCulling;
     float cullingThreshold;
+    uint  doSkinning;
+    uint  hasElementTypeTexture;
+    uint  hasAOTexture;
+    uint  padding1;
 } resurfacingUBO;
+
+// --- Skinning SSBOs (set 2, bindings 1-3) ---
+
+LAYOUT_STD430(SET_PER_OBJECT, BINDING_SKIN_JOINTS) readonly buffer SkinJointsBuffer {
+    vec4 jointIndices[];
+};
+
+LAYOUT_STD430(SET_PER_OBJECT, BINDING_SKIN_WEIGHTS) readonly buffer SkinWeightsBuffer {
+    vec4 jointWeights[];
+};
+
+LAYOUT_STD430(SET_PER_OBJECT, BINDING_BONE_MATRICES) readonly buffer BoneMatricesBuffer {
+    mat4 boneMatrices[];
+};
+
+// --- Texture samplers (set 2, bindings 4-5) ---
+
+layout(set = SET_PER_OBJECT, binding = BINDING_SAMPLERS) uniform sampler samplers[SAMPLER_COUNT];
+layout(set = SET_PER_OBJECT, binding = BINDING_TEXTURES) uniform texture2D textures[TEXTURE_COUNT];
 
 // --- Constants ---
 

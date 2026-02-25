@@ -270,10 +270,16 @@ void Renderer::createLogicalDevice() {
     maintenance4Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES;
     maintenance4Features.maintenance4 = VK_TRUE;
 
+    // Enable descriptor indexing for partial binding support
+    VkPhysicalDeviceDescriptorIndexingFeatures descriptorIndexingFeatures{};
+    descriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+    descriptorIndexingFeatures.pNext = &maintenance4Features;
+    descriptorIndexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
+
     // Enable mesh shader features via pNext chain
     VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures{};
     meshShaderFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
-    meshShaderFeatures.pNext = &maintenance4Features;
+    meshShaderFeatures.pNext = &descriptorIndexingFeatures;
     meshShaderFeatures.taskShader = VK_TRUE;
     meshShaderFeatures.meshShader = VK_TRUE;
 
@@ -848,26 +854,78 @@ void Renderer::createDescriptorSetLayouts() {
         throw std::runtime_error("Failed to create half-edge descriptor set layout!");
     }
 
-    // Set 2: PerObject
-    // Binding 0: ResurfacingUBO (task + mesh stages)
-    VkDescriptorSetLayoutBinding objBinding{};
-    objBinding.binding = 0;  // BINDING_CONFIG_UBO
-    objBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    objBinding.descriptorCount = 1;
-    objBinding.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
-                             VK_SHADER_STAGE_MESH_BIT_EXT;
+    // Set 2: PerObject (6 bindings, partial binding for optional resources)
+    VkShaderStageFlags taskMeshFrag = VK_SHADER_STAGE_TASK_BIT_EXT |
+                                       VK_SHADER_STAGE_MESH_BIT_EXT |
+                                       VK_SHADER_STAGE_FRAGMENT_BIT;
+    VkShaderStageFlags taskMesh = VK_SHADER_STAGE_TASK_BIT_EXT |
+                                   VK_SHADER_STAGE_MESH_BIT_EXT;
+
+    std::array<VkDescriptorSetLayoutBinding, 6> objBindings{};
+
+    // Binding 0: ResurfacingUBO
+    objBindings[0].binding = 0;
+    objBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    objBindings[0].descriptorCount = 1;
+    objBindings[0].stageFlags = taskMeshFrag;
+
+    // Binding 1: Joint indices SSBO
+    objBindings[1].binding = 1;
+    objBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    objBindings[1].descriptorCount = 1;
+    objBindings[1].stageFlags = taskMesh;
+
+    // Binding 2: Joint weights SSBO
+    objBindings[2].binding = 2;
+    objBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    objBindings[2].descriptorCount = 1;
+    objBindings[2].stageFlags = taskMesh;
+
+    // Binding 3: Bone matrices SSBO
+    objBindings[3].binding = 3;
+    objBindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    objBindings[3].descriptorCount = 1;
+    objBindings[3].stageFlags = taskMesh;
+
+    // Binding 4: Samplers [linear, nearest]
+    objBindings[4].binding = 4;
+    objBindings[4].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    objBindings[4].descriptorCount = 2;
+    objBindings[4].stageFlags = taskMeshFrag;
+
+    // Binding 5: Textures [AO, element type map]
+    objBindings[5].binding = 5;
+    objBindings[5].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    objBindings[5].descriptorCount = 2;
+    objBindings[5].stageFlags = taskMeshFrag;
+
+    // Partial binding: bindings 1-5 may remain unwritten for non-dragon meshes
+    std::array<VkDescriptorBindingFlags, 6> bindingFlags{};
+    bindingFlags[0] = 0;  // binding 0 (UBO) always written
+    bindingFlags[1] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    bindingFlags[2] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    bindingFlags[3] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    bindingFlags[4] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    bindingFlags[5] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+
+    VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo{};
+    bindingFlagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+    bindingFlagsInfo.bindingCount = static_cast<uint32_t>(bindingFlags.size());
+    bindingFlagsInfo.pBindingFlags = bindingFlags.data();
 
     VkDescriptorSetLayoutCreateInfo objLayoutInfo{};
     objLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    objLayoutInfo.bindingCount = 1;
-    objLayoutInfo.pBindings = &objBinding;
+    objLayoutInfo.pNext = &bindingFlagsInfo;
+    objLayoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+    objLayoutInfo.bindingCount = static_cast<uint32_t>(objBindings.size());
+    objLayoutInfo.pBindings = objBindings.data();
 
     if (vkCreateDescriptorSetLayout(device, &objLayoutInfo, nullptr,
                                      &perObjectSetLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create per-object descriptor set layout!");
     }
 
-    std::cout << "Descriptor set layouts created (Scene, HalfEdge, PerObject)" << std::endl;
+    std::cout << "Descriptor set layouts created (Scene, HalfEdge, PerObject[6 bindings])" << std::endl;
 }
 
 void Renderer::createPipelineLayout() {
@@ -962,18 +1020,27 @@ void Renderer::createUniformBuffers() {
 }
 
 void Renderer::createDescriptorPool() {
-    std::array<VkDescriptorPoolSize, 2> poolSizes{};
+    std::array<VkDescriptorPoolSize, 4> poolSizes{};
 
     // UBOs: 2 per scene frame + 1 ResurfacingUBO for per-object set
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2 + 1);
 
-    // SSBOs: 17 for HE buffers
+    // SSBOs: 17 for HE buffers + 3 for skeleton (joints, weights, bone matrices)
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[1].descriptorCount = 17;
+    poolSizes[1].descriptorCount = 17 + 3;
+
+    // Samplers: 2 (linear + nearest)
+    poolSizes[2].type = VK_DESCRIPTOR_TYPE_SAMPLER;
+    poolSizes[2].descriptorCount = 2;
+
+    // Sampled images: 2 (AO + element type map)
+    poolSizes[3].type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    poolSizes[3].descriptorCount = 2;
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
     // scene sets + 1 HE set + 1 per-object set
@@ -1375,4 +1442,36 @@ VKAPI_ATTR VkBool32 VKAPI_CALL Renderer::debugCallback(
     }
 
     return VK_FALSE;
+}
+
+void Renderer::createSamplers() {
+    // Linear sampler (for AO texture - smooth interpolation)
+    VkSamplerCreateInfo linearInfo{};
+    linearInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    linearInfo.magFilter = VK_FILTER_LINEAR;
+    linearInfo.minFilter = VK_FILTER_LINEAR;
+    linearInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    linearInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    linearInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    linearInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+
+    if (vkCreateSampler(device, &linearInfo, nullptr, &linearSampler) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create linear sampler!");
+    }
+
+    // Nearest sampler (for element type map - exact color classification)
+    VkSamplerCreateInfo nearestInfo{};
+    nearestInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    nearestInfo.magFilter = VK_FILTER_NEAREST;
+    nearestInfo.minFilter = VK_FILTER_NEAREST;
+    nearestInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    nearestInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    nearestInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    nearestInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+
+    if (vkCreateSampler(device, &nearestInfo, nullptr, &nearestSampler) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create nearest sampler!");
+    }
+
+    std::cout << "Samplers created (linear + nearest)" << std::endl;
 }

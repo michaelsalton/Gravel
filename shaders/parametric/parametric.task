@@ -27,6 +27,7 @@ struct TaskPayload {
     uint deltaU;        // Tile size in U direction
     uint deltaV;        // Tile size in V direction
     float faceColor;    // Face 2-coloring (0.0 or 1.0) for chainmail
+    vec2 baseUV;        // Base mesh UV (for AO/element type map sampling)
 };
 
 taskPayloadSharedEXT TaskPayload payload;
@@ -99,6 +100,21 @@ void getDeltaUV(uint M, uint N, out uint deltaU, out uint deltaV) {
 }
 
 // ============================================================================
+// Element Type Map Sampling
+// ============================================================================
+
+uint getElementTypeFromTexture(vec2 uv) {
+    uv.y = 1.0 - uv.y;  // Flip V (OBJ convention)
+    vec3 c = texture(sampler2D(textures[ELEMENT_TYPE_TEXTURE], samplers[NEAREST_SAMPLER]), uv).rgb;
+
+    if (c.b >= 0.9 && c.r <= 0.1 && c.g <= 0.1) return 2u;           // blue  -> cone/spike
+    if (c.r >= 0.9 && c.b >= 0.9 && c.g <= 0.1) return 1u;           // violet -> sphere
+    if (c.g >= 0.9 && c.r <= 0.1 && c.b <= 0.1) return 0xFFFFFFFFu;  // green  -> empty (cull)
+
+    return resurfacingUBO.elementType;  // default from UI
+}
+
+// ============================================================================
 // Main: Mapping Function F with Amplification K and Culling
 // ============================================================================
 
@@ -125,6 +141,7 @@ void main() {
         payload.area = readFaceArea(faceId);
         // Vertex elements tilt opposite to their adjacent face
         payload.faceColor = 1.0 - readFaceColor(faceId);
+        payload.baseUV = getVertexTexCoord(vertId);
 
         // Edge tangent: use the vertex's outgoing edge direction
         if (edge >= 0) {
@@ -144,8 +161,12 @@ void main() {
         payload.area = readFaceArea(faceId);
         payload.faceColor = readFaceColor(faceId);
 
-        // Edge tangent: use the face's first edge direction
+        // Base UV: use the face's first vertex texcoord
         int edge = readFaceEdge(faceId);
+        uint firstVert = uint(getHalfEdgeVertex(uint(edge)));
+        payload.baseUV = getVertexTexCoord(firstVert);
+
+        // Edge tangent: use the face's first edge direction
         int v0id = getHalfEdgeVertex(uint(edge));
         int nextHE = getHalfEdgeNext(uint(edge));
         int v1id = getHalfEdgeVertex(uint(nextHE));
@@ -154,9 +175,30 @@ void main() {
         payload.edgeTangent = normalize(edgeDir - dot(edgeDir, payload.normal) * payload.normal);
     }
 
+    // Bone skinning: transform position and normal by weighted bone matrices
+    if (resurfacingUBO.doSkinning != 0u) {
+        uint skinVertId = isVertex ? vertId : uint(getHalfEdgeVertex(uint(readFaceEdge(faceId))));
+        vec4 j = jointIndices[skinVertId];
+        vec4 w = jointWeights[skinVertId];
+        mat4 skinMat = w.x * boneMatrices[int(j.x)] + w.y * boneMatrices[int(j.y)]
+                     + w.z * boneMatrices[int(j.z)] + w.w * boneMatrices[int(j.w)];
+        payload.position = (skinMat * vec4(payload.position, 1.0)).xyz;
+        payload.normal = normalize((skinMat * vec4(payload.normal, 0.0)).xyz);
+    }
+
     payload.taskId = globalId;
     payload.isVertex = isVertex ? 1u : 0u;
     payload.elementType = push.elementType;
+
+    // Override element type from texture map if enabled
+    if (resurfacingUBO.hasElementTypeTexture != 0u) {
+        uint mappedType = getElementTypeFromTexture(payload.baseUV);
+        if (mappedType == 0xFFFFFFFFu) {
+            EmitMeshTasksEXT(0, 0, 1);  // cull: green region
+            return;
+        }
+        payload.elementType = mappedType;
+    }
 
     // MVP needed for both frustum culling and LOD
     mat4 mvp = viewUBO.projection * viewUBO.view * push.model;

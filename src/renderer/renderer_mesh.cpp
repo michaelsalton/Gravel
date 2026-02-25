@@ -2,10 +2,14 @@
 #include "renderer/renderer_mesh.h"
 #include "geometry/HalfEdge.h"
 #include "loaders/ObjLoader.h"
+#include "loaders/ImageLoader.h"
+#include "loaders/GltfLoader.h"
+#include <tiny_gltf.h>
 #include "core/window.h"
 #include <iostream>
 #include <cstring>
 #include <stdexcept>
+#include <filesystem>
 
 void Renderer::uploadHalfEdgeMesh(const HalfEdgeMesh& mesh) {
     std::cout << "Uploading half-edge mesh to GPU..." << std::endl;
@@ -202,7 +206,67 @@ void Renderer::updatePerObjectDescriptorSet() {
     vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
 }
 
+void Renderer::writeTextureDescriptors() {
+    std::vector<VkWriteDescriptorSet> writes;
+
+    // Binding 4: Samplers [linear, nearest]
+    VkDescriptorImageInfo samplerInfos[2] = {};
+    samplerInfos[0].sampler = linearSampler;
+    samplerInfos[1].sampler = nearestSampler;
+
+    VkWriteDescriptorSet samplerWrite{};
+    samplerWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    samplerWrite.dstSet = perObjectDescriptorSet;
+    samplerWrite.dstBinding = 4;  // BINDING_SAMPLERS
+    samplerWrite.dstArrayElement = 0;
+    samplerWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    samplerWrite.descriptorCount = 2;
+    samplerWrite.pImageInfo = samplerInfos;
+    writes.push_back(samplerWrite);
+
+    // Binding 5: Textures [AO, element type map]
+    // Both slots must be written if either is loaded (partial binding is per-binding, not per-element)
+    // Use a 1x1 placeholder for missing textures — but with partial binding we can write only loaded ones
+    VkDescriptorImageInfo textureInfos[2] = {};
+
+    // If AO is loaded, write slot 0
+    if (aoTextureLoaded) {
+        textureInfos[0].imageView = aoTexture.getImageView();
+        textureInfos[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkWriteDescriptorSet texWrite{};
+        texWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        texWrite.dstSet = perObjectDescriptorSet;
+        texWrite.dstBinding = 5;  // BINDING_TEXTURES
+        texWrite.dstArrayElement = 0;  // AO_TEXTURE index
+        texWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        texWrite.descriptorCount = 1;
+        texWrite.pImageInfo = &textureInfos[0];
+        writes.push_back(texWrite);
+    }
+
+    // If element type map is loaded, write slot 1
+    if (elementTypeTextureLoaded) {
+        textureInfos[1].imageView = elementTypeTexture.getImageView();
+        textureInfos[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        VkWriteDescriptorSet texWrite{};
+        texWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        texWrite.dstSet = perObjectDescriptorSet;
+        texWrite.dstBinding = 5;  // BINDING_TEXTURES
+        texWrite.dstArrayElement = 1;  // ELEMENT_TYPE_TEXTURE index
+        texWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        texWrite.descriptorCount = 1;
+        texWrite.pImageInfo = &textureInfos[1];
+        writes.push_back(texWrite);
+    }
+
+    vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
+                           writes.data(), 0, nullptr);
+}
+
 void Renderer::processInput(Window& win, float deltaTime) {
+    lastDeltaTime = deltaTime;
     camera.processInput(win, deltaTime);
 }
 
@@ -213,11 +277,118 @@ size_t Renderer::calculateVRAM() const {
     for (const auto& buf : heIntBuffers) total += buf.getSize();
     for (const auto& buf : heFloatBuffers) total += buf.getSize();
     total += sizeof(MeshInfoUBO);
+    if (aoTextureLoaded) total += aoTexture.getMemorySize();
+    if (elementTypeTextureLoaded) total += elementTypeTexture.getMemorySize();
+    if (skeletonLoaded) {
+        total += jointIndicesBuffer.getSize();
+        total += jointWeightsBuffer.getSize();
+        total += boneMatricesBuffer.getSize();
+    }
     return total;
+}
+
+void Renderer::cleanupMeshTextures() {
+    aoTexture.destroy();
+    elementTypeTexture.destroy();
+    aoTextureLoaded = false;
+    elementTypeTextureLoaded = false;
+    useElementTypeTexture = false;
+    useAOTexture = false;
+}
+
+void Renderer::cleanupMeshSkeleton() {
+    jointIndicesBuffer.destroy();
+    jointWeightsBuffer.destroy();
+    boneMatricesBuffer.destroy();
+    skeletonLoaded = false;
+    doSkinning = false;
+    animationPlaying = false;
+    animationTime = 0.0f;
+    boneCount = 0;
+    skeleton = Skeleton{};
+    animations.clear();
+    jointIndicesData.clear();
+    jointWeightsData.clear();
+}
+
+void Renderer::writeSkeletonDescriptors() {
+    std::vector<VkWriteDescriptorSet> writes;
+
+    // Binding 1: Joint indices SSBO
+    VkDescriptorBufferInfo jointsInfo{};
+    jointsInfo.buffer = jointIndicesBuffer.getBuffer();
+    jointsInfo.offset = 0;
+    jointsInfo.range = jointIndicesBuffer.getSize();
+
+    VkWriteDescriptorSet jointsWrite{};
+    jointsWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    jointsWrite.dstSet = perObjectDescriptorSet;
+    jointsWrite.dstBinding = 1;  // BINDING_SKIN_JOINTS
+    jointsWrite.dstArrayElement = 0;
+    jointsWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    jointsWrite.descriptorCount = 1;
+    jointsWrite.pBufferInfo = &jointsInfo;
+    writes.push_back(jointsWrite);
+
+    // Binding 2: Joint weights SSBO
+    VkDescriptorBufferInfo weightsInfo{};
+    weightsInfo.buffer = jointWeightsBuffer.getBuffer();
+    weightsInfo.offset = 0;
+    weightsInfo.range = jointWeightsBuffer.getSize();
+
+    VkWriteDescriptorSet weightsWrite{};
+    weightsWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    weightsWrite.dstSet = perObjectDescriptorSet;
+    weightsWrite.dstBinding = 2;  // BINDING_SKIN_WEIGHTS
+    weightsWrite.dstArrayElement = 0;
+    weightsWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    weightsWrite.descriptorCount = 1;
+    weightsWrite.pBufferInfo = &weightsInfo;
+    writes.push_back(weightsWrite);
+
+    // Binding 3: Bone matrices SSBO
+    VkDescriptorBufferInfo bonesInfo{};
+    bonesInfo.buffer = boneMatricesBuffer.getBuffer();
+    bonesInfo.offset = 0;
+    bonesInfo.range = boneMatricesBuffer.getSize();
+
+    VkWriteDescriptorSet bonesWrite{};
+    bonesWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    bonesWrite.dstSet = perObjectDescriptorSet;
+    bonesWrite.dstBinding = 3;  // BINDING_BONE_MATRICES
+    bonesWrite.dstArrayElement = 0;
+    bonesWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    bonesWrite.descriptorCount = 1;
+    bonesWrite.pBufferInfo = &bonesInfo;
+    writes.push_back(bonesWrite);
+
+    vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
+                           writes.data(), 0, nullptr);
+}
+
+void Renderer::loadAndUploadTexture(const std::string& path, VulkanTexture& texture,
+                                     VkFormat format, bool& loadedFlag) {
+    if (!std::filesystem::exists(path)) return;
+
+    ImageData img = ImageLoader::load(path);
+    if (img.pixels.empty()) return;
+
+    texture.create(device, physicalDevice, img.width, img.height, format);
+    texture.uploadData(commandPool, graphicsQueue, physicalDevice,
+                       img.pixels.data(), img.pixels.size());
+    loadedFlag = true;
+
+    std::cout << "  Loaded texture: " << path
+              << " (" << img.width << "x" << img.height << ")" << std::endl;
 }
 
 void Renderer::loadMesh(const std::string& path) {
     vkDeviceWaitIdle(device);
+
+    // Cleanup previous mesh resources
+    cleanupMeshTextures();
+    cleanupMeshSkeleton();
+
     NGonMesh ngon = ObjLoader::load(path);
     if (triangulateMesh) {
         ObjLoader::triangulate(ngon);
@@ -225,4 +396,69 @@ void Renderer::loadMesh(const std::string& path) {
     HalfEdgeMesh heMesh = HalfEdgeBuilder::build(ngon);
     computeFace2Coloring(heMesh);
     uploadHalfEdgeMesh(heMesh);
+
+    // Auto-detect textures in the same directory as the mesh
+    std::string dir = path.substr(0, path.find_last_of("/\\") + 1);
+
+    // Determine AO texture name based on mesh filename
+    std::string filename = path.substr(path.find_last_of("/\\") + 1);
+    if (filename.find("dragon_coat") != std::string::npos) {
+        loadAndUploadTexture(dir + "dragon_coat_ao.png", aoTexture,
+                             VK_FORMAT_R8G8B8A8_SRGB, aoTextureLoaded);
+    } else if (filename.find("dragon") != std::string::npos) {
+        // Note: the AO file is named "dargon_8k_ao.png" (typo in asset)
+        loadAndUploadTexture(dir + "dargon_8k_ao.png", aoTexture,
+                             VK_FORMAT_R8G8B8A8_SRGB, aoTextureLoaded);
+    }
+
+    // Element type map (shared across dragon meshes)
+    loadAndUploadTexture(dir + "dragon_element_type_map_2k.png", elementTypeTexture,
+                         VK_FORMAT_R8G8B8A8_UNORM, elementTypeTextureLoaded);
+
+    // Write sampler and texture descriptors if any textures were loaded
+    if (aoTextureLoaded || elementTypeTextureLoaded) {
+        writeTextureDescriptors();
+    }
+
+    // Auto-detect glTF skeleton (same name as OBJ, with .gltf extension)
+    std::string baseName = path.substr(0, path.find_last_of('.'));
+    std::string gltfPath = baseName + ".gltf";
+    if (std::filesystem::exists(gltfPath)) {
+        std::cout << "  Loading glTF skeleton: " << gltfPath << std::endl;
+        try {
+            tinygltf::Model gltfModel = GltfLoader::loadModel(gltfPath);
+            GltfLoader::extractSkeleton(gltfModel, skeleton);
+            GltfLoader::extractAnimations(gltfModel, skeleton, animations);
+            GltfLoader::matchBoneDataToObjMesh(gltfModel, ngon.positions,
+                                                jointIndicesData, jointWeightsData);
+
+            boneCount = static_cast<uint32_t>(skeleton.bones.size());
+            if (boneCount > 0 && !jointIndicesData.empty()) {
+                // Upload joint indices (device-local, static)
+                jointIndicesBuffer.create(device, physicalDevice,
+                    jointIndicesData.size() * sizeof(glm::vec4),
+                    jointIndicesData.data());
+
+                // Upload joint weights (device-local, static)
+                jointWeightsBuffer.create(device, physicalDevice,
+                    jointWeightsData.size() * sizeof(glm::vec4),
+                    jointWeightsData.data());
+
+                // Bone matrices buffer (already host-visible via StorageBuffer::create)
+                std::vector<glm::mat4> boneMatrices;
+                GltfLoader::computeBoneMatrices(skeleton, boneMatrices);
+                boneMatricesBuffer.create(device, physicalDevice,
+                    boneMatrices.size() * sizeof(glm::mat4),
+                    boneMatrices.data());
+
+                skeletonLoaded = true;
+                writeSkeletonDescriptors();
+
+                std::cout << "  Skeleton uploaded: " << boneCount << " bones, "
+                          << jointIndicesData.size() << " skinned vertices" << std::endl;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "  glTF loading error: " << e.what() << std::endl;
+        }
+    }
 }

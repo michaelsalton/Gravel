@@ -16,6 +16,8 @@ layout(location = 2) perprimitiveEXT in PerPrimitiveData {
     flat uvec4 data;  // x = taskId, y = isVertex, z = elementType, w = unused
 } pIn;
 
+layout(location = 3) perprimitiveEXT in vec2 baseUV;
+
 // UBOs
 layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
     mat4 view;
@@ -121,6 +123,14 @@ void main() {
 
                 vec3 elementColor = getDebugColor(taskId);
                 color = mix(color, color * elementColor, 0.2);
+            }
+
+            // Apply ambient occlusion from texture
+            if (resurfacingUBO.hasAOTexture != 0u) {
+                vec2 aoUV = baseUV;
+                aoUV.y = 1.0 - aoUV.y;  // Flip V (OBJ convention)
+                float ao = texture(sampler2D(textures[AO_TEXTURE], samplers[LINEAR_SAMPLER]), aoUV).r;
+                color *= ao;
             }
             break;
         }

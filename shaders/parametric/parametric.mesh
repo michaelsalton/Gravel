@@ -27,6 +27,7 @@ struct TaskPayload {
     uint deltaU;
     uint deltaV;
     float faceColor;
+    vec2 baseUV;
 };
 
 taskPayloadSharedEXT TaskPayload payload;
@@ -41,6 +42,8 @@ layout(location = 0) out PerVertexData {
 layout(location = 2) perprimitiveEXT out PerPrimitiveData {
     flat uvec4 data;  // x = taskId, y = isVertex, z = elementType, w = unused
 } pOut[];
+
+layout(location = 3) perprimitiveEXT out vec2 outBaseUV[];
 
 layout(push_constant) uniform PushConstants {
     mat4 model;
@@ -147,5 +150,7 @@ void main() {
 
         pOut[triId0].data = uvec4(payload.taskId, payload.isVertex, payload.elementType, 0);
         pOut[triId1].data = uvec4(payload.taskId, payload.isVertex, payload.elementType, 0);
+        outBaseUV[triId0] = payload.baseUV;
+        outBaseUV[triId1] = payload.baseUV;
     }
 }

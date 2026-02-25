@@ -88,7 +88,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                 1000.0f / ImGui::GetIO().Framerate);
     ImGui::Separator();
 
-    const char* meshNames[] = { "Cube", "Plane (3x3)", "Plane (5x5)", "Sphere", "Sphere HD", "Icosphere", "Dragon 8K", "Boy" };
+    const char* meshNames[] = { "Cube", "Plane (3x3)", "Plane (5x5)", "Sphere", "Sphere HD", "Icosphere", "Dragon 8K", "Dragon Coat", "Boy" };
     const char* meshPaths[] = {
         ASSETS_DIR "cube.obj",
         ASSETS_DIR "plane.obj",
@@ -96,10 +96,11 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ASSETS_DIR "sphere.obj",
         ASSETS_DIR "sphere_hd.obj",
         ASSETS_DIR "icosphere.obj",
-        ASSETS_DIR "dragon_8k.obj",
+        ASSETS_DIR "dragon/dragon_8k.obj",
+        ASSETS_DIR "dragon/dragon_coat.obj",
         ASSETS_DIR "boy.obj"
     };
-    constexpr int meshCount = 8;
+    constexpr int meshCount = 9;
 
     // Base mesh selector
     if (ImGui::CollapsingHeader("Base Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -121,6 +122,11 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 4)) {
             elementType = static_cast<uint32_t>(currentType);
         }
+
+        if (elementTypeTextureLoaded)
+            ImGui::Checkbox("Use Element Type Map", &useElementTypeTexture);
+        if (aoTextureLoaded)
+            ImGui::Checkbox("Use AO Texture", &useAOTexture);
 
         ImGui::SliderFloat("Global Scale", &userScaling, 0.01f, 3.0f);
 
@@ -205,6 +211,23 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::Text("Elements: %u (%u faces + %u verts)",
                      totalElements, heNbFaces, heNbVertices);
         ImGui::Text("Total mesh tasks: %u", totalElements * totalTiles);
+    }
+
+    // Animation controls (only when skeleton is loaded)
+    if (skeletonLoaded && ImGui::CollapsingHeader("Animation", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Checkbox("Enable Skinning", &doSkinning);
+        ImGui::Checkbox("Play Animation", &animationPlaying);
+        ImGui::SliderFloat("Speed", &animationSpeed, 0.0f, 5.0f, "%.2f");
+
+        float duration = animations.empty() ? 0.0f : animations[0].duration;
+        ImGui::SliderFloat("Time", &animationTime, 0.0f, duration, "%.3f s");
+        ImGui::SameLine();
+        if (ImGui::Button("Reset##anim")) animationTime = 0.0f;
+
+        ImGui::Text("Bones: %u", boneCount);
+        if (!animations.empty()) {
+            ImGui::Text("Animation: \"%s\" (%.2fs)", animations[0].name.c_str(), duration);
+        }
     }
 
     // Lighting controls
