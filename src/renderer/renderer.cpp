@@ -294,7 +294,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                             VK_SHADER_STAGE_FRAGMENT_BIT,
                             0, sizeof(PushConstants), &pushConstants);
         uint32_t totalTasks = heMeshUploaded
-            ? (chainmailMode ? heNbFaces : (heNbFaces + heNbVertices))
+            ? (heNbFaces + heNbVertices)
             : 1;
         pfnCmdDrawMeshTasksEXT(cmd, totalTasks, 1, 1);
     } else {

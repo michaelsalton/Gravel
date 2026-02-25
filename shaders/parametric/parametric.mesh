@@ -125,10 +125,11 @@ void main() {
         // Transform to world space
         vec3 worldPos, worldNormal;
         if (push.chainmailMode != 0u) {
+            float isVertexF = (payload.isVertex != 0u) ? 1.0 : 0.0;
             offsetVertexChainmail(localPos, localNormal,
                                   payload.position, payload.normal,
                                   payload.area, push.userScaling,
-                                  payload.faceColor, push.chainmailTiltAngle,
+                                  isVertexF, push.chainmailTiltAngle,
                                   worldPos, worldNormal);
         } else {
             offsetVertex(localPos, localNormal,

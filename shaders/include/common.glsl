@@ -76,31 +76,36 @@ void offsetVertex(vec3 localPos, vec3 localNormal,
     worldNormal = rotatedNormal;
 }
 
-// Chainmail variant: tilts the ring around the tangent axis based on face color.
-// faceColor 0.0 tilts by +tiltAngle, faceColor 1.0 tilts by -tiltAngle.
+// Chainmail variant (European 4-in-1): face elements and vertex elements
+// lean in opposite directions around the tangent axis.
+// Rings lie mostly flat on the surface with a moderate lean for interlocking.
+// isVertex: 0.0 for face elements, 1.0 for vertex elements.
+// tiltAmount: 0.0 = flat, 1.0 = full lean (~30 degrees).
 void offsetVertexChainmail(vec3 localPos, vec3 localNormal,
                            vec3 elementPos, vec3 elementNormal,
                            float faceArea, float userScaling,
-                           float faceColor, float tiltAngle,
+                           float isVertex, float tiltAmount,
                            out vec3 worldPos, out vec3 worldNormal) {
     float scale = sqrt(faceArea) * userScaling;
-    vec3 scaledPos = localPos * scale;
+    vec3 pos = localPos * scale;
 
-    mat3 rotation = alignRotationToVector(elementNormal);
+    // Build flat TBN frame aligned to surface normal
+    mat3 tbn = alignRotationToVector(elementNormal);
 
-    // Tilt around tangent (column 0): color 0 -> +angle, color 1 -> -angle
-    float sign = 1.0 - 2.0 * faceColor;
-    float angle = sign * tiltAngle;
+    // Face elements lean one way, vertex elements lean the other
+    float sign = (isVertex > 0.5) ? -1.0 : 1.0;
+    float angle = sign * tiltAmount * 0.52; // ~30° at tiltAmount=1.0
+
+    // Tilt around tangent axis: rotate bitangent and normal
     float c = cos(angle);
     float s = sin(angle);
-    vec3 T = rotation[0];
-    vec3 B = rotation[1];
-    vec3 N = rotation[2];
-    rotation[1] = c * B + s * N;
-    rotation[2] = -s * B + c * N;
+    vec3 B = tbn[1];
+    vec3 N = tbn[2];
+    tbn[1] = c * B + s * N;
+    tbn[2] = -s * B + c * N;
 
-    worldPos = elementPos + rotation * scaledPos;
-    worldNormal = rotation * localNormal;
+    worldPos = elementPos + tbn * pos;
+    worldNormal = tbn * localNormal;
 }
 
 #endif // COMMON_GLSL

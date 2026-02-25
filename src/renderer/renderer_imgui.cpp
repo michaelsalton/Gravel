@@ -99,13 +99,14 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
     // Base mesh — always visible regardless of render mode
     if (ImGui::CollapsingHeader("Base Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
-        const char* meshNames[] = { "Cube", "Plane" };
+        const char* meshNames[] = { "Cube", "Plane (3x3)", "Plane (5x5)" };
         const char* meshPaths[] = {
             ASSETS_DIR "cube.obj",
-            ASSETS_DIR "plane.obj"
+            ASSETS_DIR "plane.obj",
+            ASSETS_DIR "plane5x5.obj"
         };
         int prev = selectedMesh;
-        ImGui::Combo("Mesh", &selectedMesh, meshNames, 2);
+        ImGui::Combo("Mesh", &selectedMesh, meshNames, 3);
         if (selectedMesh != prev)
             loadMesh(meshPaths[selectedMesh]);
         ImGui::Checkbox("Show Base Mesh", &showBaseMesh);
@@ -171,7 +172,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             ImGui::Unindent();
         }
 
-        ImGui::SliderFloat("Global Scale", &userScaling, 0.1f, 3.0f);
+        ImGui::SliderFloat("Global Scale", &userScaling, 0.01f, 3.0f);
 
         ImGui::Separator();
 
@@ -229,21 +230,16 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::Checkbox("Chainmail Mode", &chainmailMode);
         if (chainmailMode) {
             ImGui::Indent();
-            ImGui::SliderFloat("Tilt Angle", &chainmailTiltAngle, 0.0f, 1.5708f, "%.3f rad");
-            float degrees = chainmailTiltAngle * 180.0f / 3.14159265f;
+            ImGui::SliderFloat("Lean Amount", &chainmailTiltAngle, 0.0f, 1.0f, "%.2f");
             ImGui::SameLine();
-            ImGui::Text("(%.1f deg)", degrees);
+            ImGui::Text("(0=flat, 1=full)");
             ImGui::Unindent();
         }
 
         ImGui::Separator();
-        uint32_t totalElements = chainmailMode ? heNbFaces : (heNbFaces + heNbVertices);
-        if (chainmailMode) {
-            ImGui::Text("Elements: %u (faces only)", totalElements);
-        } else {
-            ImGui::Text("Elements: %u (%u faces + %u verts)",
-                         totalElements, heNbFaces, heNbVertices);
-        }
+        uint32_t totalElements = heNbFaces + heNbVertices;
+        ImGui::Text("Elements: %u (%u faces + %u verts)",
+                     totalElements, heNbFaces, heNbVertices);
         ImGui::Text("Total mesh tasks: %u", totalElements * totalTiles);
     }
 
@@ -443,12 +439,12 @@ void Renderer::applyPresetChainMail() {
     renderMode         = RENDER_MODE_PARAMETRIC;
     elementType        = 0;       // Torus
     torusMajorR        = 1.0f;
-    torusMinorR        = 0.15f;   // Thinner tube for chainmail look
-    userScaling        = 0.18f;   // Slightly larger for overlap
-    resolutionM        = 12;      // Higher res for smooth rings
+    torusMinorR        = 0.15f;   // Thin tube for clean interlocking
+    userScaling        = 0.85f;   // Large enough for rings to overlap and interlock
+    resolutionM        = 16;      // Higher res for smooth rings
     resolutionN        = 8;
     chainmailMode      = true;
-    chainmailTiltAngle = 0.785f;  // ~45 degrees
+    chainmailTiltAngle = 1.0f;    // Full lean (reference project default)
 }
 
 void Renderer::applyPresetDragonScales() {

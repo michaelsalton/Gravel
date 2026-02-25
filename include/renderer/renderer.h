@@ -293,7 +293,7 @@ private:
     bool enableLod = false;
     float lodFactor = 1.0f;
     bool chainmailMode = false;
-    float chainmailTiltAngle = 0.785f;  // ~45 degrees
+    float chainmailTiltAngle = 1.0f;    // Lean blend: 0=flat, 1=full chainmail lean
     bool vsync = false;
     bool pendingSwapChainRecreation = false;
 
