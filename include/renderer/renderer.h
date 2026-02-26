@@ -121,6 +121,8 @@ private:
     size_t calculateVRAM() const;
 
     void applyPresetChainMail();
+    void applyPresetSphereWorld();
+    void applyPresetChainmailMan();
 
     void initImGui();
     void cleanupImGui();

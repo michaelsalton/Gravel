@@ -43,16 +43,16 @@ void OrbitCamera::processInput(Window& win, float deltaTime) {
     }
 
     // Gamepad right stick: orbit yaw/pitch (always active)
-    float rx = win.getGamepadAxis(GLFW_GAMEPAD_AXIS_RIGHT_X);
-    float ry = win.getGamepadAxis(GLFW_GAMEPAD_AXIS_RIGHT_Y);
+    const auto& pad = win.gamepad;
+    glm::vec2 rs = pad.getRightStick();
     constexpr float stickSensitivity = 120.0f;  // degrees/sec at full deflection
-    yaw += rx * stickSensitivity * deltaTime;
-    pitch += ry * stickSensitivity * deltaTime;
+    yaw += rs.x * stickSensitivity * deltaTime;
+    pitch += rs.y * stickSensitivity * deltaTime;
     pitch = glm::clamp(pitch, -80.0f, 80.0f);
 
     // Gamepad triggers: zoom (LT = zoom in, RT = zoom out)
-    float lt = win.getGamepadTrigger(GLFW_GAMEPAD_AXIS_LEFT_TRIGGER);
-    float rt = win.getGamepadTrigger(GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER);
+    float lt = pad.getLeftTrigger();
+    float rt = pad.getRightTrigger();
     constexpr float zoomSpeed = 5.0f;
     distance += (rt - lt) * zoomSpeed * deltaTime;
     distance = glm::clamp(distance, 1.5f, 20.0f);

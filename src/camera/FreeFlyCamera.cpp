@@ -79,24 +79,23 @@ void FreeFlyCamera::processInput(Window& win, float deltaTime) {
     }
 
     // Gamepad left stick: forward/back + strafe
-    float lx = win.getGamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_X);
-    float ly = win.getGamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y);
+    const auto& pad = win.gamepad;
+    glm::vec2 ls = pad.getLeftStick();
     float gs = speed * deltaTime;
-    if (win.getGamepadButton(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER)) gs *= 5.0f;
-    position += forward * (-ly) * gs;
-    position += right * lx * gs;
+    if (pad.getButton(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER)) gs *= 5.0f;
+    position += forward * (-ls.y) * gs;
+    position += right * ls.x * gs;
 
     // Gamepad right stick: look
-    float rx = win.getGamepadAxis(GLFW_GAMEPAD_AXIS_RIGHT_X);
-    float ry = win.getGamepadAxis(GLFW_GAMEPAD_AXIS_RIGHT_Y);
+    glm::vec2 rs = pad.getRightStick();
     constexpr float stickSensitivity = 120.0f;
-    yaw += rx * stickSensitivity * deltaTime;
-    pitch -= ry * stickSensitivity * deltaTime;
+    yaw += rs.x * stickSensitivity * deltaTime;
+    pitch -= rs.y * stickSensitivity * deltaTime;
     pitch = glm::clamp(pitch, -89.0f, 89.0f);
 
     // Gamepad triggers: up/down
-    float lt = win.getGamepadTrigger(GLFW_GAMEPAD_AXIS_LEFT_TRIGGER);
-    float rt = win.getGamepadTrigger(GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER);
+    float lt = pad.getLeftTrigger();
+    float rt = pad.getRightTrigger();
     position += up * rt * gs;
     position -= up * lt * gs;
 }

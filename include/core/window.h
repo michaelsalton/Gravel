@@ -3,6 +3,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <string>
+#include "input/Gamepad.h"
 
 class Window {
 public:
@@ -29,12 +30,8 @@ public:
     float getScrollDelta() const { return scrollDelta; }
     void  resetInputDeltas() { mouseDeltaX = 0.0f; mouseDeltaY = 0.0f; scrollDelta = 0.0f; }
 
-    // Gamepad — call pollGamepad() once per frame before reading
-    void pollGamepad();
-    bool isGamepadConnected() const { return gamepadConnected; }
-    float getGamepadAxis(int axis) const;       // stick axes, deadzone applied
-    float getGamepadTrigger(int axis) const;    // trigger axes, remapped to 0..1
-    bool  getGamepadButton(int button) const;
+    // Gamepad — call gamepad.poll() once per frame before reading
+    Gamepad gamepad;
 
 private:
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
@@ -56,7 +53,4 @@ private:
     float mouseDeltaY = 0.0f;
     float scrollDelta = 0.0f;
 
-    // Gamepad state
-    bool gamepadConnected = false;
-    GLFWgamepadstate gamepadState{};
 };

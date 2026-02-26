@@ -88,6 +88,14 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                 1000.0f / ImGui::GetIO().Framerate);
     ImGui::Separator();
 
+    // Presets
+    if (ImGui::CollapsingHeader("Presets", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::Button("Sphere World")) applyPresetSphereWorld();
+        ImGui::SameLine();
+        if (ImGui::Button("Chainmail Man")) applyPresetChainmailMan();
+    }
+    ImGui::Separator();
+
     const char* meshNames[] = { "Cube", "Plane (3x3)", "Plane (5x5)", "Sphere", "Sphere HD", "Icosphere", "Dragon 8K", "Dragon Coat", "Boy", "Man" };
     const char* meshPaths[] = {
         ASSETS_DIR "cube.obj",
@@ -422,5 +430,57 @@ void Renderer::applyPresetChainMail() {
     metalF0            = 0.65f;
     envReflection      = 0.35f;
     metalDiffuse       = 0.3f;
+}
+
+void Renderer::applyPresetSphereWorld() {
+    // Load icosphere
+    selectedMesh = 5;
+    pendingMeshLoad = ASSETS_DIR "icosphere.obj";
+    triangulateMesh = false;
+    baseMeshMode = 0;           // Off (just show resurfaced elements)
+
+    // Sphere resurfacing
+    elementType = 1;            // Sphere
+    sphereRadius = 0.6f;
+    userScaling = 0.12f;
+    resolutionM = 12;
+    resolutionN = 12;
+
+    // Disable chainmail
+    chainmailMode = false;
+
+    // Free-fly camera
+    thirdPersonMode = false;
+    activeCamera = &freeFlyCamera;
+
+    // Default lighting
+    lightPosition = glm::vec3(5.0f, 5.0f, 5.0f);
+    ambientColor = glm::vec3(0.2f, 0.2f, 0.25f);
+    ambientIntensity = 1.0f;
+    diffuseIntensity = 0.7f;
+    specularIntensity = 0.5f;
+    shininess = 32.0f;
+}
+
+void Renderer::applyPresetChainmailMan() {
+    // Load man mesh (triggers skeleton + skin texture auto-load)
+    selectedMesh = 9;
+    pendingMeshLoad = ASSETS_DIR "man/man.obj";
+    triangulateMesh = false;
+    baseMeshMode = 5;           // Skin display
+
+    // Chainmail resurfacing (reuse existing preset values)
+    applyPresetChainMail();
+
+    // Third-person mode with orbit camera
+    thirdPersonMode = true;
+    activeCamera = &orbitCamera;
+    orbitCamera.distance = 5.0f;
+    orbitCamera.setTarget(player.position + glm::vec3(0.0f, 1.5f, 0.0f));
+
+    // Enable skinning and animation
+    doSkinning = true;
+    animationPlaying = true;
+    animationSpeed = 1.0f;
 }
 
