@@ -29,6 +29,13 @@ public:
     float getScrollDelta() const { return scrollDelta; }
     void  resetInputDeltas() { mouseDeltaX = 0.0f; mouseDeltaY = 0.0f; scrollDelta = 0.0f; }
 
+    // Gamepad — call pollGamepad() once per frame before reading
+    void pollGamepad();
+    bool isGamepadConnected() const { return gamepadConnected; }
+    float getGamepadAxis(int axis) const;       // stick axes, deadzone applied
+    float getGamepadTrigger(int axis) const;    // trigger axes, remapped to 0..1
+    bool  getGamepadButton(int button) const;
+
 private:
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
     static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
@@ -48,4 +55,8 @@ private:
     float mouseDeltaX = 0.0f;
     float mouseDeltaY = 0.0f;
     float scrollDelta = 0.0f;
+
+    // Gamepad state
+    bool gamepadConnected = false;
+    GLFWgamepadstate gamepadState{};
 };

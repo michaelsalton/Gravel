@@ -301,6 +301,7 @@ void Renderer::writeTextureDescriptors() {
 
 void Renderer::processInput(Window& win, float deltaTime) {
     lastDeltaTime = deltaTime;
+    win.pollGamepad();
 
     if (thirdPersonMode) {
         // Update orbit camera target to player chest height

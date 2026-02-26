@@ -72,3 +72,33 @@ void Window::scrollCallback(GLFWwindow* window, double xoffset, double yoffset) 
     auto* app = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
     app->scrollDelta += static_cast<float>(yoffset);
 }
+
+void Window::pollGamepad() {
+    gamepadConnected = glfwJoystickPresent(GLFW_JOYSTICK_1) &&
+                       glfwJoystickIsGamepad(GLFW_JOYSTICK_1);
+    if (gamepadConnected) {
+        glfwGetGamepadState(GLFW_JOYSTICK_1, &gamepadState);
+    }
+}
+
+float Window::getGamepadAxis(int axis) const {
+    if (!gamepadConnected) return 0.0f;
+    float val = gamepadState.axes[axis];
+    constexpr float deadzone = 0.15f;
+    if (std::abs(val) < deadzone) return 0.0f;
+    float sign = val > 0.0f ? 1.0f : -1.0f;
+    return sign * (std::abs(val) - deadzone) / (1.0f - deadzone);
+}
+
+float Window::getGamepadTrigger(int axis) const {
+    if (!gamepadConnected) return 0.0f;
+    float val = (gamepadState.axes[axis] + 1.0f) * 0.5f;  // -1..1 -> 0..1
+    constexpr float deadzone = 0.1f;
+    if (val < deadzone) return 0.0f;
+    return (val - deadzone) / (1.0f - deadzone);
+}
+
+bool Window::getGamepadButton(int button) const {
+    if (!gamepadConnected) return false;
+    return gamepadState.buttons[button] == GLFW_PRESS;
+}

@@ -45,6 +45,18 @@ void PlayerController::update(Window& window, float deltaTime, float cameraYaw) 
         moveDir += right;
     }
 
+    // Gamepad left stick (additive with keyboard)
+    float lx = window.getGamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_X);
+    float ly = window.getGamepadAxis(GLFW_GAMEPAD_AXIS_LEFT_Y);
+    if (std::abs(lx) > 0.0f || std::abs(ly) > 0.0f) {
+        moveDir += right * lx;
+        moveDir -= forward * ly;  // stick Y: up = -1
+    }
+
+    // Gamepad LB = sprint
+    if (window.getGamepadButton(GLFW_GAMEPAD_BUTTON_LEFT_BUMPER))
+        sprinting = true;
+
     float dirLength = glm::length(moveDir);
     if (dirLength > 0.001f) {
         moveDir /= dirLength;  // normalize

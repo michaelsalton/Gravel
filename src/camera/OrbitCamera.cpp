@@ -19,7 +19,7 @@ glm::mat4 OrbitCamera::getViewMatrix() const {
     return glm::lookAt(getPosition(), orbitTarget, glm::vec3(0.0f, 1.0f, 0.0f));
 }
 
-void OrbitCamera::processInput(Window& win, float /*deltaTime*/) {
+void OrbitCamera::processInput(Window& win, float deltaTime) {
     GLFWwindow* glfwWin = win.getHandle();
     ImGuiIO& io = ImGui::GetIO();
 
@@ -41,6 +41,21 @@ void OrbitCamera::processInput(Window& win, float /*deltaTime*/) {
         distance -= scroll * 0.5f;
         distance = glm::clamp(distance, 1.5f, 20.0f);
     }
+
+    // Gamepad right stick: orbit yaw/pitch (always active)
+    float rx = win.getGamepadAxis(GLFW_GAMEPAD_AXIS_RIGHT_X);
+    float ry = win.getGamepadAxis(GLFW_GAMEPAD_AXIS_RIGHT_Y);
+    constexpr float stickSensitivity = 120.0f;  // degrees/sec at full deflection
+    yaw += rx * stickSensitivity * deltaTime;
+    pitch += ry * stickSensitivity * deltaTime;
+    pitch = glm::clamp(pitch, -80.0f, 80.0f);
+
+    // Gamepad triggers: zoom (LT = zoom in, RT = zoom out)
+    float lt = win.getGamepadTrigger(GLFW_GAMEPAD_AXIS_LEFT_TRIGGER);
+    float rt = win.getGamepadTrigger(GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER);
+    constexpr float zoomSpeed = 5.0f;
+    distance += (rt - lt) * zoomSpeed * deltaTime;
+    distance = glm::clamp(distance, 1.5f, 20.0f);
 }
 
 void OrbitCamera::renderImGuiControls() {
