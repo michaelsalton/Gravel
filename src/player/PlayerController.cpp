@@ -2,13 +2,10 @@
 #include "core/window.h"
 #include "imgui.h"
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
 #include <cmath>
 
 void PlayerController::update(Window& window, float deltaTime, float cameraYaw) {
-    GLFWwindow* glfwWin = window.getHandle();
+    const auto& kb = window.keyboardMouse;
     ImGuiIO& io = ImGui::GetIO();
 
     if (io.WantCaptureKeyboard) {
@@ -18,8 +15,7 @@ void PlayerController::update(Window& window, float deltaTime, float cameraYaw) 
     }
 
     // Determine sprint state
-    sprinting = (glfwGetKey(glfwWin, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
-                 glfwGetKey(glfwWin, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS);
+    sprinting = (kb.getKey(GLFW_KEY_LEFT_SHIFT) || kb.getKey(GLFW_KEY_RIGHT_SHIFT));
 
     // Camera-relative directions on XZ plane
     float camYawRad = glm::radians(cameraYaw);
@@ -28,20 +24,16 @@ void PlayerController::update(Window& window, float deltaTime, float cameraYaw) 
 
     // Accumulate input direction
     glm::vec3 moveDir(0.0f);
-    if (glfwGetKey(glfwWin, GLFW_KEY_W) == GLFW_PRESS ||
-        glfwGetKey(glfwWin, GLFW_KEY_UP) == GLFW_PRESS) {
+    if (kb.getKey(GLFW_KEY_W) || kb.getKey(GLFW_KEY_UP)) {
         moveDir += forward;
     }
-    if (glfwGetKey(glfwWin, GLFW_KEY_S) == GLFW_PRESS ||
-        glfwGetKey(glfwWin, GLFW_KEY_DOWN) == GLFW_PRESS) {
+    if (kb.getKey(GLFW_KEY_S) || kb.getKey(GLFW_KEY_DOWN)) {
         moveDir -= forward;
     }
-    if (glfwGetKey(glfwWin, GLFW_KEY_A) == GLFW_PRESS ||
-        glfwGetKey(glfwWin, GLFW_KEY_LEFT) == GLFW_PRESS) {
+    if (kb.getKey(GLFW_KEY_A) || kb.getKey(GLFW_KEY_LEFT)) {
         moveDir -= right;
     }
-    if (glfwGetKey(glfwWin, GLFW_KEY_D) == GLFW_PRESS ||
-        glfwGetKey(glfwWin, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+    if (kb.getKey(GLFW_KEY_D) || kb.getKey(GLFW_KEY_RIGHT)) {
         moveDir += right;
     }
 

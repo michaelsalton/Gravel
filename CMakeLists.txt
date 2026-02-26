@@ -68,6 +68,7 @@ set(SOURCES
     src/loaders/ImageLoader.cpp
     src/loaders/GltfLoader.cpp
     src/input/Gamepad.cpp
+    src/input/KeyboardMouse.cpp
     src/level/LevelPreset.cpp
     src/player/PlayerController.cpp
     src/ui/ResurfacingPanel.cpp

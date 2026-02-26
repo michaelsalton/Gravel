@@ -2,9 +2,6 @@
 #include "core/window.h"
 #include "imgui.h"
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
 glm::vec3 FreeFlyCamera::getForward() const {
     glm::vec3 forward;
     forward.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
@@ -22,17 +19,16 @@ glm::mat4 FreeFlyCamera::getViewMatrix() const {
 }
 
 void FreeFlyCamera::processInput(Window& win, float deltaTime) {
-    GLFWwindow* glfwWin = win.getHandle();
+    const auto& kb = win.keyboardMouse;
     ImGuiIO& io = ImGui::GetIO();
 
-    float dx = win.getMouseDeltaX();
-    float dy = win.getMouseDeltaY();
-    float scroll = win.getScrollDelta();
-    win.resetInputDeltas();
+    float dx = kb.getMouseDeltaX();
+    float dy = kb.getMouseDeltaY();
+    float scroll = kb.getScrollDelta();
+    win.keyboardMouse.resetDeltas();
 
     // Right-click drag: rotate yaw/pitch
-    if (!io.WantCaptureMouse &&
-        glfwGetMouseButton(glfwWin, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
+    if (!io.WantCaptureMouse && kb.getMouseButton(GLFW_MOUSE_BUTTON_RIGHT)) {
         yaw += dx * sensitivity;
         pitch -= dy * sensitivity;
         pitch = glm::clamp(pitch, -89.0f, 89.0f);
@@ -50,30 +46,25 @@ void FreeFlyCamera::processInput(Window& win, float deltaTime) {
     // WASD / arrow keys: translate
     if (!io.WantCaptureKeyboard) {
         float s = speed * deltaTime;
-        if (glfwGetKey(glfwWin, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
-            glfwGetKey(glfwWin, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS) {
+        if (kb.getKey(GLFW_KEY_LEFT_SHIFT) || kb.getKey(GLFW_KEY_RIGHT_SHIFT)) {
             s *= 5.0f;
         }
-        if (glfwGetKey(glfwWin, GLFW_KEY_W) == GLFW_PRESS ||
-            glfwGetKey(glfwWin, GLFW_KEY_UP) == GLFW_PRESS) {
+        if (kb.getKey(GLFW_KEY_W) || kb.getKey(GLFW_KEY_UP)) {
             position += forward * s;
         }
-        if (glfwGetKey(glfwWin, GLFW_KEY_S) == GLFW_PRESS ||
-            glfwGetKey(glfwWin, GLFW_KEY_DOWN) == GLFW_PRESS) {
+        if (kb.getKey(GLFW_KEY_S) || kb.getKey(GLFW_KEY_DOWN)) {
             position -= forward * s;
         }
-        if (glfwGetKey(glfwWin, GLFW_KEY_A) == GLFW_PRESS ||
-            glfwGetKey(glfwWin, GLFW_KEY_LEFT) == GLFW_PRESS) {
+        if (kb.getKey(GLFW_KEY_A) || kb.getKey(GLFW_KEY_LEFT)) {
             position -= right * s;
         }
-        if (glfwGetKey(glfwWin, GLFW_KEY_D) == GLFW_PRESS ||
-            glfwGetKey(glfwWin, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+        if (kb.getKey(GLFW_KEY_D) || kb.getKey(GLFW_KEY_RIGHT)) {
             position += right * s;
         }
-        if (glfwGetKey(glfwWin, GLFW_KEY_E) == GLFW_PRESS) {
+        if (kb.getKey(GLFW_KEY_E)) {
             position += up * s;
         }
-        if (glfwGetKey(glfwWin, GLFW_KEY_Q) == GLFW_PRESS) {
+        if (kb.getKey(GLFW_KEY_Q)) {
             position -= up * s;
         }
     }

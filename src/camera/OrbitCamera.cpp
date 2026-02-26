@@ -2,9 +2,6 @@
 #include "core/window.h"
 #include "imgui.h"
 
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
 glm::vec3 OrbitCamera::getPosition() const {
     float yawRad = glm::radians(yaw);
     float pitchRad = glm::radians(pitch);
@@ -20,17 +17,16 @@ glm::mat4 OrbitCamera::getViewMatrix() const {
 }
 
 void OrbitCamera::processInput(Window& win, float deltaTime) {
-    GLFWwindow* glfwWin = win.getHandle();
+    const auto& kb = win.keyboardMouse;
     ImGuiIO& io = ImGui::GetIO();
 
-    float dx = win.getMouseDeltaX();
-    float dy = win.getMouseDeltaY();
-    float scroll = win.getScrollDelta();
-    win.resetInputDeltas();
+    float dx = kb.getMouseDeltaX();
+    float dy = kb.getMouseDeltaY();
+    float scroll = kb.getScrollDelta();
+    win.keyboardMouse.resetDeltas();
 
     // Right-click drag: orbit yaw/pitch
-    if (!io.WantCaptureMouse &&
-        glfwGetMouseButton(glfwWin, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
+    if (!io.WantCaptureMouse && kb.getMouseButton(GLFW_MOUSE_BUTTON_RIGHT)) {
         yaw += dx * sensitivity;
         pitch -= dy * sensitivity;
         pitch = glm::clamp(pitch, -80.0f, 80.0f);
