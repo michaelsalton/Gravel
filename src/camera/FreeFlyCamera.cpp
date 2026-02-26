@@ -1,11 +1,11 @@
-#include "core/camera.h"
+#include "camera/FreeFlyCamera.h"
 #include "core/window.h"
 #include "imgui.h"
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-glm::vec3 Camera::getForward() const {
+glm::vec3 FreeFlyCamera::getForward() const {
     glm::vec3 forward;
     forward.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
     forward.y = sin(glm::radians(pitch));
@@ -13,64 +13,28 @@ glm::vec3 Camera::getForward() const {
     return glm::normalize(forward);
 }
 
-glm::vec3 Camera::getRight() const {
+glm::vec3 FreeFlyCamera::getRight() const {
     return glm::normalize(glm::cross(getForward(), glm::vec3(0.0f, 1.0f, 0.0f)));
 }
 
-glm::mat4 Camera::getViewMatrix() const {
-    if (mode == Mode::ThirdPerson) {
-        // Compute camera position from orbit parameters
-        float yawRad = glm::radians(orbitYaw);
-        float pitchRad = glm::radians(orbitPitch);
-        glm::vec3 offset;
-        offset.x = orbitDistance * cos(pitchRad) * sin(yawRad);
-        offset.y = -orbitDistance * sin(pitchRad);
-        offset.z = orbitDistance * cos(pitchRad) * cos(yawRad);
-        glm::vec3 camPos = orbitTarget + offset;
-        return glm::lookAt(camPos, orbitTarget, glm::vec3(0.0f, 1.0f, 0.0f));
-    }
+glm::mat4 FreeFlyCamera::getViewMatrix() const {
     return glm::lookAt(position, position + getForward(), glm::vec3(0.0f, 1.0f, 0.0f));
 }
 
-glm::mat4 Camera::getProjectionMatrix(float aspect) const {
-    glm::mat4 proj = glm::perspective(glm::radians(fov), aspect, nearPlane, farPlane);
-    proj[1][1] *= -1;  // Vulkan NDC has Y pointing down
-    return proj;
-}
-
-void Camera::processInput(Window& win, float deltaTime) {
+void FreeFlyCamera::processInput(Window& win, float deltaTime) {
     GLFWwindow* glfwWin = win.getHandle();
     ImGuiIO& io = ImGui::GetIO();
 
-    // Snapshot and reset accumulated deltas for this frame
     float dx = win.getMouseDeltaX();
     float dy = win.getMouseDeltaY();
     float scroll = win.getScrollDelta();
     win.resetInputDeltas();
 
-    if (mode == Mode::ThirdPerson) {
-        // Right-click drag: orbit yaw/pitch
-        if (!io.WantCaptureMouse &&
-            glfwGetMouseButton(glfwWin, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
-            orbitYaw += dx * sensitivity;
-            orbitPitch -= dy * sensitivity;
-            orbitPitch = glm::clamp(orbitPitch, -80.0f, 80.0f);
-        }
-
-        // Scroll: zoom in/out
-        if (!io.WantCaptureMouse && scroll != 0.0f) {
-            orbitDistance -= scroll * 0.5f;
-            orbitDistance = glm::clamp(orbitDistance, 1.5f, 20.0f);
-        }
-        return;
-    }
-
-    // Free-fly mode below
     // Right-click drag: rotate yaw/pitch
     if (!io.WantCaptureMouse &&
         glfwGetMouseButton(glfwWin, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
         yaw += dx * sensitivity;
-        pitch -= dy * sensitivity;  // screen Y is inverted relative to world
+        pitch -= dy * sensitivity;
         pitch = glm::clamp(pitch, -89.0f, 89.0f);
     }
 
@@ -115,7 +79,7 @@ void Camera::processInput(Window& win, float deltaTime) {
     }
 }
 
-void Camera::renderImGuiControls() {
+void FreeFlyCamera::renderImGuiControls() {
     ImGui::DragFloat3("Position", &position.x, 0.1f);
     ImGui::DragFloat("Yaw",   &yaw,   0.5f, -180.0f, 180.0f, "%.1f deg");
     ImGui::DragFloat("Pitch", &pitch, 0.5f,  -89.0f,  89.0f, "%.1f deg");

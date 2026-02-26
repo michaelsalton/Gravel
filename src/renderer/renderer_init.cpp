@@ -988,11 +988,11 @@ void Renderer::createUniformBuffers() {
                    static_cast<float>(swapChainExtent.height);
 
     ViewUBO viewData{};
-    viewData.view           = camera.getViewMatrix();
-    viewData.projection     = camera.getProjectionMatrix(aspect);
-    viewData.cameraPosition = glm::vec4(camera.position, 1.0f);
-    viewData.nearPlane      = camera.nearPlane;
-    viewData.farPlane       = camera.farPlane;
+    viewData.view           = activeCamera->getViewMatrix();
+    viewData.projection     = activeCamera->getProjectionMatrix(aspect);
+    viewData.cameraPosition = glm::vec4(activeCamera->getPosition(), 1.0f);
+    viewData.nearPlane      = activeCamera->nearPlane;
+    viewData.farPlane       = activeCamera->farPlane;
 
     GlobalShadingUBO shadingData{};
     shadingData.lightPosition = glm::vec4(lightPosition, 0.0f);

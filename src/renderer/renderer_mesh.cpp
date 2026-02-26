@@ -304,10 +304,10 @@ void Renderer::processInput(Window& win, float deltaTime) {
 
     if (thirdPersonMode) {
         // Update orbit camera target to player chest height
-        camera.setOrbitTarget(player.position + glm::vec3(0.0f, 1.5f, 0.0f));
+        orbitCamera.setTarget(player.position + glm::vec3(0.0f, 1.5f, 0.0f));
 
         // Player movement uses camera's orbit yaw for direction
-        player.update(win, deltaTime, camera.getOrbitYaw());
+        player.update(win, deltaTime, orbitCamera.getYaw());
 
         // Drive animation from player movement state
         if (player.isMoving()) {
@@ -318,7 +318,7 @@ void Renderer::processInput(Window& win, float deltaTime) {
         }
     }
 
-    camera.processInput(win, deltaTime);
+    activeCamera->processInput(win, deltaTime);
 }
 
 size_t Renderer::calculateVRAM() const {

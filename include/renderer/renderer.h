@@ -10,7 +10,8 @@
 #include <array>
 
 #include "vulkan/vkHelper.h"
-#include "core/camera.h"
+#include "camera/FreeFlyCamera.h"
+#include "camera/OrbitCamera.h"
 #include "renderer/renderer_init.h"
 #include "loaders/GltfLoader.h"
 #include "player/PlayerController.h"
@@ -336,8 +337,10 @@ private:
     bool pendingSwapChainRecreation = false;
     std::string pendingMeshLoad;  // deferred mesh load (set by ImGui, processed between frames)
 
-    // Camera
-    Camera camera;
+    // Cameras
+    FreeFlyCamera freeFlyCamera;
+    OrbitCamera   orbitCamera;
+    CameraBase*   activeCamera = &freeFlyCamera;
 
     // Player controller (third-person mode)
     PlayerController player;

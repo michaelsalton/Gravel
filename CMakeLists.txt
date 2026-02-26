@@ -58,7 +58,8 @@ endif()
 set(SOURCES
     src/main.cpp
     src/core/window.cpp
-    src/core/camera.cpp
+    src/camera/FreeFlyCamera.cpp
+    src/camera/OrbitCamera.cpp
     src/renderer/renderer.cpp
     src/renderer/renderer_init.cpp
     src/renderer/renderer_mesh.cpp

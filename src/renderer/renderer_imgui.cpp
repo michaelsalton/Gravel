@@ -124,18 +124,14 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         bool prevMode = thirdPersonMode;
         ImGui::Checkbox("Third Person Mode", &thirdPersonMode);
         if (thirdPersonMode != prevMode) {
-            if (thirdPersonMode) {
-                // Save free-fly state and switch camera to orbit
-                camera.mode = Camera::Mode::ThirdPerson;
-            } else {
-                // Restore free-fly camera
-                camera.mode = Camera::Mode::FreeFly;
-            }
+            activeCamera = thirdPersonMode
+                ? static_cast<CameraBase*>(&orbitCamera)
+                : static_cast<CameraBase*>(&freeFlyCamera);
         }
         if (thirdPersonMode) {
             ImGui::SliderFloat("Move Speed", &player.speed, 0.5f, 10.0f, "%.1f");
             ImGui::SliderFloat("Sprint Multiplier", &player.sprintMultiplier, 1.0f, 5.0f, "%.1f");
-            ImGui::SliderFloat("Camera Distance", &camera.orbitDistance, 1.5f, 20.0f, "%.1f");
+            ImGui::SliderFloat("Camera Distance", &orbitCamera.distance, 1.5f, 20.0f, "%.1f");
             ImGui::SliderFloat("Rotation Smoothing", &player.rotationSmoothing, 1.0f, 30.0f, "%.1f");
             ImGui::Text("Position: (%.1f, %.1f, %.1f)",
                         player.position.x, player.position.y, player.position.z);
@@ -315,7 +311,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
     // Camera controls
     if (ImGui::CollapsingHeader("Camera")) {
-        camera.renderImGuiControls();
+        activeCamera->renderImGuiControls();
     }
 
     // Advanced: Culling, LOD, Display, Statistics
@@ -357,7 +353,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             if (heMeshUploaded && (enableFrustumCulling || enableBackfaceCulling)) {
                 float aspect = static_cast<float>(swapChainExtent.width) /
                                static_cast<float>(swapChainExtent.height);
-                glm::mat4 mvp = camera.getProjectionMatrix(aspect) * camera.getViewMatrix();
+                glm::mat4 mvp = activeCamera->getProjectionMatrix(aspect) * activeCamera->getViewMatrix();
 
                 visibleElements = 0;
                 auto testElement = [&](glm::vec3 pos, glm::vec3 normal, float area) -> bool {
@@ -372,7 +368,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                         if (ndc.z + cr <  0.0f || ndc.z - cr > 1.0f) return false;
                     }
                     if (enableBackfaceCulling) {
-                        glm::vec3 viewDir = glm::normalize(camera.position - pos);
+                        glm::vec3 viewDir = glm::normalize(activeCamera->getPosition() - pos);
                         if (glm::dot(viewDir, normal) <= cullingThreshold) return false;
                     }
                     return true;

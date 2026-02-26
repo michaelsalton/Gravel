@@ -204,22 +204,11 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                        static_cast<float>(swapChainExtent.height);
 
         ViewUBO viewData{};
-        viewData.view           = camera.getViewMatrix();
-        viewData.projection     = camera.getProjectionMatrix(aspect);
-        // In orbit mode, compute camera position from orbit parameters
-        glm::vec3 camPos = camera.position;
-        if (camera.mode == Camera::Mode::ThirdPerson) {
-            float yawRad = glm::radians(camera.orbitYaw);
-            float pitchRad = glm::radians(camera.orbitPitch);
-            glm::vec3 offset;
-            offset.x = camera.orbitDistance * cos(pitchRad) * sin(yawRad);
-            offset.y = -camera.orbitDistance * sin(pitchRad);
-            offset.z = camera.orbitDistance * cos(pitchRad) * cos(yawRad);
-            camPos = player.position + glm::vec3(0.0f, 1.5f, 0.0f) + offset;
-        }
-        viewData.cameraPosition = glm::vec4(camPos, 1.0f);
-        viewData.nearPlane      = camera.nearPlane;
-        viewData.farPlane       = camera.farPlane;
+        viewData.view           = activeCamera->getViewMatrix();
+        viewData.projection     = activeCamera->getProjectionMatrix(aspect);
+        viewData.cameraPosition = glm::vec4(activeCamera->getPosition(), 1.0f);
+        viewData.nearPlane      = activeCamera->nearPlane;
+        viewData.farPlane       = activeCamera->farPlane;
         memcpy(viewUBOMapped[currentFrame], &viewData, sizeof(ViewUBO));
     }
 
