@@ -16,6 +16,10 @@
 #include "loaders/GltfLoader.h"
 #include "player/PlayerController.h"
 #include "level/LevelPreset.h"
+#include "ui/ResurfacingPanel.h"
+#include "ui/AdvancedPanel.h"
+#include "ui/PlayerPanel.h"
+#include "ui/AnimationPanel.h"
 
 class Window;
 struct HalfEdgeMesh;
@@ -84,6 +88,92 @@ public:
     void loadMesh(const std::string& path);
     void processInput(Window& window, float deltaTime);
 
+    void applyPreset(const LevelPreset& preset);
+    void applyPresetChainMail();
+
+    // ---- UI-facing state (driven by ImGui panels) ----
+
+    int              selectedMesh   = 0;
+
+    // Resurfacing config
+    uint32_t elementType = 0;       // 0=torus, 1=sphere, 2=cone, 3=cylinder
+    float userScaling = 0.1f;
+    float torusMajorR = 1.0f;
+    float torusMinorR = 0.3f;
+    float sphereRadius = 0.5f;
+    uint32_t resolutionM = 8;
+    uint32_t resolutionN = 8;
+    uint32_t debugMode = 0;         // 0=shading, 1=normals, 2=UV, 3=taskID, 4=element type
+    bool enableFrustumCulling = false;
+    bool enableBackfaceCulling = false;
+    float cullingThreshold = 0.0f;  // Back-face dot product threshold [-1, 1]
+    bool enableLod = false;
+    float lodFactor = 1.0f;
+    int baseMeshMode = 0;  // 0=off, 1=wireframe, 2=solid, 3=both
+    bool chainmailMode = false;
+    float chainmailTiltAngle = 1.0f;    // Lean blend: 0=flat, 1=full chainmail lean
+    bool triangulateMesh = false;
+    bool useElementTypeTexture = false;
+    bool useAOTexture = false;
+    bool useMaskTexture = false;
+    bool doSkinning = false;
+    bool animationPlaying = false;
+    float animationTime = 0.0f;
+    float animationSpeed = 1.0f;
+    float lastDeltaTime = 0.0f;
+    bool vsync = false;
+    bool pendingSwapChainRecreation = false;
+    std::string pendingMeshLoad;  // deferred mesh load (set by ImGui, processed between frames)
+    const LevelPreset* pendingPreset = nullptr;  // post-load state to apply after mesh load
+
+    // Cameras
+    FreeFlyCamera freeFlyCamera;
+    OrbitCamera   orbitCamera;
+    CameraBase*   activeCamera = &freeFlyCamera;
+
+    // Player controller (third-person mode)
+    PlayerController player;
+    bool thirdPersonMode = false;
+
+    // Lighting config
+    glm::vec3 lightPosition = glm::vec3(5.0f, 5.0f, 5.0f);
+    glm::vec3 ambientColor = glm::vec3(0.2f, 0.2f, 0.25f);
+    float ambientIntensity = 1.0f;
+    float diffuseIntensity = 0.7f;
+    float specularIntensity = 0.5f;
+    float shininess = 32.0f;
+    float metalF0 = 0.65f;
+    float envReflection = 0.35f;
+    float metalDiffuse = 0.3f;
+
+    // Loaded-state flags (read by UI panels)
+    bool aoTextureLoaded = false;
+    bool elementTypeTextureLoaded = false;
+    bool maskTextureLoaded = false;
+    bool skinTextureLoaded = false;
+    bool skeletonLoaded = false;
+    bool heMeshUploaded = false;
+    uint32_t heNbFaces = 0;
+    uint32_t heNbVertices = 0;
+    uint32_t boneCount = 0;
+
+    // Skeleton & animation data (CPU-side)
+    Skeleton skeleton;
+    std::vector<Animation> animations;
+    std::vector<glm::vec4> jointIndicesData;
+    std::vector<glm::vec4> jointWeightsData;
+
+    // CPU-side mesh data for stats computation
+    std::vector<glm::vec3> cpuFaceCenters;
+    std::vector<glm::vec3> cpuFaceNormals;
+    std::vector<float>     cpuFaceAreas;
+    std::vector<glm::vec3> cpuVertexPositions;
+    std::vector<glm::vec3> cpuVertexNormals;
+    std::vector<float>     cpuVertexFaceAreas;  // area of adjacent face, for bounding radius
+
+    // Swap chain extent (needed by stats panel)
+    VkExtent2D swapChainExtent;
+
 private:
     void recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex);
     void createInstance();
@@ -120,9 +210,6 @@ private:
     void loadAndUploadTexture(const std::string& path, VulkanTexture& texture,
                                VkFormat format, bool& loadedFlag);
     size_t calculateVRAM() const;
-
-    void applyPreset(const LevelPreset& preset);
-    void applyPresetChainMail();
 
     void initImGui();
     void cleanupImGui();
@@ -199,8 +286,6 @@ private:
     VkPipeline baseMeshPipeline = VK_NULL_HANDLE;       // wireframe
     VkPipeline baseMeshSolidPipeline = VK_NULL_HANDLE;  // solid fill
 
-    int              selectedMesh   = 0;  // 0 = cube, 1 = plane
-
     // Mesh shader function pointer
     PFN_vkCmdDrawMeshTasksEXT pfnCmdDrawMeshTasksEXT = nullptr;
 
@@ -232,7 +317,6 @@ private:
     // Swap chain
     VkSwapchainKHR swapChain = VK_NULL_HANDLE;
     VkFormat swapChainImageFormat;
-    VkExtent2D swapChainExtent;
     std::vector<VkImage> swapChainImages;
     std::vector<VkImageView> swapChainImageViews;
 
@@ -246,10 +330,6 @@ private:
 
     VkBuffer meshInfoBuffer = VK_NULL_HANDLE;
     VkDeviceMemory meshInfoMemory = VK_NULL_HANDLE;
-
-    bool heMeshUploaded = false;
-    uint32_t heNbFaces = 0;
-    uint32_t heNbVertices = 0;
 
     // Per-object descriptor set (Set 2) and associated buffers
     VkDescriptorSet perObjectDescriptorSet = VK_NULL_HANDLE;
@@ -268,16 +348,11 @@ private:
     VulkanTexture elementTypeTexture;
     VulkanTexture maskTexture;
     VulkanTexture skinTexture;
-    bool aoTextureLoaded = false;
-    bool elementTypeTextureLoaded = false;
-    bool maskTextureLoaded = false;
-    bool skinTextureLoaded = false;
 
     // Skeleton buffers (loaded per-mesh)
     StorageBuffer jointIndicesBuffer;
     StorageBuffer jointWeightsBuffer;
     StorageBuffer boneMatricesBuffer;
-    bool skeletonLoaded = false;
 
     // Secondary mesh (base dragon rendered under coat)
     std::vector<StorageBuffer> secondaryHeVec4Buffers;
@@ -294,71 +369,11 @@ private:
     uint32_t secondaryHeNbVertices = 0;
     bool dualMeshActive = false;
 
-    // Skeleton & animation data (CPU-side)
-    Skeleton skeleton;
-    std::vector<Animation> animations;
-    std::vector<glm::vec4> jointIndicesData;
-    std::vector<glm::vec4> jointWeightsData;
-    uint32_t boneCount = 0;
-
-    // CPU-side mesh data for stats computation
-    std::vector<glm::vec3> cpuFaceCenters;
-    std::vector<glm::vec3> cpuFaceNormals;
-    std::vector<float>     cpuFaceAreas;
-    std::vector<glm::vec3> cpuVertexPositions;
-    std::vector<glm::vec3> cpuVertexNormals;
-    std::vector<float>     cpuVertexFaceAreas;  // area of adjacent face, for bounding radius
-
-    // Resurfacing config (driven by ImGui)
-    uint32_t elementType = 0;       // 0=torus, 1=sphere, 2=cone, 3=cylinder
-    float userScaling = 0.1f;
-    float torusMajorR = 1.0f;
-    float torusMinorR = 0.3f;
-    float sphereRadius = 0.5f;
-    uint32_t resolutionM = 8;
-    uint32_t resolutionN = 8;
-    uint32_t debugMode = 0;         // 0=shading, 1=normals, 2=UV, 3=taskID, 4=element type
-    bool enableFrustumCulling = false;
-    bool enableBackfaceCulling = false;
-    float cullingThreshold = 0.0f;  // Back-face dot product threshold [-1, 1]
-    bool enableLod = false;
-    float lodFactor = 1.0f;
-    int baseMeshMode = 0;  // 0=off, 1=wireframe, 2=solid, 3=both
-    bool chainmailMode = false;
-    float chainmailTiltAngle = 1.0f;    // Lean blend: 0=flat, 1=full chainmail lean
-    bool triangulateMesh = false;
-    bool useElementTypeTexture = false;
-    bool useAOTexture = false;
-    bool useMaskTexture = false;
-    bool doSkinning = false;
-    bool animationPlaying = false;
-    float animationTime = 0.0f;
-    float animationSpeed = 1.0f;
-    float lastDeltaTime = 0.0f;
-    bool vsync = false;
-    bool pendingSwapChainRecreation = false;
-    std::string pendingMeshLoad;  // deferred mesh load (set by ImGui, processed between frames)
-    const LevelPreset* pendingPreset = nullptr;  // post-load state to apply after mesh load
-
-    // Cameras
-    FreeFlyCamera freeFlyCamera;
-    OrbitCamera   orbitCamera;
-    CameraBase*   activeCamera = &freeFlyCamera;
-
-    // Player controller (third-person mode)
-    PlayerController player;
-    bool thirdPersonMode = false;
-
-    // Lighting config (driven by ImGui)
-    glm::vec3 lightPosition = glm::vec3(5.0f, 5.0f, 5.0f);
-    glm::vec3 ambientColor = glm::vec3(0.2f, 0.2f, 0.25f);
-    float ambientIntensity = 1.0f;
-    float diffuseIntensity = 0.7f;
-    float specularIntensity = 0.5f;
-    float shininess = 32.0f;
-    float metalF0 = 0.65f;
-    float envReflection = 0.35f;
-    float metalDiffuse = 0.3f;
+    // UI panels
+    ResurfacingPanel resurfacingPanel;
+    AdvancedPanel    advancedPanel;
+    PlayerPanel      playerPanel;
+    AnimationPanel   animationPanel;
 
 #ifdef NDEBUG
     const bool enableValidationLayers = false;

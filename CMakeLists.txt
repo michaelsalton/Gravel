@@ -70,6 +70,10 @@ set(SOURCES
     src/input/Gamepad.cpp
     src/level/LevelPreset.cpp
     src/player/PlayerController.cpp
+    src/ui/ResurfacingPanel.cpp
+    src/ui/AdvancedPanel.cpp
+    src/ui/PlayerPanel.cpp
+    src/ui/AnimationPanel.cpp
     src/geometry/HalfEdge.cpp
     src/vulkan/vkHelper.cpp
     ${IMGUI_SOURCES}
