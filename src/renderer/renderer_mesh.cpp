@@ -11,64 +11,38 @@
 #include <stdexcept>
 #include <filesystem>
 
-void Renderer::uploadHalfEdgeMesh(const HalfEdgeMesh& mesh) {
-    std::cout << "Uploading half-edge mesh to GPU..." << std::endl;
+void Renderer::uploadHEBuffers(const HalfEdgeMesh& mesh,
+                                std::vector<StorageBuffer>& vec4Bufs,
+                                std::vector<StorageBuffer>& vec2Bufs,
+                                std::vector<StorageBuffer>& intBufs,
+                                std::vector<StorageBuffer>& floatBufs,
+                                VkBuffer& meshInfoBuf, VkDeviceMemory& meshInfoMem) {
+    vec4Bufs.resize(5);
+    vec2Bufs.resize(1);
+    intBufs.resize(10);
+    floatBufs.resize(1);
 
-    heVec4Buffers.resize(5);
-    heVec2Buffers.resize(1);
-    heIntBuffers.resize(10);
-    heFloatBuffers.resize(1);
+    vec4Bufs[0].create(device, physicalDevice, mesh.vertexPositions.size() * sizeof(glm::vec4), mesh.vertexPositions.data());
+    vec4Bufs[1].create(device, physicalDevice, mesh.vertexColors.size() * sizeof(glm::vec4), mesh.vertexColors.data());
+    vec4Bufs[2].create(device, physicalDevice, mesh.vertexNormals.size() * sizeof(glm::vec4), mesh.vertexNormals.data());
+    vec4Bufs[3].create(device, physicalDevice, mesh.faceNormals.size() * sizeof(glm::vec4), mesh.faceNormals.data());
+    vec4Bufs[4].create(device, physicalDevice, mesh.faceCenters.size() * sizeof(glm::vec4), mesh.faceCenters.data());
 
-    // vec4 buffers: positions, colors, normals, faceNormals, faceCenters
-    heVec4Buffers[0].create(device, physicalDevice,
-        mesh.vertexPositions.size() * sizeof(glm::vec4),
-        mesh.vertexPositions.data());
-    heVec4Buffers[1].create(device, physicalDevice,
-        mesh.vertexColors.size() * sizeof(glm::vec4),
-        mesh.vertexColors.data());
-    heVec4Buffers[2].create(device, physicalDevice,
-        mesh.vertexNormals.size() * sizeof(glm::vec4),
-        mesh.vertexNormals.data());
-    heVec4Buffers[3].create(device, physicalDevice,
-        mesh.faceNormals.size() * sizeof(glm::vec4),
-        mesh.faceNormals.data());
-    heVec4Buffers[4].create(device, physicalDevice,
-        mesh.faceCenters.size() * sizeof(glm::vec4),
-        mesh.faceCenters.data());
+    vec2Bufs[0].create(device, physicalDevice, mesh.vertexTexCoords.size() * sizeof(glm::vec2), mesh.vertexTexCoords.data());
 
-    // vec2 buffer: texCoords
-    heVec2Buffers[0].create(device, physicalDevice,
-        mesh.vertexTexCoords.size() * sizeof(glm::vec2),
-        mesh.vertexTexCoords.data());
+    intBufs[0].create(device, physicalDevice, mesh.vertexEdges.size() * sizeof(int), mesh.vertexEdges.data());
+    intBufs[1].create(device, physicalDevice, mesh.faceEdges.size() * sizeof(int), mesh.faceEdges.data());
+    intBufs[2].create(device, physicalDevice, mesh.faceVertCounts.size() * sizeof(int), mesh.faceVertCounts.data());
+    intBufs[3].create(device, physicalDevice, mesh.faceOffsets.size() * sizeof(int), mesh.faceOffsets.data());
+    intBufs[4].create(device, physicalDevice, mesh.heVertex.size() * sizeof(int), mesh.heVertex.data());
+    intBufs[5].create(device, physicalDevice, mesh.heFace.size() * sizeof(int), mesh.heFace.data());
+    intBufs[6].create(device, physicalDevice, mesh.heNext.size() * sizeof(int), mesh.heNext.data());
+    intBufs[7].create(device, physicalDevice, mesh.hePrev.size() * sizeof(int), mesh.hePrev.data());
+    intBufs[8].create(device, physicalDevice, mesh.heTwin.size() * sizeof(int), mesh.heTwin.data());
+    intBufs[9].create(device, physicalDevice, mesh.vertexFaceIndices.size() * sizeof(int), mesh.vertexFaceIndices.data());
 
-    // int buffers: vertexEdges, faceEdges, faceVertCounts, faceOffsets,
-    //              heVertex, heFace, heNext, hePrev, heTwin, vertexFaceIndices
-    heIntBuffers[0].create(device, physicalDevice,
-        mesh.vertexEdges.size() * sizeof(int), mesh.vertexEdges.data());
-    heIntBuffers[1].create(device, physicalDevice,
-        mesh.faceEdges.size() * sizeof(int), mesh.faceEdges.data());
-    heIntBuffers[2].create(device, physicalDevice,
-        mesh.faceVertCounts.size() * sizeof(int), mesh.faceVertCounts.data());
-    heIntBuffers[3].create(device, physicalDevice,
-        mesh.faceOffsets.size() * sizeof(int), mesh.faceOffsets.data());
-    heIntBuffers[4].create(device, physicalDevice,
-        mesh.heVertex.size() * sizeof(int), mesh.heVertex.data());
-    heIntBuffers[5].create(device, physicalDevice,
-        mesh.heFace.size() * sizeof(int), mesh.heFace.data());
-    heIntBuffers[6].create(device, physicalDevice,
-        mesh.heNext.size() * sizeof(int), mesh.heNext.data());
-    heIntBuffers[7].create(device, physicalDevice,
-        mesh.hePrev.size() * sizeof(int), mesh.hePrev.data());
-    heIntBuffers[8].create(device, physicalDevice,
-        mesh.heTwin.size() * sizeof(int), mesh.heTwin.data());
-    heIntBuffers[9].create(device, physicalDevice,
-        mesh.vertexFaceIndices.size() * sizeof(int), mesh.vertexFaceIndices.data());
+    floatBufs[0].create(device, physicalDevice, mesh.faceAreas.size() * sizeof(float), mesh.faceAreas.data());
 
-    // float buffer: faceAreas
-    heFloatBuffers[0].create(device, physicalDevice,
-        mesh.faceAreas.size() * sizeof(float), mesh.faceAreas.data());
-
-    // MeshInfo UBO
     MeshInfoUBO meshInfo{};
     meshInfo.nbVertices = mesh.nbVertices;
     meshInfo.nbFaces = mesh.nbFaces;
@@ -77,14 +51,84 @@ void Renderer::uploadHalfEdgeMesh(const HalfEdgeMesh& mesh) {
 
     createBuffer(sizeof(MeshInfoUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                 meshInfoBuffer, meshInfoMemory);
+                 meshInfoBuf, meshInfoMem);
 
     void* data;
-    vkMapMemory(device, meshInfoMemory, 0, sizeof(MeshInfoUBO), 0, &data);
+    vkMapMemory(device, meshInfoMem, 0, sizeof(MeshInfoUBO), 0, &data);
     memcpy(data, &meshInfo, sizeof(MeshInfoUBO));
-    vkUnmapMemory(device, meshInfoMemory);
+    vkUnmapMemory(device, meshInfoMem);
+}
 
-    updateHEDescriptorSet();
+void Renderer::writeHEDescriptorSet(VkDescriptorSet dstSet,
+                                      const std::vector<StorageBuffer>& vec4Bufs,
+                                      const std::vector<StorageBuffer>& vec2Bufs,
+                                      const std::vector<StorageBuffer>& intBufs,
+                                      const std::vector<StorageBuffer>& floatBufs) {
+    std::vector<VkWriteDescriptorSet> writes;
+
+    std::vector<VkDescriptorBufferInfo> vec4Infos(5);
+    for (int i = 0; i < 5; ++i) {
+        vec4Infos[i].buffer = vec4Bufs[i].getBuffer();
+        vec4Infos[i].offset = 0;
+        vec4Infos[i].range = vec4Bufs[i].getSize();
+    }
+    VkWriteDescriptorSet w{};
+    w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    w.dstSet = dstSet;
+    w.dstBinding = 0;
+    w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    w.descriptorCount = 5;
+    w.pBufferInfo = vec4Infos.data();
+    writes.push_back(w);
+
+    VkDescriptorBufferInfo vec2Info{};
+    vec2Info.buffer = vec2Bufs[0].getBuffer();
+    vec2Info.offset = 0;
+    vec2Info.range = vec2Bufs[0].getSize();
+    w = {}; w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    w.dstSet = dstSet;
+    w.dstBinding = 1;
+    w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    w.descriptorCount = 1;
+    w.pBufferInfo = &vec2Info;
+    writes.push_back(w);
+
+    std::vector<VkDescriptorBufferInfo> intInfos(10);
+    for (int i = 0; i < 10; ++i) {
+        intInfos[i].buffer = intBufs[i].getBuffer();
+        intInfos[i].offset = 0;
+        intInfos[i].range = intBufs[i].getSize();
+    }
+    w = {}; w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    w.dstSet = dstSet;
+    w.dstBinding = 2;
+    w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    w.descriptorCount = 10;
+    w.pBufferInfo = intInfos.data();
+    writes.push_back(w);
+
+    VkDescriptorBufferInfo floatInfo{};
+    floatInfo.buffer = floatBufs[0].getBuffer();
+    floatInfo.offset = 0;
+    floatInfo.range = floatBufs[0].getSize();
+    w = {}; w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    w.dstSet = dstSet;
+    w.dstBinding = 3;
+    w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    w.descriptorCount = 1;
+    w.pBufferInfo = &floatInfo;
+    writes.push_back(w);
+
+    vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
+                           writes.data(), 0, nullptr);
+}
+
+void Renderer::uploadHalfEdgeMesh(const HalfEdgeMesh& mesh) {
+    std::cout << "Uploading half-edge mesh to GPU..." << std::endl;
+
+    uploadHEBuffers(mesh, heVec4Buffers, heVec2Buffers, heIntBuffers, heFloatBuffers,
+                    meshInfoBuffer, meshInfoMemory);
+    writeHEDescriptorSet(heDescriptorSet, heVec4Buffers, heVec2Buffers, heIntBuffers, heFloatBuffers);
 
     // Store CPU copies for per-frame stats computation
     cpuFaceCenters.resize(mesh.nbFaces);
@@ -111,81 +155,6 @@ void Renderer::uploadHalfEdgeMesh(const HalfEdgeMesh& mesh) {
     size_t vram = calculateVRAM();
     std::cout << "Half-edge mesh uploaded to GPU" << std::endl;
     std::cout << "  Total VRAM: " << vram / 1024.0f << " KB" << std::endl;
-}
-
-void Renderer::updateHEDescriptorSet() {
-    std::vector<VkWriteDescriptorSet> writes;
-
-    // Binding 0: vec4 buffers[5]
-    std::vector<VkDescriptorBufferInfo> vec4BufferInfos(5);
-    for (int i = 0; i < 5; ++i) {
-        vec4BufferInfos[i].buffer = heVec4Buffers[i].getBuffer();
-        vec4BufferInfos[i].offset = 0;
-        vec4BufferInfos[i].range = heVec4Buffers[i].getSize();
-    }
-
-    VkWriteDescriptorSet vec4Write{};
-    vec4Write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    vec4Write.dstSet = heDescriptorSet;
-    vec4Write.dstBinding = 0;
-    vec4Write.dstArrayElement = 0;
-    vec4Write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    vec4Write.descriptorCount = 5;
-    vec4Write.pBufferInfo = vec4BufferInfos.data();
-    writes.push_back(vec4Write);
-
-    // Binding 1: vec2 buffers[1]
-    VkDescriptorBufferInfo vec2BufferInfo{};
-    vec2BufferInfo.buffer = heVec2Buffers[0].getBuffer();
-    vec2BufferInfo.offset = 0;
-    vec2BufferInfo.range = heVec2Buffers[0].getSize();
-
-    VkWriteDescriptorSet vec2Write{};
-    vec2Write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    vec2Write.dstSet = heDescriptorSet;
-    vec2Write.dstBinding = 1;
-    vec2Write.dstArrayElement = 0;
-    vec2Write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    vec2Write.descriptorCount = 1;
-    vec2Write.pBufferInfo = &vec2BufferInfo;
-    writes.push_back(vec2Write);
-
-    // Binding 2: int buffers[10]
-    std::vector<VkDescriptorBufferInfo> intBufferInfos(10);
-    for (int i = 0; i < 10; ++i) {
-        intBufferInfos[i].buffer = heIntBuffers[i].getBuffer();
-        intBufferInfos[i].offset = 0;
-        intBufferInfos[i].range = heIntBuffers[i].getSize();
-    }
-
-    VkWriteDescriptorSet intWrite{};
-    intWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    intWrite.dstSet = heDescriptorSet;
-    intWrite.dstBinding = 2;
-    intWrite.dstArrayElement = 0;
-    intWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    intWrite.descriptorCount = 10;
-    intWrite.pBufferInfo = intBufferInfos.data();
-    writes.push_back(intWrite);
-
-    // Binding 3: float buffers[1]
-    VkDescriptorBufferInfo floatBufferInfo{};
-    floatBufferInfo.buffer = heFloatBuffers[0].getBuffer();
-    floatBufferInfo.offset = 0;
-    floatBufferInfo.range = heFloatBuffers[0].getSize();
-
-    VkWriteDescriptorSet floatWrite{};
-    floatWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    floatWrite.dstSet = heDescriptorSet;
-    floatWrite.dstBinding = 3;
-    floatWrite.dstArrayElement = 0;
-    floatWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    floatWrite.descriptorCount = 1;
-    floatWrite.pBufferInfo = &floatBufferInfo;
-    writes.push_back(floatWrite);
-
-    vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
-                           writes.data(), 0, nullptr);
 }
 
 void Renderer::updatePerObjectDescriptorSet() {
@@ -413,65 +382,10 @@ void Renderer::loadSecondaryMesh(const std::string& path) {
     secondaryHeNbFaces = mesh.nbFaces;
     secondaryHeNbVertices = mesh.nbVertices;
 
-    // Upload half-edge buffers (mirrors uploadHalfEdgeMesh)
-    secondaryHeVec4Buffers.resize(5);
-    secondaryHeVec2Buffers.resize(1);
-    secondaryHeIntBuffers.resize(10);
-    secondaryHeFloatBuffers.resize(1);
-
-    secondaryHeVec4Buffers[0].create(device, physicalDevice,
-        mesh.vertexPositions.size() * sizeof(glm::vec4), mesh.vertexPositions.data());
-    secondaryHeVec4Buffers[1].create(device, physicalDevice,
-        mesh.vertexColors.size() * sizeof(glm::vec4), mesh.vertexColors.data());
-    secondaryHeVec4Buffers[2].create(device, physicalDevice,
-        mesh.vertexNormals.size() * sizeof(glm::vec4), mesh.vertexNormals.data());
-    secondaryHeVec4Buffers[3].create(device, physicalDevice,
-        mesh.faceNormals.size() * sizeof(glm::vec4), mesh.faceNormals.data());
-    secondaryHeVec4Buffers[4].create(device, physicalDevice,
-        mesh.faceCenters.size() * sizeof(glm::vec4), mesh.faceCenters.data());
-
-    secondaryHeVec2Buffers[0].create(device, physicalDevice,
-        mesh.vertexTexCoords.size() * sizeof(glm::vec2), mesh.vertexTexCoords.data());
-
-    secondaryHeIntBuffers[0].create(device, physicalDevice,
-        mesh.vertexEdges.size() * sizeof(int), mesh.vertexEdges.data());
-    secondaryHeIntBuffers[1].create(device, physicalDevice,
-        mesh.faceEdges.size() * sizeof(int), mesh.faceEdges.data());
-    secondaryHeIntBuffers[2].create(device, physicalDevice,
-        mesh.faceVertCounts.size() * sizeof(int), mesh.faceVertCounts.data());
-    secondaryHeIntBuffers[3].create(device, physicalDevice,
-        mesh.faceOffsets.size() * sizeof(int), mesh.faceOffsets.data());
-    secondaryHeIntBuffers[4].create(device, physicalDevice,
-        mesh.heVertex.size() * sizeof(int), mesh.heVertex.data());
-    secondaryHeIntBuffers[5].create(device, physicalDevice,
-        mesh.heFace.size() * sizeof(int), mesh.heFace.data());
-    secondaryHeIntBuffers[6].create(device, physicalDevice,
-        mesh.heNext.size() * sizeof(int), mesh.heNext.data());
-    secondaryHeIntBuffers[7].create(device, physicalDevice,
-        mesh.hePrev.size() * sizeof(int), mesh.hePrev.data());
-    secondaryHeIntBuffers[8].create(device, physicalDevice,
-        mesh.heTwin.size() * sizeof(int), mesh.heTwin.data());
-    secondaryHeIntBuffers[9].create(device, physicalDevice,
-        mesh.vertexFaceIndices.size() * sizeof(int), mesh.vertexFaceIndices.data());
-
-    secondaryHeFloatBuffers[0].create(device, physicalDevice,
-        mesh.faceAreas.size() * sizeof(float), mesh.faceAreas.data());
-
-    // MeshInfo UBO for secondary mesh
-    MeshInfoUBO meshInfo{};
-    meshInfo.nbVertices = mesh.nbVertices;
-    meshInfo.nbFaces = mesh.nbFaces;
-    meshInfo.nbHalfEdges = mesh.nbHalfEdges;
-    meshInfo.padding = 0;
-
-    createBuffer(sizeof(MeshInfoUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                 secondaryMeshInfoBuffer, secondaryMeshInfoMemory);
-
-    void* data;
-    vkMapMemory(device, secondaryMeshInfoMemory, 0, sizeof(MeshInfoUBO), 0, &data);
-    memcpy(data, &meshInfo, sizeof(MeshInfoUBO));
-    vkUnmapMemory(device, secondaryMeshInfoMemory);
+    // Upload half-edge buffers
+    uploadHEBuffers(mesh, secondaryHeVec4Buffers, secondaryHeVec2Buffers,
+                    secondaryHeIntBuffers, secondaryHeFloatBuffers,
+                    secondaryMeshInfoBuffer, secondaryMeshInfoMemory);
 
     // Allocate secondary HE descriptor set (Set 1 layout)
     VkDescriptorSetAllocateInfo heAllocInfo{};
@@ -483,56 +397,9 @@ void Renderer::loadSecondaryMesh(const std::string& path) {
         throw std::runtime_error("Failed to allocate secondary HE descriptor set!");
     }
 
-    // Write secondary HE descriptor set (same pattern as updateHEDescriptorSet)
-    {
-        std::vector<VkWriteDescriptorSet> writes;
-
-        std::vector<VkDescriptorBufferInfo> vec4Infos(5);
-        for (int i = 0; i < 5; ++i) {
-            vec4Infos[i].buffer = secondaryHeVec4Buffers[i].getBuffer();
-            vec4Infos[i].offset = 0;
-            vec4Infos[i].range = secondaryHeVec4Buffers[i].getSize();
-        }
-        VkWriteDescriptorSet w{};
-        w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        w.dstSet = secondaryHeDescriptorSet;
-        w.dstBinding = 0; w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        w.descriptorCount = 5; w.pBufferInfo = vec4Infos.data();
-        writes.push_back(w);
-
-        VkDescriptorBufferInfo vec2Info{};
-        vec2Info.buffer = secondaryHeVec2Buffers[0].getBuffer();
-        vec2Info.offset = 0; vec2Info.range = secondaryHeVec2Buffers[0].getSize();
-        w = {}; w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        w.dstSet = secondaryHeDescriptorSet;
-        w.dstBinding = 1; w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        w.descriptorCount = 1; w.pBufferInfo = &vec2Info;
-        writes.push_back(w);
-
-        std::vector<VkDescriptorBufferInfo> intInfos(10);
-        for (int i = 0; i < 10; ++i) {
-            intInfos[i].buffer = secondaryHeIntBuffers[i].getBuffer();
-            intInfos[i].offset = 0;
-            intInfos[i].range = secondaryHeIntBuffers[i].getSize();
-        }
-        w = {}; w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        w.dstSet = secondaryHeDescriptorSet;
-        w.dstBinding = 2; w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        w.descriptorCount = 10; w.pBufferInfo = intInfos.data();
-        writes.push_back(w);
-
-        VkDescriptorBufferInfo floatInfo{};
-        floatInfo.buffer = secondaryHeFloatBuffers[0].getBuffer();
-        floatInfo.offset = 0; floatInfo.range = secondaryHeFloatBuffers[0].getSize();
-        w = {}; w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        w.dstSet = secondaryHeDescriptorSet;
-        w.dstBinding = 3; w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        w.descriptorCount = 1; w.pBufferInfo = &floatInfo;
-        writes.push_back(w);
-
-        vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
-                               writes.data(), 0, nullptr);
-    }
+    // Write secondary HE descriptor set
+    writeHEDescriptorSet(secondaryHeDescriptorSet, secondaryHeVec4Buffers,
+                         secondaryHeVec2Buffers, secondaryHeIntBuffers, secondaryHeFloatBuffers);
 
     // Allocate secondary per-object descriptor set (Set 2 layout)
     VkDescriptorSetAllocateInfo objAllocInfo{};
@@ -804,7 +671,7 @@ void Renderer::loadMesh(const std::string& path) {
                 heVec2Buffers[0].destroy();
                 heVec2Buffers[0].create(device, physicalDevice,
                     gltfUVs.size() * sizeof(glm::vec2), gltfUVs.data());
-                updateHEDescriptorSet();
+                writeHEDescriptorSet(heDescriptorSet, heVec4Buffers, heVec2Buffers, heIntBuffers, heFloatBuffers);
                 std::cout << "  UV buffer re-uploaded from glTF data" << std::endl;
             }
 

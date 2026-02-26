@@ -244,19 +244,6 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         GltfLoader::computeBoneMatrices(skeleton, boneMatrices);
         boneMatricesBuffer.update(boneMatrices.data(),
                                   boneMatrices.size() * sizeof(glm::mat4));
-
-        // Debug: print once per second
-        static float debugTimer = 0.0f;
-        debugTimer += lastDeltaTime;
-        if (debugTimer > 1.0f) {
-            debugTimer = 0.0f;
-            auto& hips = skeleton.bones[0];
-            std::cout << "  Anim t=" << animationTime
-                      << " dt=" << lastDeltaTime
-                      << " hips T=(" << hips.animTranslation.x << "," << hips.animTranslation.y << "," << hips.animTranslation.z << ")"
-                      << " bone0 mat[3]=(" << boneMatrices[0][3][0] << "," << boneMatrices[0][3][1] << "," << boneMatrices[0][3][2] << ")"
-                      << std::endl;
-        }
     }
 
     // Update ResurfacingUBO with current state
@@ -280,25 +267,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
     }
 
-    struct PushConstants {
-        glm::mat4 model;
-        uint32_t nbFaces;
-        uint32_t nbVertices;
-        uint32_t elementType;
-        float userScaling;
-        float torusMajorR;
-        float torusMinorR;
-        float sphereRadius;
-        uint32_t resolutionM;
-        uint32_t resolutionN;
-        uint32_t debugMode;
-        uint32_t enableCulling;
-        float cullingThreshold;
-        uint32_t enableLod;
-        float lodFactor;
-        uint32_t chainmailMode;
-        float chainmailTiltAngle;
-    } pushConstants{};
+    PushConstants pushConstants{};
 
     pushConstants.model = thirdPersonMode ? player.getModelMatrix() : glm::mat4(1.0f);
     pushConstants.nbFaces = heNbFaces;

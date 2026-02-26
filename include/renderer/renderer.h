@@ -69,6 +69,27 @@ struct GlobalShadingUBO {
     float padding2;
 };
 
+// Must stay in sync with GLSL push_constant blocks in shader files
+struct PushConstants {
+    glm::mat4 model;
+    uint32_t nbFaces;
+    uint32_t nbVertices;
+    uint32_t elementType;
+    float userScaling;
+    float torusMajorR;
+    float torusMinorR;
+    float sphereRadius;
+    uint32_t resolutionM;
+    uint32_t resolutionN;
+    uint32_t debugMode;
+    uint32_t enableCulling;
+    float cullingThreshold;
+    uint32_t enableLod;
+    float lodFactor;
+    uint32_t chainmailMode;
+    float chainmailTiltAngle;
+};
+
 class Renderer {
 public:
     Renderer(Window& window);
@@ -199,7 +220,17 @@ private:
     void cleanupSwapChain();
     void createSamplers();
 
-    void updateHEDescriptorSet();
+    void uploadHEBuffers(const HalfEdgeMesh& mesh,
+                         std::vector<StorageBuffer>& vec4Bufs,
+                         std::vector<StorageBuffer>& vec2Bufs,
+                         std::vector<StorageBuffer>& intBufs,
+                         std::vector<StorageBuffer>& floatBufs,
+                         VkBuffer& meshInfoBuf, VkDeviceMemory& meshInfoMem);
+    void writeHEDescriptorSet(VkDescriptorSet dstSet,
+                               const std::vector<StorageBuffer>& vec4Bufs,
+                               const std::vector<StorageBuffer>& vec2Bufs,
+                               const std::vector<StorageBuffer>& intBufs,
+                               const std::vector<StorageBuffer>& floatBufs);
     void updatePerObjectDescriptorSet();
     void writeTextureDescriptors();
     void writeSkeletonDescriptors();

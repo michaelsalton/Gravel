@@ -1,4 +1,5 @@
 #include "renderer/renderer.h"
+#include "vulkan/vkHelper.h"
 #include "core/window.h"
 #include <stdexcept>
 #include <iostream>
@@ -554,17 +555,7 @@ VkFormat Renderer::findSupportedFormat(const std::vector<VkFormat>& candidates,
 
 uint32_t Renderer::findMemoryType(uint32_t typeFilter,
                                    VkMemoryPropertyFlags properties) {
-    VkPhysicalDeviceMemoryProperties memProperties;
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
-
-    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
-        if ((typeFilter & (1 << i)) &&
-            (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
-            return i;
-        }
-    }
-
-    throw std::runtime_error("Failed to find suitable memory type!");
+    return ::findMemoryType(physicalDevice, typeFilter, properties);
 }
 
 void Renderer::createDepthResources() {
@@ -778,6 +769,8 @@ void Renderer::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
     allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
 
     if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
+        vkDestroyBuffer(device, buffer, nullptr);
+        buffer = VK_NULL_HANDLE;
         throw std::runtime_error("Failed to allocate buffer memory!");
     }
 
@@ -934,7 +927,7 @@ void Renderer::createPipelineLayout() {
                                     VK_SHADER_STAGE_MESH_BIT_EXT |
                                     VK_SHADER_STAGE_FRAGMENT_BIT;
     pushConstantRange.offset = 0;
-    pushConstantRange.size = sizeof(glm::mat4) + 16 * sizeof(uint32_t); // 128 bytes
+    pushConstantRange.size = sizeof(PushConstants);
 
     std::array<VkDescriptorSetLayout, 3> setLayouts = {
         sceneSetLayout,

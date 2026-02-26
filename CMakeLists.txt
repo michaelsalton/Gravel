@@ -149,7 +149,7 @@ function(compile_shader TARGET_NAME SHADER_SOURCE)
             -o ${SHADER_OUTPUT}
             -I${CMAKE_SOURCE_DIR}/shaders
             -I${CMAKE_SOURCE_DIR}/shaders/include
-        DEPENDS ${SHADER_SOURCE}
+        DEPENDS ${SHADER_SOURCE} ${SHADER_INCLUDES}
         COMMENT "Compiling shader ${SHADER_NAME}"
         VERBATIM
     )
@@ -165,6 +165,9 @@ file(GLOB_RECURSE SHADER_SOURCES
     ${CMAKE_SOURCE_DIR}/shaders/*.task
     ${CMAKE_SOURCE_DIR}/shaders/*.mesh
 )
+
+# Shader include files (tracked as dependencies so changes trigger recompilation)
+file(GLOB SHADER_INCLUDES ${CMAKE_SOURCE_DIR}/shaders/include/*.h)
 
 foreach(SHADER ${SHADER_SOURCES})
     compile_shader(${PROJECT_NAME} ${SHADER})

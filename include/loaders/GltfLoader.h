@@ -37,10 +37,13 @@ struct KeyFrame {
     glm::vec3 scale = glm::vec3(1.0f);
 };
 
+enum class AnimPath { Translation, Rotation, Scale };
+enum class AnimInterp { Linear, Step };
+
 struct AnimationChannel {
     int boneIndex;
-    std::string path;           // "translation", "rotation", "scale"
-    std::string interpolation;  // "LINEAR", "STEP"
+    AnimPath path;
+    AnimInterp interpolation;
     std::vector<KeyFrame> keyframes;
 };
 
