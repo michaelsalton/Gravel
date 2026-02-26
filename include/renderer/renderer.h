@@ -15,6 +15,7 @@
 #include "renderer/renderer_init.h"
 #include "loaders/GltfLoader.h"
 #include "player/PlayerController.h"
+#include "level/LevelPreset.h"
 
 class Window;
 struct HalfEdgeMesh;
@@ -120,9 +121,8 @@ private:
                                VkFormat format, bool& loadedFlag);
     size_t calculateVRAM() const;
 
+    void applyPreset(const LevelPreset& preset);
     void applyPresetChainMail();
-    void applyPresetSphereWorld();
-    void applyPresetChainmailMan();
 
     void initImGui();
     void cleanupImGui();
@@ -338,6 +338,7 @@ private:
     bool vsync = false;
     bool pendingSwapChainRecreation = false;
     std::string pendingMeshLoad;  // deferred mesh load (set by ImGui, processed between frames)
+    const LevelPreset* pendingPreset = nullptr;  // post-load state to apply after mesh load
 
     // Cameras
     FreeFlyCamera freeFlyCamera;

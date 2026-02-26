@@ -90,9 +90,10 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
     // Presets
     if (ImGui::CollapsingHeader("Presets", ImGuiTreeNodeFlags_DefaultOpen)) {
-        if (ImGui::Button("Sphere World")) applyPresetSphereWorld();
-        ImGui::SameLine();
-        if (ImGui::Button("Chainmail Man")) applyPresetChainmailMan();
+        for (int i = 0; i < LEVEL_PRESET_COUNT; i++) {
+            if (i > 0) ImGui::SameLine();
+            if (ImGui::Button(LEVEL_PRESETS[i].name)) applyPreset(LEVEL_PRESETS[i]);
+        }
     }
     ImGui::Separator();
 
@@ -432,55 +433,55 @@ void Renderer::applyPresetChainMail() {
     metalDiffuse       = 0.3f;
 }
 
-void Renderer::applyPresetSphereWorld() {
-    // Load icosphere
-    selectedMesh = 5;
-    pendingMeshLoad = ASSETS_DIR "icosphere.obj";
-    triangulateMesh = false;
-    baseMeshMode = 0;           // Off (just show resurfaced elements)
+void Renderer::applyPreset(const LevelPreset& preset) {
+    // Mesh
+    selectedMesh = preset.selectedMesh;
+    pendingMeshLoad = preset.meshPath;
+    triangulateMesh = preset.triangulateMesh;
+    baseMeshMode = preset.baseMeshMode;
 
-    // Sphere resurfacing
-    elementType = 1;            // Sphere
-    sphereRadius = 0.6f;
-    userScaling = 0.12f;
-    resolutionM = 12;
-    resolutionN = 12;
+    // Resurfacing
+    elementType = preset.elementType;
+    torusMajorR = preset.torusMajorR;
+    torusMinorR = preset.torusMinorR;
+    sphereRadius = preset.sphereRadius;
+    userScaling = preset.userScaling;
+    resolutionM = preset.resolutionM;
+    resolutionN = preset.resolutionN;
 
-    // Disable chainmail
-    chainmailMode = false;
+    // Chainmail
+    chainmailMode = preset.chainmailMode;
+    chainmailTiltAngle = preset.chainmailTiltAngle;
 
-    // Free-fly camera
-    thirdPersonMode = false;
-    activeCamera = &freeFlyCamera;
+    // Camera / Player
+    thirdPersonMode = preset.thirdPersonMode;
+    activeCamera = thirdPersonMode
+        ? static_cast<CameraBase*>(&orbitCamera)
+        : static_cast<CameraBase*>(&freeFlyCamera);
+    orbitCamera.distance = preset.orbitCameraDistance;
+    if (thirdPersonMode) {
+        orbitCamera.setTarget(player.position + glm::vec3(0.0f, 1.5f, 0.0f));
+    }
 
-    // Default lighting
-    lightPosition = glm::vec3(5.0f, 5.0f, 5.0f);
-    ambientColor = glm::vec3(0.2f, 0.2f, 0.25f);
-    ambientIntensity = 1.0f;
-    diffuseIntensity = 0.7f;
-    specularIntensity = 0.5f;
-    shininess = 32.0f;
-}
+    // Animation (also applied after mesh load since cleanupMeshSkeleton resets these)
+    doSkinning = preset.doSkinning;
+    animationPlaying = preset.animationPlaying;
+    animationSpeed = preset.animationSpeed;
 
-void Renderer::applyPresetChainmailMan() {
-    // Load man mesh (triggers skeleton + skin texture auto-load)
-    selectedMesh = 9;
-    pendingMeshLoad = ASSETS_DIR "man/man.obj";
-    triangulateMesh = false;
-    baseMeshMode = 5;           // Skin display
+    // Store preset pointer for post-load re-application
+    pendingPreset = &preset;
 
-    // Chainmail resurfacing (reuse existing preset values)
-    applyPresetChainMail();
+    // Lighting
+    lightPosition = preset.lightPosition;
+    ambientColor = preset.ambientColor;
+    ambientIntensity = preset.ambientIntensity;
+    diffuseIntensity = preset.diffuseIntensity;
+    specularIntensity = preset.specularIntensity;
+    shininess = preset.shininess;
 
-    // Third-person mode with orbit camera
-    thirdPersonMode = true;
-    activeCamera = &orbitCamera;
-    orbitCamera.distance = 5.0f;
-    orbitCamera.setTarget(player.position + glm::vec3(0.0f, 1.5f, 0.0f));
-
-    // Enable skinning and animation
-    doSkinning = true;
-    animationPlaying = true;
-    animationSpeed = 1.0f;
+    // Metallic
+    metalF0 = preset.metalF0;
+    envReflection = preset.envReflection;
+    metalDiffuse = preset.metalDiffuse;
 }
 

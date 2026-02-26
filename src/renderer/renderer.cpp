@@ -118,6 +118,15 @@ void Renderer::beginFrame() {
         std::string path = std::move(pendingMeshLoad);
         pendingMeshLoad.clear();
         loadMesh(path);
+
+        // Re-apply preset state that loadMesh() resets (cleanupMeshSkeleton clears these)
+        if (pendingPreset) {
+            doSkinning = pendingPreset->doSkinning;
+            animationPlaying = pendingPreset->animationPlaying;
+            animationSpeed = pendingPreset->animationSpeed;
+            baseMeshMode = pendingPreset->baseMeshMode;
+            pendingPreset = nullptr;
+        }
     }
 
     vkWaitForFences(device, 1, &inFlightFences[currentFrame],
