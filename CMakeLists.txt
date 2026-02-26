@@ -66,6 +66,7 @@ set(SOURCES
     src/loaders/ObjLoader.cpp
     src/loaders/ImageLoader.cpp
     src/loaders/GltfLoader.cpp
+    src/player/PlayerController.cpp
     src/geometry/HalfEdge.cpp
     src/vulkan/vkHelper.cpp
     ${IMGUI_SOURCES}

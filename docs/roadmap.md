@@ -23,6 +23,7 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 | [Epic 9: Chainmail Generation](#epic-9-chainmail-generation) | 3 | 5-7h | In Progress |
 | [Epic 10: Textures, Skeleton & Skinning](#epic-10-textures-skeleton--skinning) | 5 | 10-15h | In Progress |
 | [Epic 11: Per-Face Mask Texture](#epic-11-per-face-mask-texture) | 3 | 3-5h | Planned |
+| [Epic 12: Third-Person Character Controller](#epic-12-third-person-character-controller) | 5 | 6-10h | Complete |
 
 ---
 
@@ -175,6 +176,19 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 - [ ] 11.3 ImGui Toggle (0.5h)
 
 **Milestone**: Painted mask texture controls which mesh faces generate procedural geometry
+
+---
+
+## Epic 12: Third-Person Character Controller
+**Details**: [docs/12/epic-12-third-person-controller.md](12/epic-12-third-person-controller.md)
+
+- [x] 12.1 PlayerController Class & Model Matrix (1-2h)
+- [x] 12.2 Third-Person Orbit Camera (2-3h)
+- [x] 12.3 WASD Camera-Relative Movement (1-2h)
+- [x] 12.4 Animation State Machine (1-2h)
+- [x] 12.5 ImGui Controls & Mode Toggle (1h)
+
+**Milestone**: Character moves with WASD in third-person view, walks when moving, idles when still, camera orbits the character, free-fly camera available via toggle
 
 ---
 

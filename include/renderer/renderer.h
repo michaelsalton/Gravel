@@ -13,6 +13,7 @@
 #include "core/camera.h"
 #include "renderer/renderer_init.h"
 #include "loaders/GltfLoader.h"
+#include "player/PlayerController.h"
 
 class Window;
 struct HalfEdgeMesh;
@@ -337,6 +338,10 @@ private:
 
     // Camera
     Camera camera;
+
+    // Player controller (third-person mode)
+    PlayerController player;
+    bool thirdPersonMode = false;
 
     // Lighting config (driven by ImGui)
     glm::vec3 lightPosition = glm::vec3(5.0f, 5.0f, 5.0f);

@@ -119,6 +119,33 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     }
     ImGui::Separator();
 
+    // Player controller (third-person mode)
+    if (ImGui::CollapsingHeader("Player")) {
+        bool prevMode = thirdPersonMode;
+        ImGui::Checkbox("Third Person Mode", &thirdPersonMode);
+        if (thirdPersonMode != prevMode) {
+            if (thirdPersonMode) {
+                // Save free-fly state and switch camera to orbit
+                camera.mode = Camera::Mode::ThirdPerson;
+            } else {
+                // Restore free-fly camera
+                camera.mode = Camera::Mode::FreeFly;
+            }
+        }
+        if (thirdPersonMode) {
+            ImGui::SliderFloat("Move Speed", &player.speed, 0.5f, 10.0f, "%.1f");
+            ImGui::SliderFloat("Sprint Multiplier", &player.sprintMultiplier, 1.0f, 5.0f, "%.1f");
+            ImGui::SliderFloat("Camera Distance", &camera.orbitDistance, 1.5f, 20.0f, "%.1f");
+            ImGui::SliderFloat("Rotation Smoothing", &player.rotationSmoothing, 1.0f, 30.0f, "%.1f");
+            ImGui::Text("Position: (%.1f, %.1f, %.1f)",
+                        player.position.x, player.position.y, player.position.z);
+            const char* stateNames[] = { "Idle", "Walking", "Running" };
+            int stateIdx = static_cast<int>(player.getAnimState());
+            ImGui::Text("State: %s", stateNames[stateIdx]);
+        }
+    }
+    ImGui::Separator();
+
     // Resurfacing controls
     if (ImGui::CollapsingHeader("Resurfacing", ImGuiTreeNodeFlags_DefaultOpen)) {
         const char* surfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder"};
@@ -222,8 +249,13 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     // Animation controls (only when skeleton is loaded)
     if (skeletonLoaded && ImGui::CollapsingHeader("Animation", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Checkbox("Enable Skinning", &doSkinning);
-        ImGui::Checkbox("Play Animation", &animationPlaying);
-        ImGui::SliderFloat("Speed", &animationSpeed, 0.0f, 5.0f, "%.2f");
+        if (thirdPersonMode) {
+            ImGui::Text("Play Animation: %s (Auto)", animationPlaying ? "On" : "Off");
+            ImGui::Text("Speed: %.2f (Auto)", animationSpeed);
+        } else {
+            ImGui::Checkbox("Play Animation", &animationPlaying);
+            ImGui::SliderFloat("Speed", &animationSpeed, 0.0f, 5.0f, "%.2f");
+        }
 
         float duration = animations.empty() ? 0.0f : animations[0].duration;
         ImGui::SliderFloat("Time", &animationTime, 0.0f, duration, "%.3f s");

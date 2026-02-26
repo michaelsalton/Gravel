@@ -301,6 +301,23 @@ void Renderer::writeTextureDescriptors() {
 
 void Renderer::processInput(Window& win, float deltaTime) {
     lastDeltaTime = deltaTime;
+
+    if (thirdPersonMode) {
+        // Update orbit camera target to player chest height
+        camera.setOrbitTarget(player.position + glm::vec3(0.0f, 1.5f, 0.0f));
+
+        // Player movement uses camera's orbit yaw for direction
+        player.update(win, deltaTime, camera.getOrbitYaw());
+
+        // Drive animation from player movement state
+        if (player.isMoving()) {
+            animationPlaying = true;
+            animationSpeed = player.getAnimationSpeed();
+        } else {
+            animationPlaying = false;
+        }
+    }
+
     camera.processInput(win, deltaTime);
 }
 

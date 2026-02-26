@@ -18,6 +18,17 @@ glm::vec3 Camera::getRight() const {
 }
 
 glm::mat4 Camera::getViewMatrix() const {
+    if (mode == Mode::ThirdPerson) {
+        // Compute camera position from orbit parameters
+        float yawRad = glm::radians(orbitYaw);
+        float pitchRad = glm::radians(orbitPitch);
+        glm::vec3 offset;
+        offset.x = orbitDistance * cos(pitchRad) * sin(yawRad);
+        offset.y = -orbitDistance * sin(pitchRad);
+        offset.z = orbitDistance * cos(pitchRad) * cos(yawRad);
+        glm::vec3 camPos = orbitTarget + offset;
+        return glm::lookAt(camPos, orbitTarget, glm::vec3(0.0f, 1.0f, 0.0f));
+    }
     return glm::lookAt(position, position + getForward(), glm::vec3(0.0f, 1.0f, 0.0f));
 }
 
@@ -37,6 +48,24 @@ void Camera::processInput(Window& win, float deltaTime) {
     float scroll = win.getScrollDelta();
     win.resetInputDeltas();
 
+    if (mode == Mode::ThirdPerson) {
+        // Right-click drag: orbit yaw/pitch
+        if (!io.WantCaptureMouse &&
+            glfwGetMouseButton(glfwWin, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
+            orbitYaw += dx * sensitivity;
+            orbitPitch -= dy * sensitivity;
+            orbitPitch = glm::clamp(orbitPitch, -80.0f, 80.0f);
+        }
+
+        // Scroll: zoom in/out
+        if (!io.WantCaptureMouse && scroll != 0.0f) {
+            orbitDistance -= scroll * 0.5f;
+            orbitDistance = glm::clamp(orbitDistance, 1.5f, 20.0f);
+        }
+        return;
+    }
+
+    // Free-fly mode below
     // Right-click drag: rotate yaw/pitch
     if (!io.WantCaptureMouse &&
         glfwGetMouseButton(glfwWin, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {

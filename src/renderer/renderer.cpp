@@ -206,7 +206,18 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         ViewUBO viewData{};
         viewData.view           = camera.getViewMatrix();
         viewData.projection     = camera.getProjectionMatrix(aspect);
-        viewData.cameraPosition = glm::vec4(camera.position, 1.0f);
+        // In orbit mode, compute camera position from orbit parameters
+        glm::vec3 camPos = camera.position;
+        if (camera.mode == Camera::Mode::ThirdPerson) {
+            float yawRad = glm::radians(camera.orbitYaw);
+            float pitchRad = glm::radians(camera.orbitPitch);
+            glm::vec3 offset;
+            offset.x = camera.orbitDistance * cos(pitchRad) * sin(yawRad);
+            offset.y = -camera.orbitDistance * sin(pitchRad);
+            offset.z = camera.orbitDistance * cos(pitchRad) * cos(yawRad);
+            camPos = player.position + glm::vec3(0.0f, 1.5f, 0.0f) + offset;
+        }
+        viewData.cameraPosition = glm::vec4(camPos, 1.0f);
         viewData.nearPlane      = camera.nearPlane;
         viewData.farPlane       = camera.farPlane;
         memcpy(viewUBOMapped[currentFrame], &viewData, sizeof(ViewUBO));
@@ -291,7 +302,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         float chainmailTiltAngle;
     } pushConstants{};
 
-    pushConstants.model = glm::mat4(1.0f);
+    pushConstants.model = thirdPersonMode ? player.getModelMatrix() : glm::mat4(1.0f);
     pushConstants.nbFaces = heNbFaces;
     pushConstants.nbVertices = heNbVertices;
     pushConstants.elementType = elementType;
@@ -322,6 +333,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     // Dual-mesh: render secondary mesh as solid base under coat
     if (dualMeshActive && heMeshUploaded) {
         PushConstants basePush = pushConstants;
+        basePush.model = pushConstants.model;  // inherit player transform
         basePush.nbFaces = secondaryHeNbFaces;
         basePush.nbVertices = secondaryHeNbVertices;
 
