@@ -167,9 +167,9 @@ file(GLOB_RECURSE SHADER_SOURCES
 )
 
 # Shader include files (tracked as dependencies so changes trigger recompilation)
-file(GLOB SHADER_INCLUDES
-    ${CMAKE_SOURCE_DIR}/shaders/include/*.h
-    ${CMAKE_SOURCE_DIR}/shaders/include/*.glsl)
+file(GLOB_RECURSE SHADER_INCLUDES
+    ${CMAKE_SOURCE_DIR}/shaders/*.h
+    ${CMAKE_SOURCE_DIR}/shaders/*.glsl)
 
 foreach(SHADER ${SHADER_SOURCES})
     compile_shader(${PROJECT_NAME} ${SHADER})
