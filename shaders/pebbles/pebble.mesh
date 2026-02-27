@@ -419,18 +419,24 @@ void main() {
         uint edgeID = subdividedEdgeID / 2;
         uint nextEdgeID = (edgeID + 1) % vertCount;
 
+        // Match the randomized extrusion from edge patches (same seed)
+        _seed = IN.baseID;
+        float minLevel = pebbleUbo.extrusionAmount * (1.0 - pebbleUbo.extrusionVariation);
+        float maxLevel = pebbleUbo.extrusionAmount * (1.0 + pebbleUbo.extrusionVariation);
+        float extrusionAmount = rand(minLevel, maxLevel);
+
         // Gather vertices for B-spline curve along edge
         vec3 vertA = center + pebbleUbo.fillradius * (getVertexPosShared(edgeID) - center)
-                     + faceNormal * pebbleUbo.extrusionAmount;
+                     + faceNormal * extrusionAmount;
         vec3 vertB = center + pebbleUbo.fillradius * (getVertexPosShared(nextEdgeID) - center)
-                     + faceNormal * pebbleUbo.extrusionAmount;
+                     + faceNormal * extrusionAmount;
 
         vec3 P0, P1, P2, P3;
 
         if (subdividedEdgeID % 2 == 0) {
             uint prevEdgeID = (edgeID - 1 + vertCount) % vertCount;
             vec3 prevVert = center + pebbleUbo.fillradius * (getVertexPosShared(prevEdgeID) - center)
-                           + faceNormal * pebbleUbo.extrusionAmount;
+                           + faceNormal * extrusionAmount;
             P0 = (prevVert + vertA) * 0.5;
             P1 = vertA;
             P2 = (vertA + vertB) * 0.5;
@@ -438,7 +444,7 @@ void main() {
         } else {
             uint nextNextEdgeID = (nextEdgeID + 1) % vertCount;
             vec3 nextNextVert = center + pebbleUbo.fillradius * (getVertexPosShared(nextNextEdgeID) - center)
-                               + faceNormal * pebbleUbo.extrusionAmount;
+                               + faceNormal * extrusionAmount;
             P0 = vertA;
             P1 = (vertA + vertB) * 0.5;
             P2 = vertB;
@@ -455,7 +461,7 @@ void main() {
         SetMeshOutputsEXT(totalVerts, nbQuads * 2 + nbTriangles);
 
         // Center vertex for fan
-        vec3 fanCenter = center + faceNormal * pebbleUbo.extrusionAmount;
+        vec3 fanCenter = center + faceNormal * extrusionAmount;
         emitVertex(fanCenter, faceNormal, vec2(0), nbOuterVertices + nbInnerVertices);
 
         // Outer and inner ring vertices
