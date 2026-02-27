@@ -44,16 +44,71 @@ layout(push_constant) uniform PushConstants {
 taskPayloadSharedEXT Task OUT;
 
 // ============================================================================
-// LOD Computation (stub -- full implementation in Task 13.7)
+// LOD Computation
 // ============================================================================
 
-uint computeSubdivLevel(vec3 center, vec3 faceNormal) {
-    if (pebbleUbo.useLod == 0)
-        return pebbleUbo.subdivisionLevel;
+// Compute AABB from face vertices + extrusion along face normal
+void pebbleBoundingBox(uint numVertices, vec3 faceNormal, out vec3 minAABB, out vec3 maxAABB) {
+    minAABB = vec3(1e6);
+    maxAABB = vec3(-1e6);
 
-    // TODO (Task 13.7): compute screen-space bounding box size
-    // and map to subdivision level
-    return pebbleUbo.subdivisionLevel;
+    for (uint i = 0; i < numVertices; i++) {
+        vec3 vertexPos = getVertexPosShared(i);
+        minAABB = min(minAABB, vertexPos);
+        maxAABB = max(maxAABB, vertexPos);
+    }
+
+    // Extend bounds by extrusion
+    vec3 extrusionOffset = faceNormal * pebbleUbo.extrusionAmount * (1.0 + pebbleUbo.extrusionVariation);
+    minAABB = min(minAABB, minAABB + extrusionOffset);
+    maxAABB = max(maxAABB, maxAABB + extrusionOffset);
+}
+
+// Project AABB to screen space and return max NDC extent
+float pebbleScreenSpaceSize(vec3 minAABB, vec3 maxAABB, mat4 mvp) {
+    vec2 screenMin = vec2( 1e10);
+    vec2 screenMax = vec2(-1e10);
+
+    for (uint i = 0; i < 8; i++) {
+        vec3 corner = vec3(
+            ((i & 1) != 0) ? maxAABB.x : minAABB.x,
+            ((i & 2) != 0) ? maxAABB.y : minAABB.y,
+            ((i & 4) != 0) ? maxAABB.z : minAABB.z
+        );
+
+        vec4 clip = mvp * vec4(corner, 1.0);
+        if (clip.w <= 0.0)
+            return 10.0; // behind camera — treat as large
+
+        vec2 ndc = clip.xy / clip.w;
+        screenMin = min(screenMin, ndc);
+        screenMax = max(screenMax, ndc);
+    }
+
+    vec2 extent = screenMax - screenMin;
+    return max(extent.x, extent.y);
+}
+
+uint computeSubdivLevel(vec3 faceNormal) {
+    uint N = pebbleUbo.subdivisionLevel;
+
+    if (pebbleUbo.useLod == 0)
+        return N;
+
+    vec3 minAABB, maxAABB;
+    pebbleBoundingBox(vertCount, faceNormal, minAABB, maxAABB);
+
+    mat4 mvp = viewUBO.projection * viewUBO.view * pc.model;
+    float screenSize = pebbleScreenSpaceSize(minAABB, maxAABB, mvp);
+
+    uint targetN = uint(float(N) * sqrt(screenSize * pebbleUbo.lodFactor));
+    targetN = min(targetN, N);
+
+    // Prevent N=0 (flat extrusion) unless explicitly allowed
+    if (pebbleUbo.allowLowLod == 0)
+        targetN = max(targetN, 1);
+
+    return targetN;
 }
 
 // ============================================================================
@@ -96,7 +151,7 @@ void main() {
     uint nbWorkGroupsPerPatch = 1;
 
     // ==================== LOD ====================
-    uint N = computeSubdivLevel(center, normal);
+    uint N = computeSubdivLevel(normal);
 
     uint taskcount = 1;
     if (N > 0) {
