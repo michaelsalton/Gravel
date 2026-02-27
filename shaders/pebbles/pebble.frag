@@ -5,6 +5,8 @@
 #define FRAGMENT_SHADER
 #define PEBBLE_PIPELINE
 #include "shaderInterface.h"
+#include "noise.glsl"
+#include "shading.glsl"
 
 // Per-vertex inputs (interpolated)
 layout(location = 0) in vec4 worldPosU;
@@ -54,22 +56,73 @@ layout(push_constant) uniform PushConstants {
 
 layout(location = 0) out vec4 outColor;
 
+vec2 getBaseUv(uint faceId) {
+    uint vertId = uint(getHalfEdgeVertex(uint(getFaceEdge(faceId))));
+    return getVertexTexCoord(vertId);
+}
+
 void main() {
     vec3 worldPos = worldPosU.xyz;
     vec3 normal = normalize(normalV.xyz);
+    vec2 localUV = vec2(worldPosU.w, normalV.w);
+    uint faceId = primData.x;
 
-    // Simple Phong shading (placeholder)
-    vec3 lightDir = normalize(shadingUBO.lightPosition.xyz - worldPos);
-    vec3 viewDir = normalize(viewUBO.cameraPosition.xyz - worldPos);
+    vec3 color;
 
-    float diff = max(dot(normal, lightDir), 0.0);
-    vec3 reflectDir = reflect(-lightDir, normal);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), shadingUBO.shininess);
+    switch (pc.debugMode) {
+        case 0: {
+            // Blinn-Phong shading
+            color = blinnPhong(worldPos, normal,
+                               shadingUBO.lightPosition.xyz,
+                               viewUBO.cameraPosition.xyz,
+                               shadingUBO.ambient,
+                               shadingUBO.diffuse,
+                               shadingUBO.specular,
+                               shadingUBO.shininess);
 
-    vec3 color = vec3(0.7, 0.65, 0.6);  // stone color
-    vec3 result = shadingUBO.ambient.rgb * shadingUBO.ambient.a * color
-                + shadingUBO.diffuse * diff * color
-                + shadingUBO.specular * spec * vec3(1.0);
+            // Per-face random color variation
+            _seed = faceId;
+            color *= rand(0.5, 1.0);
 
-    outColor = vec4(result, 1.0);
+            // AO texture
+            if (pebbleUbo.hasAOTexture != 0) {
+                vec2 baseUV = getBaseUv(faceId);
+                baseUV.y = 1.0 - baseUV.y;
+                float ao = texture(sampler2D(textures[AO_TEXTURE], samplers[LINEAR_SAMPLER]), baseUV).r;
+                color *= ao;
+            }
+            break;
+        }
+
+        case 1: {
+            // Normal visualization
+            color = normal * 0.5 + 0.5;
+            break;
+        }
+
+        case 2: {
+            // UV visualization
+            color = vec3(localUV, 0.5);
+            break;
+        }
+
+        case 3: {
+            // Task ID (per-face unique color)
+            color = getDebugColor(faceId);
+            break;
+        }
+
+        default: {
+            color = blinnPhong(worldPos, normal,
+                               shadingUBO.lightPosition.xyz,
+                               viewUBO.cameraPosition.xyz,
+                               shadingUBO.ambient,
+                               shadingUBO.diffuse,
+                               shadingUBO.specular,
+                               shadingUBO.shininess);
+            break;
+        }
+    }
+
+    outColor = vec4(color, 1.0);
 }
