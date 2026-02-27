@@ -1,0 +1,62 @@
+#ifndef PEBBLE_HELPER_GLSL
+#define PEBBLE_HELPER_GLSL
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+#define PEBBLE_PIPELINE
+#include "shaderInterface.h"
+
+#define MAX_NGON_VERTICES 12
+
+#define FACE_PER_PATCH 10
+#define VERT_PER_PATCH 12
+#define NB_RINGS 6
+
+#define MAX_FACES MAX_NGON_VERTICES * FACE_PER_PATCH
+#define MAX_VERTICES MAX_NGON_VERTICES * VERT_PER_PATCH
+#define MAX_PATCHES MAX_NGON_VERTICES * NB_RINGS
+
+#define MAX_SUBDIV_PER_WORKGROUP 3
+#define MAX_SUBDIVISION_LEVEL 9
+
+// ============================================================================
+// Task Payload
+// ============================================================================
+
+struct Task {
+    uint baseID;
+    uint targetSubdivLevel;
+    float scale;
+};
+
+// ============================================================================
+// Shared Memory for Face Data
+// ============================================================================
+
+shared uint sharedVertIndices[MAX_NGON_VERTICES];
+shared uint vertCount;
+shared uint faceOffset;
+
+// Load face vertex indices into shared memory (cooperative across workgroup)
+void fetchFaceData(uint faceId) {
+    uint lid = gl_LocalInvocationID.x;
+    uint count = uint(getFaceVertCount(faceId));
+    uint off = uint(getFaceOffset(faceId));
+    if (lid < MAX_NGON_VERTICES || lid < count) {
+        sharedVertIndices[lid] = uint(getVertexFaceIndex(off + lid));
+    }
+    if (lid == 0) {
+        vertCount = count;
+        faceOffset = off;
+    }
+    barrier();
+}
+
+// Read vertex position using shared index lookup
+vec3 getVertexPosShared(uint id) {
+    return getVertexPosition(sharedVertIndices[id]);
+}
+
+#endif // PEBBLE_HELPER_GLSL

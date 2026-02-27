@@ -2,11 +2,13 @@
 #extension GL_EXT_mesh_shader : require
 #extension GL_GOOGLE_include_directive : require
 
-#define PEBBLE_PIPELINE
-#include "shaderInterface.h"
+#include "pebble.glsl"
+
+#define MESH_MAX_VERTICES 81     // (2^3 + 1)^2
+#define MESH_MAX_PRIMITIVES 128  // 2 * (4^3)
 
 layout(local_size_x = 32) in;
-layout(max_vertices = 3, max_primitives = 1, triangles) out;
+layout(max_vertices = MESH_MAX_VERTICES, max_primitives = MESH_MAX_PRIMITIVES, triangles) out;
 
 layout(push_constant) uniform PushConstants {
     mat4 model;
@@ -28,7 +30,6 @@ layout(push_constant) uniform PushConstants {
     float chainmailTiltAngle;
 } pc;
 
-// UBOs for MVP computation
 layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
     mat4 view;
     mat4 projection;
@@ -37,13 +38,10 @@ layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
     float farPlane;
 } viewUBO;
 
-struct Task {
-    uint baseID;
-    uint targetSubdivLevel;
-    float scale;
-};
-
 taskPayloadSharedEXT Task IN;
+
+shared vec3 sharedControlVertices[16];  // 4x4 control cage
+shared vec3 sharedNormals[16];          // normals at control points
 
 // Per-vertex output
 layout(location = 0) out vec4 outWorldPosU[];
