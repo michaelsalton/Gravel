@@ -1,11 +1,11 @@
 # Gravel Project - Feature Roadmap
 
-Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is designed to be completed in 1-3 hours (single coding session).
+Complete breakdown of all features across 13 epics. Each feature is designed to be completed in 1-3 hours (single coding session).
 
 ## Project Overview
 
-**Total Features**: 48 core features + 2 optional
-**Estimated Total Time**: 100-130 hours
+**Total Features**: 57 core features + 2 optional
+**Estimated Total Time**: 122-161 hours
 **Target Hardware**: NVIDIA RTX 3080+ with Vulkan 1.3 and mesh shader support
 
 ## Epic Summary
@@ -24,6 +24,7 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 | [Epic 10: Textures, Skeleton & Skinning](#epic-10-textures-skeleton--skinning) | 5 | 10-15h | In Progress |
 | [Epic 11: Per-Face Mask Texture](#epic-11-per-face-mask-texture) | 3 | 3-5h | Planned |
 | [Epic 12: Third-Person Character Controller](#epic-12-third-person-character-controller) | 5 | 6-10h | Complete |
+| [Epic 13: Pebble Generation](#epic-13-pebble-generation) | 9 | 22-31h | Not Started |
 
 ---
 
@@ -189,6 +190,23 @@ Complete breakdown of all 48 bite-sized features across 8 epics. Each feature is
 - [x] 12.5 ImGui Controls & Mode Toggle (1h)
 
 **Milestone**: Character moves with WASD in third-person view, walks when moving, idles when still, camera orbits the character, free-fly camera available via toggle
+
+---
+
+## Epic 13: Pebble Generation
+**Details**: [docs/13/epic-13-pebble-generation.md](13/epic-13-pebble-generation.md)
+
+- [ ] 13.1 PebbleUBO & Separate Pipeline (3-4h)
+- [ ] 13.2 Pebble Helper & Task Shader (3-4h)
+- [ ] 13.3 Mesh Shader -- Control Cage Construction (4-5h)
+- [ ] 13.4 Mesh Shader -- B-Spline Evaluation & Tessellation (3-4h)
+- [ ] 13.5 Noise Implementation (2-3h)
+- [ ] 13.6 Fragment Shader (1-2h)
+- [ ] 13.7 LOD System (2-3h)
+- [ ] 13.8 ImGui Controls & Pipeline Toggle (2-3h)
+- [ ] 13.9 Integration & Polish (2-3h)
+
+**Milestone**: Organic pebble/rock surfaces with B-spline smoothing, Perlin noise, adaptive LOD, ring-based patch system, cobblestone appearance
 
 ---
 
