@@ -6,6 +6,7 @@
 #extension GL_KHR_shader_subgroup_arithmetic : enable
 
 #include "pebble.glsl"
+#include "noise.glsl"
 
 // ============================================================================
 // Constants
@@ -65,21 +66,6 @@ shared vec3 sharedNormals[16];   // normals at control points
 layout(location = 0) out vec4 outWorldPosU[];
 layout(location = 1) out vec4 outNormalV[];
 layout(location = 2) perprimitiveEXT out flat uvec4 outPrimData[];
-
-// ============================================================================
-// Minimal PCG Random (replaced by noise.glsl in Task 13.5)
-// ============================================================================
-
-uint _seed = 0;
-
-uint pcg() {
-    uint state = _seed * 747796405U + 2891336453U;
-    uint tmp = ((state >> ((state >> 28U) + 4U)) ^ state) * 277803737U;
-    return (_seed = (tmp >> 22U) ^ tmp);
-}
-
-float rand() { return float(pcg()) / float(0xffffffffU); }
-float rand(float minVal, float maxVal) { return mix(minVal, maxVal, rand()); }
 
 // ============================================================================
 // Bilinear Interpolation
@@ -175,7 +161,12 @@ void emitVertex(vec3 pos, vec3 normal, vec2 uv, uint vertexIndex) {
     vec3 desiredPos = (pos - center) * IN.scale + center;
     vec3 desiredNormal = normal;
 
-    // Noise displacement will be added here (Task 13.5)
+    if (pebbleUbo.doNoise != 0) {
+        PerlinNoise3D noise = perlinNoise3D(pos * pebbleUbo.noiseFrequency);
+        desiredPos += noise.value * desiredNormal * pebbleUbo.noiseAmplitude * IN.scale;
+        desiredNormal += noise.gradient * pebbleUbo.normalOffset;
+        desiredNormal = normalize(desiredNormal);
+    }
 
     outWorldPosU[vertexIndex] = vec4(desiredPos, uv.x);
     outNormalV[vertexIndex] = vec4(desiredNormal, uv.y);
