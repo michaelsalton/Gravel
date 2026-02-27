@@ -1,0 +1,47 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+
+#define PEBBLE_PIPELINE
+#include "shaderInterface.h"
+
+layout(local_size_x = 32) in;
+
+layout(push_constant) uniform PushConstants {
+    mat4 model;
+    uint nbFaces;
+    uint nbVertices;
+    uint elementType;
+    float userScaling;
+    float torusMajorR;
+    float torusMinorR;
+    float sphereRadius;
+    uint resolutionM;
+    uint resolutionN;
+    uint debugMode;
+    uint enableCulling;
+    float cullingThreshold;
+    uint enableLod;
+    float lodFactor;
+    uint chainmailMode;
+    float chainmailTiltAngle;
+} pc;
+
+struct Task {
+    uint baseID;
+    uint targetSubdivLevel;
+    float scale;
+};
+
+taskPayloadSharedEXT Task OUT;
+
+void main() {
+    uint faceId = gl_WorkGroupID.x;
+    if (faceId >= pc.nbFaces) return;
+
+    OUT.baseID = faceId;
+    OUT.targetSubdivLevel = pebbleUbo.subdivisionLevel;
+    OUT.scale = 1.0;
+
+    EmitMeshTasksEXT(1, 1, 1);
+}

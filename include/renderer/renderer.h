@@ -69,6 +69,39 @@ struct GlobalShadingUBO {
     float padding2;
 };
 
+// Must stay in sync with shaders/shaderInterface.h PebbleUBO
+struct PebbleUBO {
+    uint32_t subdivisionLevel = 3;
+    uint32_t subdivOffset = 0;
+    float    extrusionAmount = 0.1f;
+    float    extrusionVariation = 0.5f;
+
+    float    roundness = 2.0f;
+    uint32_t normalCalculationMethod = 1;
+    float    fillradius = 0.0f;
+    float    ringoffset = 0.3f;
+
+    uint32_t useLod = 0;
+    float    lodFactor = 1.0f;
+    uint32_t allowLowLod = 0;
+    uint32_t boundingBoxType = 0;
+
+    uint32_t useCulling = 0;
+    float    cullingThreshold = 0.1f;
+    float    time = 0.0f;
+    uint32_t enableRotation = 0;
+
+    float    rotationSpeed = 0.1f;
+    float    scalingThreshold = 0.1f;
+    uint32_t doNoise = 0;
+    float    noiseAmplitude = 0.01f;
+
+    float    noiseFrequency = 50.0f;
+    float    normalOffset = 0.2f;
+    uint32_t hasAOTexture = 0;
+    float    padding0 = 0.0f;
+};
+
 // Must stay in sync with GLSL push_constant blocks in shader files
 struct PushConstants {
     glm::mat4 model;
@@ -147,6 +180,10 @@ public:
     bool pendingSwapChainRecreation = false;
     std::string pendingMeshLoad;  // deferred mesh load (set by ImGui, processed between frames)
     const LevelPreset* pendingPreset = nullptr;  // post-load state to apply after mesh load
+
+    // Pebble config
+    bool renderPebbles = false;
+    PebbleUBO pebbleUBO;
 
     // Cameras
     FreeFlyCamera freeFlyCamera;
@@ -322,6 +359,7 @@ private:
     VkPipeline graphicsPipeline = VK_NULL_HANDLE;
     VkPipeline baseMeshPipeline = VK_NULL_HANDLE;       // wireframe
     VkPipeline baseMeshSolidPipeline = VK_NULL_HANDLE;  // solid fill
+    VkPipeline pebblePipeline = VK_NULL_HANDLE;
 
     // Mesh shader function pointer
     PFN_vkCmdDrawMeshTasksEXT pfnCmdDrawMeshTasksEXT = nullptr;
@@ -375,6 +413,12 @@ private:
     VkBuffer resurfacingUBOBuffer = VK_NULL_HANDLE;
     VkDeviceMemory resurfacingUBOMemory = VK_NULL_HANDLE;
     void* resurfacingUBOMapped = nullptr;
+
+    // PebbleUBO (set 2, binding 0) -- separate descriptor set for pebble pipeline
+    VkDescriptorSet pebblePerObjectDescriptorSet = VK_NULL_HANDLE;
+    VkBuffer pebbleUBOBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory pebbleUBOMemory = VK_NULL_HANDLE;
+    void* pebbleUBOMapped = nullptr;
 
     // Samplers
     VkSampler linearSampler = VK_NULL_HANDLE;

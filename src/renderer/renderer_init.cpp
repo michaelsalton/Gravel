@@ -1009,15 +1009,25 @@ void Renderer::createUniformBuffers() {
     ResurfacingUBO resurfData{};
     memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
 
+    // PebbleUBO (per-object, not per-frame)
+    VkDeviceSize pebbleSize = sizeof(PebbleUBO);
+    createBuffer(pebbleSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 pebbleUBOBuffer, pebbleUBOMemory);
+    vkMapMemory(device, pebbleUBOMemory, 0, pebbleSize, 0, &pebbleUBOMapped);
+
+    PebbleUBO pebbleData{};
+    memcpy(pebbleUBOMapped, &pebbleData, sizeof(PebbleUBO));
+
     std::cout << "Uniform buffers created and mapped" << std::endl;
 }
 
 void Renderer::createDescriptorPool() {
     std::array<VkDescriptorPoolSize, 4> poolSizes{};
 
-    // UBOs: 2 per scene frame + 1 ResurfacingUBO + 1 secondary perObject
+    // UBOs: 2 per scene frame + 1 ResurfacingUBO + 1 PebbleUBO + 1 secondary perObject
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2 + 2);
+    poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2 + 3);
 
     // SSBOs: 17 HE + 3 skeleton + 17 secondary HE + 2 secondary skeleton joints/weights + 1 shared bone matrices
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -1036,8 +1046,8 @@ void Renderer::createDescriptorPool() {
     poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    // scene sets + 1 HE set + 1 per-object set + 1 secondary HE set + 1 secondary per-object set
-    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT + 4);
+    // scene sets + 1 HE set + 1 per-object set + 1 pebble per-object set + 1 secondary HE set + 1 secondary per-object set
+    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT + 5);
 
     if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create descriptor pool!");
@@ -1121,6 +1131,37 @@ void Renderer::createDescriptorSets() {
 
     // Write binding to the per-object descriptor set
     updatePerObjectDescriptorSet();
+
+    // Allocate pebble per-object descriptor set (Set 2 with PebbleUBO)
+    VkDescriptorSetAllocateInfo pebbleObjAllocInfo{};
+    pebbleObjAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    pebbleObjAllocInfo.descriptorPool = descriptorPool;
+    pebbleObjAllocInfo.descriptorSetCount = 1;
+    pebbleObjAllocInfo.pSetLayouts = &perObjectSetLayout;
+
+    if (vkAllocateDescriptorSets(device, &pebbleObjAllocInfo,
+                                  &pebblePerObjectDescriptorSet) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate pebble per-object descriptor set!");
+    }
+
+    // Write PebbleUBO to pebble per-object descriptor set
+    {
+        VkDescriptorBufferInfo uboInfo{};
+        uboInfo.buffer = pebbleUBOBuffer;
+        uboInfo.offset = 0;
+        uboInfo.range = sizeof(PebbleUBO);
+
+        VkWriteDescriptorSet write{};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = pebblePerObjectDescriptorSet;
+        write.dstBinding = 0;  // BINDING_CONFIG_UBO
+        write.dstArrayElement = 0;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        write.descriptorCount = 1;
+        write.pBufferInfo = &uboInfo;
+
+        vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+    }
 
     std::cout << "Descriptor sets allocated and written" << std::endl;
 }
@@ -1390,6 +1431,64 @@ void Renderer::createGraphicsPipeline() {
     vkDestroyShaderModule(device, bmWireMeshModule, nullptr);
 
     std::cout << "Base mesh pipelines created (wireframe + solid)" << std::endl;
+
+    // --- Pebble pipeline (task + mesh + fragment) ---
+    auto pebbleTaskCode = readFile(std::string(SHADER_DIR) + "pebble.task.spv");
+    auto pebbleMeshCode = readFile(std::string(SHADER_DIR) + "pebble.mesh.spv");
+    auto pebbleFragCode = readFile(std::string(SHADER_DIR) + "pebble.frag.spv");
+
+    VkShaderModule pebbleTaskModule = createShaderModule(pebbleTaskCode);
+    VkShaderModule pebbleMeshModule = createShaderModule(pebbleMeshCode);
+    VkShaderModule pebbleFragModule = createShaderModule(pebbleFragCode);
+
+    VkPipelineShaderStageCreateInfo pebbleTaskStage{};
+    pebbleTaskStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    pebbleTaskStage.stage = VK_SHADER_STAGE_TASK_BIT_EXT;
+    pebbleTaskStage.module = pebbleTaskModule;
+    pebbleTaskStage.pName = "main";
+
+    VkPipelineShaderStageCreateInfo pebbleMeshStage{};
+    pebbleMeshStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    pebbleMeshStage.stage = VK_SHADER_STAGE_MESH_BIT_EXT;
+    pebbleMeshStage.module = pebbleMeshModule;
+    pebbleMeshStage.pName = "main";
+
+    VkPipelineShaderStageCreateInfo pebbleFragStage{};
+    pebbleFragStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    pebbleFragStage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    pebbleFragStage.module = pebbleFragModule;
+    pebbleFragStage.pName = "main";
+
+    std::array<VkPipelineShaderStageCreateInfo, 3> pebbleStages = {
+        pebbleTaskStage, pebbleMeshStage, pebbleFragStage
+    };
+
+    VkGraphicsPipelineCreateInfo pebblePipelineInfo{};
+    pebblePipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pebblePipelineInfo.stageCount = static_cast<uint32_t>(pebbleStages.size());
+    pebblePipelineInfo.pStages = pebbleStages.data();
+    pebblePipelineInfo.pVertexInputState = nullptr;
+    pebblePipelineInfo.pInputAssemblyState = nullptr;
+    pebblePipelineInfo.pViewportState = &viewportState;
+    pebblePipelineInfo.pRasterizationState = &rasterizer;
+    pebblePipelineInfo.pMultisampleState = &multisampling;
+    pebblePipelineInfo.pDepthStencilState = &depthStencil;
+    pebblePipelineInfo.pColorBlendState = &colorBlending;
+    pebblePipelineInfo.pDynamicState = &dynamicState;
+    pebblePipelineInfo.layout = pipelineLayout;
+    pebblePipelineInfo.renderPass = renderPass;
+    pebblePipelineInfo.subpass = 0;
+
+    if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pebblePipelineInfo,
+                                   nullptr, &pebblePipeline) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create pebble pipeline!");
+    }
+
+    vkDestroyShaderModule(device, pebbleFragModule, nullptr);
+    vkDestroyShaderModule(device, pebbleMeshModule, nullptr);
+    vkDestroyShaderModule(device, pebbleTaskModule, nullptr);
+
+    std::cout << "Pebble pipeline created (task + mesh + fragment)" << std::endl;
 }
 
 bool Renderer::checkValidationLayerSupport() {

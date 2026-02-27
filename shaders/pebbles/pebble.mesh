@@ -1,0 +1,93 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+
+#define PEBBLE_PIPELINE
+#include "shaderInterface.h"
+
+layout(local_size_x = 32) in;
+layout(max_vertices = 3, max_primitives = 1, triangles) out;
+
+layout(push_constant) uniform PushConstants {
+    mat4 model;
+    uint nbFaces;
+    uint nbVertices;
+    uint elementType;
+    float userScaling;
+    float torusMajorR;
+    float torusMinorR;
+    float sphereRadius;
+    uint resolutionM;
+    uint resolutionN;
+    uint debugMode;
+    uint enableCulling;
+    float cullingThreshold;
+    uint enableLod;
+    float lodFactor;
+    uint chainmailMode;
+    float chainmailTiltAngle;
+} pc;
+
+// UBOs for MVP computation
+layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
+    mat4 view;
+    mat4 projection;
+    vec4 cameraPosition;
+    float nearPlane;
+    float farPlane;
+} viewUBO;
+
+struct Task {
+    uint baseID;
+    uint targetSubdivLevel;
+    float scale;
+};
+
+taskPayloadSharedEXT Task IN;
+
+// Per-vertex output
+layout(location = 0) out vec4 outWorldPosU[];
+layout(location = 1) out vec4 outNormalV[];
+
+// Per-primitive output
+layout(location = 2) perprimitiveEXT out flat uvec4 outPrimData[];
+
+void main() {
+    uint faceId = IN.baseID;
+
+    // Get face center and normal from SSBO
+    vec3 center = getFaceCenter(faceId);
+    vec3 normal = getFaceNormal(faceId);
+
+    // Emit a small triangle at the face center (placeholder visualization)
+    SetMeshOutputsEXT(3, 1);
+
+    mat4 MVP = viewUBO.projection * viewUBO.view * pc.model;
+
+    float size = pebbleUbo.extrusionAmount;
+    vec3 tangent = normalize(cross(normal, vec3(0.0, 1.0, 0.0)));
+    if (length(tangent) < 0.001) tangent = normalize(cross(normal, vec3(1.0, 0.0, 0.0)));
+    vec3 bitangent = normalize(cross(normal, tangent));
+
+    vec3 extruded = center + normal * size;
+
+    vec3 v0 = extruded + tangent * size * 0.3;
+    vec3 v1 = extruded - tangent * size * 0.15 + bitangent * size * 0.25;
+    vec3 v2 = extruded - tangent * size * 0.15 - bitangent * size * 0.25;
+
+    gl_MeshVerticesEXT[0].gl_Position = MVP * vec4(v0, 1.0);
+    gl_MeshVerticesEXT[1].gl_Position = MVP * vec4(v1, 1.0);
+    gl_MeshVerticesEXT[2].gl_Position = MVP * vec4(v2, 1.0);
+
+    outWorldPosU[0] = vec4(v0, 0.0);
+    outWorldPosU[1] = vec4(v1, 0.0);
+    outWorldPosU[2] = vec4(v2, 0.0);
+
+    outNormalV[0] = vec4(normal, 0.0);
+    outNormalV[1] = vec4(normal, 0.0);
+    outNormalV[2] = vec4(normal, 0.0);
+
+    outPrimData[0] = uvec4(faceId, 0, 0, 0);
+
+    gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0, 1, 2);
+}

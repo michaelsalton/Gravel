@@ -34,6 +34,7 @@ Renderer::Renderer(Window& window) : window(window) {
 
 Renderer::~Renderer() {
     cleanupImGui();
+    vkDestroyPipeline(device, pebblePipeline, nullptr);
     vkDestroyPipeline(device, baseMeshSolidPipeline, nullptr);
     vkDestroyPipeline(device, baseMeshPipeline, nullptr);
     vkDestroyPipeline(device, graphicsPipeline, nullptr);
@@ -59,6 +60,11 @@ Renderer::~Renderer() {
     if (resurfacingUBOBuffer != VK_NULL_HANDLE) {
         vkDestroyBuffer(device, resurfacingUBOBuffer, nullptr);
         vkFreeMemory(device, resurfacingUBOMemory, nullptr);
+    }
+
+    if (pebbleUBOBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, pebbleUBOBuffer, nullptr);
+        vkFreeMemory(device, pebbleUBOMemory, nullptr);
     }
 
     if (linearSampler != VK_NULL_HANDLE) {
@@ -292,11 +298,34 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                         VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
                         VK_SHADER_STAGE_FRAGMENT_BIT,
                         0, sizeof(PushConstants), &pushConstants);
-    if (renderResurfacing) {
+    if (renderResurfacing && !renderPebbles) {
         uint32_t totalTasks = heMeshUploaded
             ? (heNbFaces + heNbVertices)
             : 1;
         pfnCmdDrawMeshTasksEXT(cmd, totalTasks, 1, 1);
+    }
+
+    // Pebble pipeline draw path
+    if (renderPebbles && heMeshUploaded) {
+        // Update PebbleUBO
+        pebbleUBO.hasAOTexture = (useAOTexture && aoTextureLoaded) ? 1u : 0u;
+        memcpy(pebbleUBOMapped, &pebbleUBO, sizeof(PebbleUBO));
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pebblePipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 0, 1,
+                                 &sceneDescriptorSets[currentFrame], 0, nullptr);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 1, 1,
+                                 &heDescriptorSet, 0, nullptr);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 2, 1,
+                                 &pebblePerObjectDescriptorSet, 0, nullptr);
+        vkCmdPushConstants(cmd, pipelineLayout,
+                            VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
+                            VK_SHADER_STAGE_FRAGMENT_BIT,
+                            0, sizeof(PushConstants), &pushConstants);
+        pfnCmdDrawMeshTasksEXT(cmd, heNbFaces, 1, 1);
     }
 
     // Dual-mesh: render secondary mesh as solid base under coat

@@ -201,7 +201,38 @@ int getVertexFaceIndex(uint index) {
     return heIntBuffer[9].data[index];
 }
 
-// --- ResurfacingUBO (set 2, binding 0): per-object configuration ---
+// --- Config UBO (set 2, binding 0): per-object configuration ---
+
+#ifdef PEBBLE_PIPELINE
+
+LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform PebbleUBOBlock {
+    uint  subdivisionLevel;
+    uint  subdivOffset;
+    float extrusionAmount;
+    float extrusionVariation;
+    float roundness;
+    uint  normalCalculationMethod;
+    float fillradius;
+    float ringoffset;
+    uint  useLod;
+    float lodFactor;
+    uint  allowLowLod;
+    uint  boundingBoxType;
+    uint  useCulling;
+    float cullingThreshold;
+    float time;
+    uint  enableRotation;
+    float rotationSpeed;
+    float scalingThreshold;
+    uint  doNoise;
+    float noiseAmplitude;
+    float noiseFrequency;
+    float normalOffset;
+    uint  hasAOTexture;
+    float padding0;
+} pebbleUbo;
+
+#else
 
 LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
     uint  elementType;
@@ -221,6 +252,8 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
     uint  hasAOTexture;
     uint  hasMaskTexture;
 } resurfacingUBO;
+
+#endif
 
 // --- Skinning SSBOs (set 2, bindings 1-3) ---
 
