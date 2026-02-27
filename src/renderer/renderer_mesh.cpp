@@ -141,16 +141,28 @@ void Renderer::uploadHalfEdgeMesh(const HalfEdgeMesh& mesh) {
         cpuFaceCenters[i] = glm::vec3(mesh.faceCenters[i]);
         cpuFaceNormals[i] = glm::vec3(mesh.faceNormals[i]);
     }
+    cpuFaceUVs.resize(mesh.nbFaces);
+    for (uint32_t i = 0; i < mesh.nbFaces; i++) {
+        // Mirror GPU logic: face baseUV = texcoord of first vertex of face
+        int edge = mesh.faceEdges[i];
+        uint32_t firstVert = static_cast<uint32_t>(mesh.heVertex[edge]);
+        cpuFaceUVs[i] = mesh.vertexTexCoords[firstVert];
+    }
+    cpuVertexUVs.resize(mesh.nbVertices);
     for (uint32_t i = 0; i < mesh.nbVertices; i++) {
         cpuVertexPositions[i] = glm::vec3(mesh.vertexPositions[i]);
         cpuVertexNormals[i]   = glm::vec3(mesh.vertexNormals[i]);
         int edge = mesh.vertexEdges[i];
         cpuVertexFaceAreas[i] = (edge >= 0) ? mesh.faceAreas[mesh.heFace[edge]] : 0.0f;
+        cpuVertexUVs[i] = mesh.vertexTexCoords[i];
     }
 
     heMeshUploaded = true;
     heNbFaces = mesh.nbFaces;
     heNbVertices = mesh.nbVertices;
+    baseMeshTriCount = 0;
+    for (uint32_t i = 0; i < mesh.nbFaces; i++)
+        baseMeshTriCount += static_cast<uint32_t>(mesh.faceVertCounts[i]) - 2;
 
     size_t vram = calculateVRAM();
     std::cout << "Half-edge mesh uploaded to GPU" << std::endl;
@@ -331,6 +343,9 @@ void Renderer::cleanupMeshTextures() {
     useElementTypeTexture = false;
     useAOTexture = false;
     useMaskTexture = false;
+    cpuMaskPixels.clear();
+    cpuMaskWidth = 0;
+    cpuMaskHeight = 0;
 }
 
 void Renderer::cleanupMeshSkeleton() {
@@ -619,7 +634,16 @@ void Renderer::loadMesh(const std::string& path) {
     // Mask texture (per-face generation mask)
     loadAndUploadTexture(dir + "mask.png", maskTexture,
                          VK_FORMAT_R8G8B8A8_UNORM, maskTextureLoaded);
-    if (maskTextureLoaded) useMaskTexture = true;  // auto-enable
+    if (maskTextureLoaded) {
+        useMaskTexture = true;  // auto-enable
+        // Keep CPU copy of mask R channel for stats
+        ImageData maskImg = ImageLoader::load(dir + "mask.png");
+        cpuMaskWidth = maskImg.width;
+        cpuMaskHeight = maskImg.height;
+        cpuMaskPixels.resize(maskImg.width * maskImg.height);
+        for (uint32_t i = 0; i < maskImg.width * maskImg.height; i++)
+            cpuMaskPixels[i] = maskImg.pixels[i * 4];  // R channel only
+    }
 
     // Skin diffuse texture
     loadAndUploadTexture(dir + "skin.png", skinTexture,

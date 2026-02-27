@@ -117,6 +117,7 @@ public:
     int              selectedMesh   = 0;
 
     // Resurfacing config
+    bool renderResurfacing = true;
     uint32_t elementType = 0;       // 0=torus, 1=sphere, 2=cone, 3=cylinder
     float userScaling = 0.1f;
     float torusMajorR = 1.0f;
@@ -124,7 +125,7 @@ public:
     float sphereRadius = 0.5f;
     uint32_t resolutionM = 8;
     uint32_t resolutionN = 8;
-    uint32_t debugMode = 0;         // 0=shading, 1=normals, 2=UV, 3=taskID, 4=element type
+    uint32_t debugMode = 0;         // 0=shading, 1=normals, 2=UV, 3=taskID, 4=element type (face/vertex)
     bool enableFrustumCulling = false;
     bool enableBackfaceCulling = false;
     float cullingThreshold = 0.0f;  // Back-face dot product threshold [-1, 1]
@@ -176,6 +177,7 @@ public:
     bool heMeshUploaded = false;
     uint32_t heNbFaces = 0;
     uint32_t heNbVertices = 0;
+    uint32_t baseMeshTriCount = 0;
     uint32_t boneCount = 0;
 
     // Skeleton & animation data (CPU-side)
@@ -191,6 +193,10 @@ public:
     std::vector<glm::vec3> cpuVertexPositions;
     std::vector<glm::vec3> cpuVertexNormals;
     std::vector<float>     cpuVertexFaceAreas;  // area of adjacent face, for bounding radius
+    std::vector<glm::vec2> cpuFaceUVs;          // base UV per face element (first vertex texcoord)
+    std::vector<glm::vec2> cpuVertexUVs;        // base UV per vertex element (vertex texcoord)
+    std::vector<uint8_t>   cpuMaskPixels;       // mask texture R channel on CPU
+    uint32_t cpuMaskWidth = 0, cpuMaskHeight = 0;
 
     // Swap chain extent (needed by stats panel)
     VkExtent2D swapChainExtent;

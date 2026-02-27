@@ -13,6 +13,7 @@ const LevelPreset LEVEL_PRESETS[] = {
         .triangulateMesh    = false,
         .baseMeshMode       = 0,
 
+        .renderResurfacing  = true,
         .elementType        = 1,        // Sphere
         .torusMajorR        = 1.0f,
         .torusMinorR        = 0.3f,
@@ -50,6 +51,7 @@ const LevelPreset LEVEL_PRESETS[] = {
         .triangulateMesh    = false,
         .baseMeshMode       = 5,        // Skin
 
+        .renderResurfacing  = true,
         .elementType        = 0,        // Torus
         .torusMajorR        = 0.814f,
         .torusMinorR        = 0.158f,

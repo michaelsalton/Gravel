@@ -292,13 +292,15 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                         VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
                         VK_SHADER_STAGE_FRAGMENT_BIT,
                         0, sizeof(PushConstants), &pushConstants);
-    uint32_t totalTasks = heMeshUploaded
-        ? (heNbFaces + heNbVertices)
-        : 1;
-    pfnCmdDrawMeshTasksEXT(cmd, totalTasks, 1, 1);
+    if (renderResurfacing) {
+        uint32_t totalTasks = heMeshUploaded
+            ? (heNbFaces + heNbVertices)
+            : 1;
+        pfnCmdDrawMeshTasksEXT(cmd, totalTasks, 1, 1);
+    }
 
     // Dual-mesh: render secondary mesh as solid base under coat
-    if (dualMeshActive && heMeshUploaded) {
+    if (renderResurfacing && dualMeshActive && heMeshUploaded) {
         PushConstants basePush = pushConstants;
         basePush.model = pushConstants.model;  // inherit player transform
         basePush.nbFaces = secondaryHeNbFaces;

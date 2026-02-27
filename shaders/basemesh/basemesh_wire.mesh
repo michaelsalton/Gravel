@@ -1,0 +1,96 @@
+#version 450
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "shaderInterface.h"
+
+// One workgroup per face (no task shader)
+layout(local_size_x = 1) in;
+
+// Max 8 verts per face, max 8 edges (line segments)
+layout(max_vertices = 8, max_primitives = 8, lines) out;
+
+// Per-vertex output: face normal for flat shading
+layout(location = 0) out vec3 outNormal[];
+layout(location = 1) out vec2 outUV[];
+
+// Per-primitive output: face ID for debug coloring
+layout(location = 2) perprimitiveEXT out flat uint outFaceId[];
+
+layout(push_constant) uniform PushConstants {
+    mat4 model;
+    uint nbFaces;
+    uint nbVertices;
+    uint elementType;
+    float userScaling;
+    float torusMajorR;
+    float torusMinorR;
+    float sphereRadius;
+    uint resolutionM;
+    uint resolutionN;
+    uint debugMode;
+    uint enableCulling;
+    float cullingThreshold;
+    uint enableLod;
+    float lodFactor;
+    uint chainmailMode;
+    float chainmailTiltAngle;
+} push;
+
+layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
+    mat4 view;
+    mat4 projection;
+    vec4 cameraPosition;
+    float nearPlane;
+    float farPlane;
+} viewUBO;
+
+void main() {
+    uint faceId = gl_WorkGroupID.x;
+
+    if (faceId >= push.nbFaces) {
+        SetMeshOutputsEXT(0, 0);
+        return;
+    }
+
+    int vertCount = getFaceVertCount(faceId);
+    int offset = getFaceOffset(faceId);
+
+    uint numVerts = uint(vertCount);
+    uint numPrims = numVerts;  // one line segment per edge
+
+    SetMeshOutputsEXT(numVerts, numPrims);
+
+    mat4 mvp = viewUBO.projection * viewUBO.view * push.model;
+    vec3 faceNorm = getFaceNormal(faceId);
+
+    // Emit vertices
+    for (uint i = 0; i < numVerts; i++) {
+        int vertId = getVertexFaceIndex(int(offset) + int(i));
+        vec3 pos = getVertexPosition(uint(vertId));
+        vec3 norm = faceNorm;
+
+        // Bone skinning
+        if (resurfacingUBO.doSkinning != 0u) {
+            vec4 j = jointIndices[uint(vertId)];
+            vec4 w = jointWeights[uint(vertId)];
+            float wSum = w.x + w.y + w.z + w.w;
+            if (wSum > 0.001) {
+                mat4 skinMat = w.x * boneMatrices[int(j.x)] + w.y * boneMatrices[int(j.y)]
+                             + w.z * boneMatrices[int(j.z)] + w.w * boneMatrices[int(j.w)];
+                pos = (skinMat * vec4(pos, 1.0)).xyz;
+                norm = normalize((skinMat * vec4(norm, 0.0)).xyz);
+            }
+        }
+
+        gl_MeshVerticesEXT[i].gl_Position = mvp * vec4(pos, 1.0);
+        outNormal[i] = norm;
+        outUV[i] = getVertexTexCoord(uint(vertId));
+    }
+
+    // Emit edge lines: (0,1), (1,2), ..., (N-1, 0)
+    for (uint i = 0; i < numVerts; i++) {
+        gl_PrimitiveLineIndicesEXT[i] = uvec2(i, (i + 1) % numVerts);
+        outFaceId[i] = faceId;
+    }
+}

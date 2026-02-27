@@ -12,6 +12,7 @@ struct LevelPreset {
     int baseMeshMode;
 
     // Resurfacing
+    bool renderResurfacing;
     uint32_t elementType;       // 0=Torus, 1=Sphere, 2=Cone, 3=Cylinder
     float torusMajorR;
     float torusMinorR;

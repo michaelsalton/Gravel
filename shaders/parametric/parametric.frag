@@ -50,7 +50,7 @@ layout(push_constant) uniform PushConstants {
     float sphereRadius;
     uint resolutionM;
     uint resolutionN;
-    uint debugMode;     // 0=shading, 1=normals, 2=UV, 3=taskID, 4=element type
+    uint debugMode;     // 0=shading, 1=normals, 2=UV, 3=taskID, 4=element type (face/vertex)
     uint enableCulling;
     float cullingThreshold;
     uint enableLod;

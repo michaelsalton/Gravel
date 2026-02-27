@@ -150,8 +150,8 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             "Shading (Blinn-Phong)",
             "Normals (RGB)",
             "UV Coordinates",
-            "Task/Face ID (Per-Element)",
-            "Element Type / LOD"
+            "Task ID",
+            "Element Type (Face/Vertex)"
         };
         int mode = static_cast<int>(debugMode);
         if (ImGui::Combo("Debug Mode", &mode, debugModes, 5)) {
@@ -223,6 +223,7 @@ void Renderer::applyPreset(const LevelPreset& preset) {
     baseMeshMode = preset.baseMeshMode;
 
     // Resurfacing
+    renderResurfacing = preset.renderResurfacing;
     elementType = preset.elementType;
     torusMajorR = preset.torusMajorR;
     torusMinorR = preset.torusMinorR;

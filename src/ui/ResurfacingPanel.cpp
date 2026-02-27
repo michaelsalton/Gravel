@@ -11,10 +11,15 @@
 
 void ResurfacingPanel::render(Renderer& r) {
     if (ImGui::CollapsingHeader("Resurfacing", ImGuiTreeNodeFlags_DefaultOpen)) {
-        const char* surfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder"};
-        int currentType = static_cast<int>(r.elementType);
-        if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 4)) {
-            r.elementType = static_cast<uint32_t>(currentType);
+        const char* surfaceTypes[] = {"None", "Torus", "Sphere", "Cone", "Cylinder"};
+        int currentType = r.renderResurfacing ? static_cast<int>(r.elementType) + 1 : 0;
+        if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 5)) {
+            if (currentType == 0) {
+                r.renderResurfacing = false;
+            } else {
+                r.renderResurfacing = true;
+                r.elementType = static_cast<uint32_t>(currentType - 1);
+            }
         }
 
         if (r.elementTypeTextureLoaded)
@@ -115,9 +120,9 @@ void ResurfacingPanel::render(Renderer& r) {
         }
 
         ImGui::Separator();
-        uint32_t totalElements = r.heNbFaces + r.heNbVertices;
+        uint32_t totalElements = r.renderResurfacing ? (r.heNbFaces + r.heNbVertices) : 0;
         ImGui::Text("Elements: %u (%u faces + %u verts)",
-                     totalElements, r.heNbFaces, r.heNbVertices);
+                     totalElements, r.renderResurfacing ? r.heNbFaces : 0u, r.renderResurfacing ? r.heNbVertices : 0u);
         ImGui::Text("Total mesh tasks: %u", totalElements * totalTiles);
     }
 }

@@ -1274,18 +1274,18 @@ void Renderer::createGraphicsPipeline() {
 
     std::cout << "Graphics pipeline created (task + mesh + fragment)" << std::endl;
 
-    // --- Base mesh wireframe pipeline (mesh + fragment, no task shader) ---
-    auto bmMeshCode = readFile(std::string(SHADER_DIR) + "basemesh.mesh.spv");
+    // --- Base mesh wireframe pipeline (line primitives, no task shader) ---
+    auto bmWireMeshCode = readFile(std::string(SHADER_DIR) + "basemesh_wire.mesh.spv");
     auto bmWireFragCode = readFile(std::string(SHADER_DIR) + "basemesh_wire.frag.spv");
 
-    VkShaderModule bmMeshModule = createShaderModule(bmMeshCode);
+    VkShaderModule bmWireMeshModule = createShaderModule(bmWireMeshCode);
     VkShaderModule bmFragModule = createShaderModule(bmWireFragCode);
 
-    VkPipelineShaderStageCreateInfo bmMeshStage{};
-    bmMeshStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    bmMeshStage.stage = VK_SHADER_STAGE_MESH_BIT_EXT;
-    bmMeshStage.module = bmMeshModule;
-    bmMeshStage.pName = "main";
+    VkPipelineShaderStageCreateInfo bmWireMeshStage{};
+    bmWireMeshStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    bmWireMeshStage.stage = VK_SHADER_STAGE_MESH_BIT_EXT;
+    bmWireMeshStage.module = bmWireMeshModule;
+    bmWireMeshStage.pName = "main";
 
     VkPipelineShaderStageCreateInfo bmFragStage{};
     bmFragStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -1294,15 +1294,15 @@ void Renderer::createGraphicsPipeline() {
     bmFragStage.pName = "main";
 
     std::array<VkPipelineShaderStageCreateInfo, 2> bmStages = {
-        bmMeshStage, bmFragStage
+        bmWireMeshStage, bmFragStage
     };
 
-    // Wireframe rasterization
+    // Wireframe rasterization (mesh shader outputs line primitives directly)
     VkPipelineRasterizationStateCreateInfo wireRasterizer{};
     wireRasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     wireRasterizer.depthClampEnable = VK_FALSE;
     wireRasterizer.rasterizerDiscardEnable = VK_FALSE;
-    wireRasterizer.polygonMode = VK_POLYGON_MODE_LINE;
+    wireRasterizer.polygonMode = VK_POLYGON_MODE_FILL;
     wireRasterizer.lineWidth = 1.0f;
     wireRasterizer.cullMode = VK_CULL_MODE_NONE;
     wireRasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
@@ -1351,9 +1351,17 @@ void Renderer::createGraphicsPipeline() {
     solidRasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     solidRasterizer.depthBiasEnable = VK_FALSE;
 
-    // Solid pipeline uses the shaded fragment shader
+    // Solid pipeline uses the triangle mesh shader and shaded fragment shader
+    auto bmMeshCode = readFile(std::string(SHADER_DIR) + "basemesh.mesh.spv");
     auto bmSolidFragCode = readFile(std::string(SHADER_DIR) + "basemesh.frag.spv");
+    VkShaderModule bmMeshModule = createShaderModule(bmMeshCode);
     VkShaderModule bmSolidFragModule = createShaderModule(bmSolidFragCode);
+
+    VkPipelineShaderStageCreateInfo bmMeshStage{};
+    bmMeshStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    bmMeshStage.stage = VK_SHADER_STAGE_MESH_BIT_EXT;
+    bmMeshStage.module = bmMeshModule;
+    bmMeshStage.pName = "main";
 
     VkPipelineShaderStageCreateInfo bmSolidFragStage{};
     bmSolidFragStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -1377,8 +1385,9 @@ void Renderer::createGraphicsPipeline() {
     }
 
     vkDestroyShaderModule(device, bmSolidFragModule, nullptr);
-    vkDestroyShaderModule(device, bmFragModule, nullptr);
     vkDestroyShaderModule(device, bmMeshModule, nullptr);
+    vkDestroyShaderModule(device, bmFragModule, nullptr);
+    vkDestroyShaderModule(device, bmWireMeshModule, nullptr);
 
     std::cout << "Base mesh pipelines created (wireframe + solid)" << std::endl;
 }
