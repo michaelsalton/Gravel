@@ -1486,9 +1486,86 @@ void Renderer::createGraphicsPipeline() {
 
     vkDestroyShaderModule(device, pebbleFragModule, nullptr);
     vkDestroyShaderModule(device, pebbleMeshModule, nullptr);
-    vkDestroyShaderModule(device, pebbleTaskModule, nullptr);
 
     std::cout << "Pebble pipeline created (task + mesh + fragment)" << std::endl;
+
+    // --- Pebble cage pipeline (task + mesh + fragment, line primitives) ---
+    auto cageMeshCode = readFile(std::string(SHADER_DIR) + "pebble_cage.mesh.spv");
+    auto cageFragCode = readFile(std::string(SHADER_DIR) + "pebble_cage.frag.spv");
+
+    VkShaderModule cageMeshModule = createShaderModule(cageMeshCode);
+    VkShaderModule cageFragModule = createShaderModule(cageFragCode);
+
+    VkPipelineShaderStageCreateInfo cageTaskStage{};
+    cageTaskStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    cageTaskStage.stage = VK_SHADER_STAGE_TASK_BIT_EXT;
+    cageTaskStage.module = pebbleTaskModule;  // reuse task module before destroying
+    cageTaskStage.pName = "main";
+
+    VkPipelineShaderStageCreateInfo cageMeshStage{};
+    cageMeshStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    cageMeshStage.stage = VK_SHADER_STAGE_MESH_BIT_EXT;
+    cageMeshStage.module = cageMeshModule;
+    cageMeshStage.pName = "main";
+
+    VkPipelineShaderStageCreateInfo cageFragStage{};
+    cageFragStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    cageFragStage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    cageFragStage.module = cageFragModule;
+    cageFragStage.pName = "main";
+
+    std::array<VkPipelineShaderStageCreateInfo, 3> cageStages = {
+        cageTaskStage, cageMeshStage, cageFragStage
+    };
+
+    // Wireframe overlay rasterizer (depth bias to render on top of surface)
+    VkPipelineRasterizationStateCreateInfo cageRasterizer{};
+    cageRasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    cageRasterizer.depthClampEnable = VK_FALSE;
+    cageRasterizer.rasterizerDiscardEnable = VK_FALSE;
+    cageRasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+    cageRasterizer.lineWidth = 1.0f;
+    cageRasterizer.cullMode = VK_CULL_MODE_NONE;
+    cageRasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    cageRasterizer.depthBiasEnable = VK_TRUE;
+    cageRasterizer.depthBiasConstantFactor = -2.0f;
+    cageRasterizer.depthBiasSlopeFactor = -2.0f;
+
+    // Depth: test on, write off (overlay)
+    VkPipelineDepthStencilStateCreateInfo cageDepth{};
+    cageDepth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    cageDepth.depthTestEnable = VK_TRUE;
+    cageDepth.depthWriteEnable = VK_FALSE;
+    cageDepth.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    cageDepth.depthBoundsTestEnable = VK_FALSE;
+    cageDepth.stencilTestEnable = VK_FALSE;
+
+    VkGraphicsPipelineCreateInfo cagePipelineInfo{};
+    cagePipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    cagePipelineInfo.stageCount = static_cast<uint32_t>(cageStages.size());
+    cagePipelineInfo.pStages = cageStages.data();
+    cagePipelineInfo.pVertexInputState = nullptr;
+    cagePipelineInfo.pInputAssemblyState = nullptr;
+    cagePipelineInfo.pViewportState = &viewportState;
+    cagePipelineInfo.pRasterizationState = &cageRasterizer;
+    cagePipelineInfo.pMultisampleState = &multisampling;
+    cagePipelineInfo.pDepthStencilState = &cageDepth;
+    cagePipelineInfo.pColorBlendState = &colorBlending;
+    cagePipelineInfo.pDynamicState = &dynamicState;
+    cagePipelineInfo.layout = pipelineLayout;
+    cagePipelineInfo.renderPass = renderPass;
+    cagePipelineInfo.subpass = 0;
+
+    if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &cagePipelineInfo,
+                                   nullptr, &pebbleCagePipeline) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create pebble cage pipeline!");
+    }
+
+    vkDestroyShaderModule(device, cageFragModule, nullptr);
+    vkDestroyShaderModule(device, cageMeshModule, nullptr);
+    vkDestroyShaderModule(device, pebbleTaskModule, nullptr);
+
+    std::cout << "Pebble cage pipeline created" << std::endl;
 }
 
 bool Renderer::checkValidationLayerSupport() {

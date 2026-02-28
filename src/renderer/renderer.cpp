@@ -34,6 +34,7 @@ Renderer::Renderer(Window& window) : window(window) {
 
 Renderer::~Renderer() {
     cleanupImGui();
+    vkDestroyPipeline(device, pebbleCagePipeline, nullptr);
     vkDestroyPipeline(device, pebblePipeline, nullptr);
     vkDestroyPipeline(device, baseMeshSolidPipeline, nullptr);
     vkDestroyPipeline(device, baseMeshPipeline, nullptr);
@@ -313,6 +314,25 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         memcpy(pebbleUBOMapped, &pebbleUBO, sizeof(PebbleUBO));
 
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pebblePipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 0, 1,
+                                 &sceneDescriptorSets[currentFrame], 0, nullptr);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 1, 1,
+                                 &heDescriptorSet, 0, nullptr);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 2, 1,
+                                 &pebblePerObjectDescriptorSet, 0, nullptr);
+        vkCmdPushConstants(cmd, pipelineLayout,
+                            VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
+                            VK_SHADER_STAGE_FRAGMENT_BIT,
+                            0, sizeof(PushConstants), &pushConstants);
+        pfnCmdDrawMeshTasksEXT(cmd, heNbFaces, 1, 1);
+    }
+
+    // Pebble control cage overlay
+    if (showControlCage && renderPebbles && heMeshUploaded) {
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pebbleCagePipeline);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                  pipelineLayout, 0, 1,
                                  &sceneDescriptorSets[currentFrame], 0, nullptr);

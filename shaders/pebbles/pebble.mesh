@@ -129,6 +129,19 @@ vec2 indexToUV(uint index, uint trueSubdivisionLevel, uint gridSize, uint subPat
 }
 
 // ============================================================================
+// B-Spline Interpolation Compensation
+// ============================================================================
+
+// Adjust vertex control point so the B-spline curve passes through the actual
+// face vertex position, compensating for uniform cubic B-spline contraction.
+vec3 adjustedVertexPos(uint id) {
+    vec3 V     = getVertexPosShared(id);
+    vec3 Vprev = getVertexPosShared((id - 1u + vertCount) % vertCount);
+    vec3 Vnext = getVertexPosShared((id + 1u) % vertCount);
+    return (5.0 * V - (Vprev + Vnext) / 2.0) / 4.0;
+}
+
+// ============================================================================
 // Normal Computation (cross-product method)
 // ============================================================================
 
@@ -264,17 +277,21 @@ void main() {
             if ((patchID % 2) == 0) {
                 uint nextFaceID = (edgeID + 1) % vertCount;
                 uint prevFaceID = (edgeID - 1 + vertCount) % vertCount;
-                sharedVertices[13] = getVertexPosShared(edgeID);
-                sharedVertices[15] = getVertexPosShared(nextFaceID);
-                sharedVertices[12] = (getVertexPosShared(prevFaceID) + sharedVertices[13]) / 2.0;
-                sharedVertices[14] = (sharedVertices[13] + sharedVertices[15]) / 2.0;
+                // Midpoints from original positions
+                sharedVertices[12] = (getVertexPosShared(prevFaceID) + getVertexPosShared(edgeID)) / 2.0;
+                sharedVertices[14] = (getVertexPosShared(edgeID) + getVertexPosShared(nextFaceID)) / 2.0;
+                // Adjusted vertex positions for B-spline interpolation
+                sharedVertices[13] = adjustedVertexPos(edgeID);
+                sharedVertices[15] = adjustedVertexPos(nextFaceID);
             } else {
                 uint nextFaceID = (edgeID + 1) % vertCount;
                 uint nextFaceID2 = (edgeID + 2 + vertCount) % vertCount;
-                sharedVertices[12] = getVertexPosShared(edgeID);
-                sharedVertices[14] = getVertexPosShared(nextFaceID);
-                sharedVertices[15] = (getVertexPosShared(nextFaceID2) + sharedVertices[14]) / 2.0;
-                sharedVertices[13] = (sharedVertices[12] + sharedVertices[14]) / 2.0;
+                // Midpoints from original positions
+                sharedVertices[13] = (getVertexPosShared(edgeID) + getVertexPosShared(nextFaceID)) / 2.0;
+                sharedVertices[15] = (getVertexPosShared(nextFaceID2) + getVertexPosShared(nextFaceID)) / 2.0;
+                // Adjusted vertex positions for B-spline interpolation
+                sharedVertices[12] = adjustedVertexPos(edgeID);
+                sharedVertices[14] = adjustedVertexPos(nextFaceID);
             }
         }
         barrier();

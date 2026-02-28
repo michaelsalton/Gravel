@@ -183,6 +183,7 @@ public:
 
     // Pebble config
     bool renderPebbles = false;
+    bool showControlCage = false;
     PebbleUBO pebbleUBO;
 
     // Cameras
@@ -360,6 +361,7 @@ private:
     VkPipeline baseMeshPipeline = VK_NULL_HANDLE;       // wireframe
     VkPipeline baseMeshSolidPipeline = VK_NULL_HANDLE;  // solid fill
     VkPipeline pebblePipeline = VK_NULL_HANDLE;
+    VkPipeline pebbleCagePipeline = VK_NULL_HANDLE;
 
     // Mesh shader function pointer
     PFN_vkCmdDrawMeshTasksEXT pfnCmdDrawMeshTasksEXT = nullptr;

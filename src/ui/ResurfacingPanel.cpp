@@ -238,6 +238,9 @@ void ResurfacingPanel::render(Renderer& r) {
             }
 
             ImGui::Separator();
+            ImGui::Checkbox("Show Control Cage", &r.showControlCage);
+
+            ImGui::Separator();
             ImGui::Text("Faces: %u", r.heNbFaces);
         }
     }

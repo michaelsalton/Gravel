@@ -1,0 +1,211 @@
+#version 460
+#extension GL_EXT_mesh_shader : require
+#extension GL_GOOGLE_include_directive : require
+#extension GL_KHR_shader_subgroup_basic : enable
+#extension GL_KHR_shader_subgroup_vote : enable
+#extension GL_KHR_shader_subgroup_arithmetic : enable
+
+#include "pebble.glsl"
+#include "noise.glsl"
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+layout(local_size_x = 32) in;
+layout(max_vertices = 16, max_primitives = 24, lines) out;
+
+// ============================================================================
+// Uniforms
+// ============================================================================
+
+layout(push_constant) uniform PushConstants {
+    mat4 model;
+    uint nbFaces;
+    uint nbVertices;
+    uint elementType;
+    float userScaling;
+    float torusMajorR;
+    float torusMinorR;
+    float sphereRadius;
+    uint resolutionM;
+    uint resolutionN;
+    uint debugMode;
+    uint enableCulling;
+    float cullingThreshold;
+    uint enableLod;
+    float lodFactor;
+    uint chainmailMode;
+    float chainmailTiltAngle;
+} pc;
+
+layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
+    mat4 view;
+    mat4 projection;
+    vec4 cameraPosition;
+    float nearPlane;
+    float farPlane;
+} viewUBO;
+
+// ============================================================================
+// Task Payload & Shared Memory
+// ============================================================================
+
+taskPayloadSharedEXT Task IN;
+
+shared vec3 sharedVertices[16];  // 4x4 B-spline control cage
+
+// ============================================================================
+// Per-Vertex Output
+// ============================================================================
+
+layout(location = 0) out vec4 outColor[];
+
+// ============================================================================
+// B-Spline Interpolation Compensation (same as pebble.mesh)
+// ============================================================================
+
+vec3 adjustedVertexPos(uint id) {
+    vec3 V     = getVertexPosShared(id);
+    vec3 Vprev = getVertexPosShared((id - 1u + vertCount) % vertCount);
+    vec3 Vnext = getVertexPosShared((id + 1u) % vertCount);
+    return (5.0 * V - (Vprev + Vnext) / 2.0) / 4.0;
+}
+
+// ============================================================================
+// Main
+// ============================================================================
+
+void main() {
+    uint lid = gl_LocalInvocationID.x;
+    uint groupId = gl_WorkGroupID.x;
+    uint N = IN.targetSubdivLevel;
+    uint baseID = IN.baseID;
+
+    fetchFaceData(baseID);
+
+    vec3 center = getFaceCenter(baseID);
+    vec3 faceNormal = getFaceNormal(baseID);
+
+    // N=0: flat extrusion, no B-spline cage
+    if (subgroupAll(N == 0)) {
+        SetMeshOutputsEXT(0, 0);
+        return;
+    }
+
+    N -= 1;
+    uint subPatchCount = 1;
+    if (N > MAX_SUBDIV_PER_WORKGROUP)
+        subPatchCount = uint(pow(4, N - MAX_SUBDIV_PER_WORKGROUP));
+
+    uint patchID = groupId / subPatchCount;
+    uint ringID = patchID / (vertCount * 2);
+
+    // Skip vertex patches (inner fill)
+    if (subgroupAll(ringID > 2)) {
+        SetMeshOutputsEXT(0, 0);
+        return;
+    }
+
+    // Skip duplicate sub-patches (only draw cage once per patch)
+    uint subPatchIndex = groupId % subPatchCount;
+    if (subgroupAll(subPatchIndex > 0)) {
+        SetMeshOutputsEXT(0, 0);
+        return;
+    }
+
+    uint edgeID = (patchID / 2) % vertCount;
+
+    // ==================== Load Base Vertices (row 3, indices 12-15) ====================
+
+    if (subgroupElect()) {
+        if ((patchID % 2) == 0) {
+            uint nextFaceID = (edgeID + 1) % vertCount;
+            uint prevFaceID = (edgeID - 1 + vertCount) % vertCount;
+            sharedVertices[12] = (getVertexPosShared(prevFaceID) + getVertexPosShared(edgeID)) / 2.0;
+            sharedVertices[14] = (getVertexPosShared(edgeID) + getVertexPosShared(nextFaceID)) / 2.0;
+            sharedVertices[13] = adjustedVertexPos(edgeID);
+            sharedVertices[15] = adjustedVertexPos(nextFaceID);
+        } else {
+            uint nextFaceID = (edgeID + 1) % vertCount;
+            uint nextFaceID2 = (edgeID + 2 + vertCount) % vertCount;
+            sharedVertices[13] = (getVertexPosShared(edgeID) + getVertexPosShared(nextFaceID)) / 2.0;
+            sharedVertices[15] = (getVertexPosShared(nextFaceID2) + getVertexPosShared(nextFaceID)) / 2.0;
+            sharedVertices[12] = adjustedVertexPos(edgeID);
+            sharedVertices[14] = adjustedVertexPos(nextFaceID);
+        }
+    }
+    barrier();
+
+    // ==================== Extrude Control Cage (same logic as pebble.mesh) ====================
+
+    _seed = IN.baseID;
+    float minLevel = pebbleUbo.extrusionAmount * (1.0 - pebbleUbo.extrusionVariation);
+    float maxLevel = pebbleUbo.extrusionAmount * (1.0 + pebbleUbo.extrusionVariation);
+    float randomizedExtrusion = rand(minLevel, maxLevel);
+
+    float roundness = mix(0.95, 0.5, pebbleUbo.roundness);
+    float extrusionAmount = randomizedExtrusion;
+
+    uint offset = ringID * 4;
+    uint vertexIndex = lid % 4;
+
+    if (lid < 4) {
+        sharedVertices[offset + lid] = sharedVertices[12 + vertexIndex] + extrusionAmount * faceNormal;
+    } else if (lid < 8) {
+        if (subgroupAll(ringID < 2)) {
+            sharedVertices[offset + lid] = sharedVertices[12 + vertexIndex] + roundness * extrusionAmount * faceNormal;
+        } else if (subgroupAll(ringID == 2)) {
+            sharedVertices[vertexIndex] = center + (2 * pebbleUbo.fillradius - 1) * (sharedVertices[12 + vertexIndex] - center) + extrusionAmount * faceNormal;
+        }
+    } else if (lid < 12) {
+        if (subgroupAll(ringID == 0)) {
+            sharedVertices[lid] = sharedVertices[12 + vertexIndex];
+        } else if (subgroupAll(ringID == 1)) {
+            sharedVertices[vertexIndex] = center + pebbleUbo.fillradius * (sharedVertices[12 + vertexIndex] - center) + extrusionAmount * faceNormal;
+        } else if (subgroupAll(ringID == 2)) {
+            sharedVertices[vertexIndex + 4] = center + pebbleUbo.fillradius * (sharedVertices[12 + vertexIndex] - center) + extrusionAmount * faceNormal;
+        }
+    } else if (lid < 16) {
+        if (subgroupAll(ringID == 0)) {
+            sharedVertices[lid] = sharedVertices[12 + vertexIndex] - roundness * extrusionAmount * faceNormal;
+        } else if (subgroupAll(ringID == 2)) {
+            sharedVertices[lid] = sharedVertices[12 + vertexIndex] + roundness * extrusionAmount * faceNormal;
+        }
+    }
+    barrier();
+
+    // ==================== Emit Cage Wireframe ====================
+
+    SetMeshOutputsEXT(16, 24);
+
+    mat4 MVP = viewUBO.projection * viewUBO.view * pc.model;
+
+    // Ring color coding
+    vec4 gridColor;
+    if (ringID == 0)      gridColor = vec4(1.0, 0.3, 0.3, 1.0);
+    else if (ringID == 1) gridColor = vec4(0.3, 1.0, 0.3, 1.0);
+    else                  gridColor = vec4(0.3, 0.3, 1.0, 1.0);
+
+    // --- 16 grid vertices ---
+    if (lid < 16) {
+        vec3 pos = sharedVertices[lid];
+        if (pebbleUbo.doSkinning != 0u)
+            pos = (IN.skinMatrix * vec4(pos, 1.0)).xyz;
+        gl_MeshVerticesEXT[lid].gl_Position = MVP * vec4(pos, 1.0);
+        outColor[lid] = gridColor;
+    }
+
+    // --- 24 grid lines: 12 horizontal + 12 vertical ---
+    if (lid < 24) {
+        if (lid < 12) {
+            uint row = lid / 3;
+            uint col = lid % 3;
+            gl_PrimitiveLineIndicesEXT[lid] = uvec2(row * 4 + col, row * 4 + col + 1);
+        } else {
+            uint col = (lid - 12) / 3;
+            uint row = (lid - 12) % 3;
+            gl_PrimitiveLineIndicesEXT[lid] = uvec2(row * 4 + col, (row + 1) * 4 + col);
+        }
+    }
+}
