@@ -78,6 +78,8 @@ imgui.ini
 # Build artifacts
 bin/
 lib/
+*.bat
+*.ps1
 
 # Package managers
 vcpkg_installed/
