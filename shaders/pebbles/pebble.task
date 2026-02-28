@@ -127,6 +127,27 @@ void main() {
     vec3 center = getFaceCenter(groupId);
     vec3 normal = getFaceNormal(groupId);
 
+    // ==================== Skinning ====================
+    mat4 skinMat = mat4(1.0);
+    if (pebbleUbo.doSkinning != 0u) {
+        skinMat = computeFaceSkinMatrix(groupId);
+        center = (skinMat * vec4(center, 1.0)).xyz;
+        normal = normalize((skinMat * vec4(normal, 0.0)).xyz);
+    }
+
+    // ==================== Mask Texture Culling ====================
+    if ((pc.enableCulling & 4u) != 0u) {
+        uint vertId = uint(getHalfEdgeVertex(uint(getFaceEdge(groupId))));
+        vec2 baseUV = getVertexTexCoord(vertId);
+        float maskVal = textureLod(
+            sampler2D(textures[MASK_TEXTURE], samplers[NEAREST_SAMPLER]),
+            baseUV, 0.0
+        ).r;
+        if (maskVal < 0.5) {
+            return;
+        }
+    }
+
     // ==================== Culling ====================
     bool doRender = true;
     if (pebbleUbo.useCulling != 0) {
@@ -164,6 +185,7 @@ void main() {
     OUT.baseID = groupId;
     OUT.targetSubdivLevel = N;
     OUT.scale = 1.0;
+    OUT.skinMatrix = skinMat;
 
     EmitMeshTasksEXT(taskcount, 1, 1);
 }

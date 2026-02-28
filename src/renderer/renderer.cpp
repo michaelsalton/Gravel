@@ -309,6 +309,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     if (renderPebbles && heMeshUploaded) {
         // Update PebbleUBO
         pebbleUBO.hasAOTexture = (useAOTexture && aoTextureLoaded) ? 1u : 0u;
+        pebbleUBO.doSkinning = (skeletonLoaded && doSkinning) ? 1u : 0u;
         memcpy(pebbleUBOMapped, &pebbleUBO, sizeof(PebbleUBO));
 
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pebblePipeline);

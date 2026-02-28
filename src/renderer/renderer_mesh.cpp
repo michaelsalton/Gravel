@@ -190,24 +190,27 @@ void Renderer::updatePerObjectDescriptorSet() {
 void Renderer::writeTextureDescriptors() {
     std::vector<VkWriteDescriptorSet> writes;
 
+    // Write to both parametric and pebble descriptor sets
+    VkDescriptorSet dstSets[] = { perObjectDescriptorSet, pebblePerObjectDescriptorSet };
+
     // Binding 4: Samplers [linear, nearest]
     VkDescriptorImageInfo samplerInfos[2] = {};
     samplerInfos[0].sampler = linearSampler;
     samplerInfos[1].sampler = nearestSampler;
 
-    VkWriteDescriptorSet samplerWrite{};
-    samplerWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    samplerWrite.dstSet = perObjectDescriptorSet;
-    samplerWrite.dstBinding = 4;  // BINDING_SAMPLERS
-    samplerWrite.dstArrayElement = 0;
-    samplerWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-    samplerWrite.descriptorCount = 2;
-    samplerWrite.pImageInfo = samplerInfos;
-    writes.push_back(samplerWrite);
+    for (auto dstSet : dstSets) {
+        VkWriteDescriptorSet samplerWrite{};
+        samplerWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        samplerWrite.dstSet = dstSet;
+        samplerWrite.dstBinding = 4;  // BINDING_SAMPLERS
+        samplerWrite.dstArrayElement = 0;
+        samplerWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+        samplerWrite.descriptorCount = 2;
+        samplerWrite.pImageInfo = samplerInfos;
+        writes.push_back(samplerWrite);
+    }
 
-    // Binding 5: Textures [AO, element type map]
-    // Both slots must be written if either is loaded (partial binding is per-binding, not per-element)
-    // Use a 1x1 placeholder for missing textures — but with partial binding we can write only loaded ones
+    // Binding 5: Textures
     VkDescriptorImageInfo textureInfos[2] = {};
 
     // If AO is loaded, write slot 0
@@ -215,15 +218,17 @@ void Renderer::writeTextureDescriptors() {
         textureInfos[0].imageView = aoTexture.getImageView();
         textureInfos[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-        VkWriteDescriptorSet texWrite{};
-        texWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        texWrite.dstSet = perObjectDescriptorSet;
-        texWrite.dstBinding = 5;  // BINDING_TEXTURES
-        texWrite.dstArrayElement = 0;  // AO_TEXTURE index
-        texWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        texWrite.descriptorCount = 1;
-        texWrite.pImageInfo = &textureInfos[0];
-        writes.push_back(texWrite);
+        for (auto dstSet : dstSets) {
+            VkWriteDescriptorSet texWrite{};
+            texWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            texWrite.dstSet = dstSet;
+            texWrite.dstBinding = 5;  // BINDING_TEXTURES
+            texWrite.dstArrayElement = 0;  // AO_TEXTURE index
+            texWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            texWrite.descriptorCount = 1;
+            texWrite.pImageInfo = &textureInfos[0];
+            writes.push_back(texWrite);
+        }
     }
 
     // If element type map is loaded, write slot 1
@@ -231,15 +236,17 @@ void Renderer::writeTextureDescriptors() {
         textureInfos[1].imageView = elementTypeTexture.getImageView();
         textureInfos[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-        VkWriteDescriptorSet texWrite{};
-        texWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        texWrite.dstSet = perObjectDescriptorSet;
-        texWrite.dstBinding = 5;  // BINDING_TEXTURES
-        texWrite.dstArrayElement = 1;  // ELEMENT_TYPE_TEXTURE index
-        texWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        texWrite.descriptorCount = 1;
-        texWrite.pImageInfo = &textureInfos[1];
-        writes.push_back(texWrite);
+        for (auto dstSet : dstSets) {
+            VkWriteDescriptorSet texWrite{};
+            texWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            texWrite.dstSet = dstSet;
+            texWrite.dstBinding = 5;  // BINDING_TEXTURES
+            texWrite.dstArrayElement = 1;  // ELEMENT_TYPE_TEXTURE index
+            texWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            texWrite.descriptorCount = 1;
+            texWrite.pImageInfo = &textureInfos[1];
+            writes.push_back(texWrite);
+        }
     }
 
     // If mask texture is loaded, write slot 2
@@ -248,15 +255,17 @@ void Renderer::writeTextureDescriptors() {
         maskInfo.imageView = maskTexture.getImageView();
         maskInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-        VkWriteDescriptorSet texWrite{};
-        texWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        texWrite.dstSet = perObjectDescriptorSet;
-        texWrite.dstBinding = 5;  // BINDING_TEXTURES
-        texWrite.dstArrayElement = 2;  // MASK_TEXTURE index
-        texWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        texWrite.descriptorCount = 1;
-        texWrite.pImageInfo = &maskInfo;
-        writes.push_back(texWrite);
+        for (auto dstSet : dstSets) {
+            VkWriteDescriptorSet texWrite{};
+            texWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            texWrite.dstSet = dstSet;
+            texWrite.dstBinding = 5;  // BINDING_TEXTURES
+            texWrite.dstArrayElement = 2;  // MASK_TEXTURE index
+            texWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            texWrite.descriptorCount = 1;
+            texWrite.pImageInfo = &maskInfo;
+            writes.push_back(texWrite);
+        }
     }
 
     // If skin texture is loaded, write slot 3
@@ -265,15 +274,17 @@ void Renderer::writeTextureDescriptors() {
         skinInfo.imageView = skinTexture.getImageView();
         skinInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-        VkWriteDescriptorSet texWrite{};
-        texWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        texWrite.dstSet = perObjectDescriptorSet;
-        texWrite.dstBinding = 5;  // BINDING_TEXTURES
-        texWrite.dstArrayElement = 3;  // SKIN_TEXTURE index
-        texWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-        texWrite.descriptorCount = 1;
-        texWrite.pImageInfo = &skinInfo;
-        writes.push_back(texWrite);
+        for (auto dstSet : dstSets) {
+            VkWriteDescriptorSet texWrite{};
+            texWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            texWrite.dstSet = dstSet;
+            texWrite.dstBinding = 5;  // BINDING_TEXTURES
+            texWrite.dstArrayElement = 3;  // SKIN_TEXTURE index
+            texWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            texWrite.descriptorCount = 1;
+            texWrite.pImageInfo = &skinInfo;
+            writes.push_back(texWrite);
+        }
     }
 
     vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
@@ -529,53 +540,55 @@ void Renderer::loadSecondaryMesh(const std::string& path) {
 void Renderer::writeSkeletonDescriptors() {
     std::vector<VkWriteDescriptorSet> writes;
 
-    // Binding 1: Joint indices SSBO
+    // Write to both parametric and pebble descriptor sets
+    VkDescriptorSet dstSets[] = { perObjectDescriptorSet, pebblePerObjectDescriptorSet };
+
     VkDescriptorBufferInfo jointsInfo{};
     jointsInfo.buffer = jointIndicesBuffer.getBuffer();
     jointsInfo.offset = 0;
     jointsInfo.range = jointIndicesBuffer.getSize();
 
-    VkWriteDescriptorSet jointsWrite{};
-    jointsWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    jointsWrite.dstSet = perObjectDescriptorSet;
-    jointsWrite.dstBinding = 1;  // BINDING_SKIN_JOINTS
-    jointsWrite.dstArrayElement = 0;
-    jointsWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    jointsWrite.descriptorCount = 1;
-    jointsWrite.pBufferInfo = &jointsInfo;
-    writes.push_back(jointsWrite);
-
-    // Binding 2: Joint weights SSBO
     VkDescriptorBufferInfo weightsInfo{};
     weightsInfo.buffer = jointWeightsBuffer.getBuffer();
     weightsInfo.offset = 0;
     weightsInfo.range = jointWeightsBuffer.getSize();
 
-    VkWriteDescriptorSet weightsWrite{};
-    weightsWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    weightsWrite.dstSet = perObjectDescriptorSet;
-    weightsWrite.dstBinding = 2;  // BINDING_SKIN_WEIGHTS
-    weightsWrite.dstArrayElement = 0;
-    weightsWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    weightsWrite.descriptorCount = 1;
-    weightsWrite.pBufferInfo = &weightsInfo;
-    writes.push_back(weightsWrite);
-
-    // Binding 3: Bone matrices SSBO
     VkDescriptorBufferInfo bonesInfo{};
     bonesInfo.buffer = boneMatricesBuffer.getBuffer();
     bonesInfo.offset = 0;
     bonesInfo.range = boneMatricesBuffer.getSize();
 
-    VkWriteDescriptorSet bonesWrite{};
-    bonesWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    bonesWrite.dstSet = perObjectDescriptorSet;
-    bonesWrite.dstBinding = 3;  // BINDING_BONE_MATRICES
-    bonesWrite.dstArrayElement = 0;
-    bonesWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    bonesWrite.descriptorCount = 1;
-    bonesWrite.pBufferInfo = &bonesInfo;
-    writes.push_back(bonesWrite);
+    for (auto dstSet : dstSets) {
+        VkWriteDescriptorSet jointsWrite{};
+        jointsWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        jointsWrite.dstSet = dstSet;
+        jointsWrite.dstBinding = 1;  // BINDING_SKIN_JOINTS
+        jointsWrite.dstArrayElement = 0;
+        jointsWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        jointsWrite.descriptorCount = 1;
+        jointsWrite.pBufferInfo = &jointsInfo;
+        writes.push_back(jointsWrite);
+
+        VkWriteDescriptorSet weightsWrite{};
+        weightsWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        weightsWrite.dstSet = dstSet;
+        weightsWrite.dstBinding = 2;  // BINDING_SKIN_WEIGHTS
+        weightsWrite.dstArrayElement = 0;
+        weightsWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        weightsWrite.descriptorCount = 1;
+        weightsWrite.pBufferInfo = &weightsInfo;
+        writes.push_back(weightsWrite);
+
+        VkWriteDescriptorSet bonesWrite{};
+        bonesWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        bonesWrite.dstSet = dstSet;
+        bonesWrite.dstBinding = 3;  // BINDING_BONE_MATRICES
+        bonesWrite.dstArrayElement = 0;
+        bonesWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        bonesWrite.descriptorCount = 1;
+        bonesWrite.pBufferInfo = &bonesInfo;
+        writes.push_back(bonesWrite);
+    }
 
     vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
                            writes.data(), 0, nullptr);

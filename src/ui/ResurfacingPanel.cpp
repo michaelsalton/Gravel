@@ -144,6 +144,8 @@ void ResurfacingPanel::render(Renderer& r) {
 
             if (r.aoTextureLoaded)
                 ImGui::Checkbox("Use AO Texture", &r.useAOTexture);
+            if (r.maskTextureLoaded)
+                ImGui::Checkbox("Use Mask Texture", &r.useMaskTexture);
 
             // Subdivision
             int subdiv = static_cast<int>(ubo.subdivisionLevel);
@@ -177,7 +179,7 @@ void ResurfacingPanel::render(Renderer& r) {
             if (doNoise) {
                 ImGui::SliderFloat("Amplitude", &ubo.noiseAmplitude, 0.0f, 1.0f,
                                    "%.3f", ImGuiSliderFlags_Logarithmic);
-                ImGui::SliderFloat("Frequency", &ubo.noiseFrequency, 0.0f, 100.0f, "%.1f");
+                ImGui::SliderFloat("Frequency", &ubo.noiseFrequency, 0.0f, 10.0f, "%.1f");
                 ImGui::SliderFloat("Normal Offset", &ubo.normalOffset, 0.0f, 1.0f, "%.2f");
             }
 

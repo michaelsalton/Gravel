@@ -112,6 +112,13 @@ void main() {
             break;
         }
 
+        case 4: {
+            // Element type: red = vertex, blue = face
+            // Pebbles are always face elements
+            color = vec3(0.2, 0.2, 1);
+            break;
+        }
+
         default: {
             color = blinnPhong(worldPos, normal,
                                shadingUBO.lightPosition.xyz,

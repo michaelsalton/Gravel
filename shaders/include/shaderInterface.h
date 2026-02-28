@@ -229,7 +229,7 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform PebbleUBOBlock {
     float noiseFrequency;
     float normalOffset;
     uint  hasAOTexture;
-    float padding0;
+    uint  doSkinning;
 } pebbleUbo;
 
 #else

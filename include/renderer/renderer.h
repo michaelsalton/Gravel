@@ -96,10 +96,10 @@ struct PebbleUBO {
     uint32_t doNoise = 0;
     float    noiseAmplitude = 0.01f;
 
-    float    noiseFrequency = 50.0f;
+    float    noiseFrequency = 5.0f;
     float    normalOffset = 0.2f;
     uint32_t hasAOTexture = 0;
-    float    padding0 = 0.0f;
+    uint32_t doSkinning = 0;
 };
 
 // Must stay in sync with GLSL push_constant blocks in shader files

@@ -29,6 +29,7 @@ struct Task {
     uint baseID;
     uint targetSubdivLevel;
     float scale;
+    mat4 skinMatrix;
 };
 
 // ============================================================================
@@ -57,6 +58,19 @@ void fetchFaceData(uint faceId) {
 // Read vertex position using shared index lookup
 vec3 getVertexPosShared(uint id) {
     return getVertexPosition(sharedVertIndices[id]);
+}
+
+// Compute bone skinning matrix from a face's first vertex
+mat4 computeFaceSkinMatrix(uint faceId) {
+    uint vertId = uint(getHalfEdgeVertex(uint(getFaceEdge(faceId))));
+    vec4 j = jointIndices[vertId];
+    vec4 w = jointWeights[vertId];
+    float wSum = w.x + w.y + w.z + w.w;
+    if (wSum > 0.001) {
+        return w.x * boneMatrices[int(j.x)] + w.y * boneMatrices[int(j.y)]
+             + w.z * boneMatrices[int(j.z)] + w.w * boneMatrices[int(j.w)];
+    }
+    return mat4(1.0);
 }
 
 #endif // PEBBLE_HELPER_GLSL

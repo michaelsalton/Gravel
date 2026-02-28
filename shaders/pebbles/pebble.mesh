@@ -168,6 +168,12 @@ void emitVertex(vec3 pos, vec3 normal, vec2 uv, uint vertexIndex) {
         desiredNormal = normalize(desiredNormal);
     }
 
+    // Bone skinning: transform from bind pose to current pose
+    if (pebbleUbo.doSkinning != 0u) {
+        desiredPos = (IN.skinMatrix * vec4(desiredPos, 1.0)).xyz;
+        desiredNormal = normalize((IN.skinMatrix * vec4(desiredNormal, 0.0)).xyz);
+    }
+
     outWorldPosU[vertexIndex] = vec4(desiredPos, uv.x);
     outNormalV[vertexIndex] = vec4(desiredNormal, uv.y);
 

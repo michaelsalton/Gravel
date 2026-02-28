@@ -224,6 +224,7 @@ void Renderer::applyPreset(const LevelPreset& preset) {
 
     // Resurfacing
     renderResurfacing = preset.renderResurfacing;
+    renderPebbles = false;
     elementType = preset.elementType;
     torusMajorR = preset.torusMajorR;
     torusMinorR = preset.torusMinorR;
