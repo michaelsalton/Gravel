@@ -97,15 +97,15 @@ void ResurfacingPanel::render(Renderer& r) {
             // Chainmail mode
             {
                 const char* meshPaths[] = {
-                    ASSETS_DIR "cube.obj",
-                    ASSETS_DIR "plane.obj",
-                    ASSETS_DIR "plane5x5.obj",
-                    ASSETS_DIR "sphere.obj",
-                    ASSETS_DIR "sphere_hd.obj",
-                    ASSETS_DIR "icosphere.obj",
+                    ASSETS_DIR "shapes/cube.obj",
+                    ASSETS_DIR "shapes/plane.obj",
+                    ASSETS_DIR "shapes/plane5x5.obj",
+                    ASSETS_DIR "shapes/sphere.obj",
+                    ASSETS_DIR "shapes/sphere_hd.obj",
+                    ASSETS_DIR "shapes/icosphere.obj",
                     ASSETS_DIR "dragon/dragon_8k.obj",
                     ASSETS_DIR "dragon/dragon_coat.obj",
-                    ASSETS_DIR "boy.obj",
+                    ASSETS_DIR "low-poly/boy.obj",
                     ASSETS_DIR "man/man.obj"
                 };
                 bool prev = r.chainmailMode;

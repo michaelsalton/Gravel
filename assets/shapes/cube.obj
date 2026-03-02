@@ -1,0 +1,18 @@
+# Simple cube mesh for testing
+# 8 vertices
+v -1.0 -1.0 -1.0
+v  1.0 -1.0 -1.0
+v  1.0  1.0 -1.0
+v -1.0  1.0 -1.0
+v -1.0 -1.0  1.0
+v  1.0 -1.0  1.0
+v  1.0  1.0  1.0
+v -1.0  1.0  1.0
+
+# 6 quad faces (cube has 6 sides) — CCW winding for outward normals
+f 4 3 2 1
+f 6 7 8 5
+f 2 6 5 1
+f 3 7 6 2
+f 4 8 7 3
+f 8 4 1 5

@@ -196,9 +196,9 @@ Complete breakdown of all features across 13 epics. Each feature is designed to 
 ## Epic 13: Pebble Generation
 **Details**: [docs/13/epic-13-pebble-generation.md](13/epic-13-pebble-generation.md)
 
-- [ ] 13.1 PebbleUBO & Separate Pipeline (3-4h)
-- [ ] 13.2 Pebble Helper & Task Shader (3-4h)
-- [ ] 13.3 Mesh Shader -- Control Cage Construction (4-5h)
+- [x] 13.1 PebbleUBO & Separate Pipeline (3-4h)
+- [x] 13.2 Pebble Helper & Task Shader (3-4h)
+- [x] 13.3 Mesh Shader -- Control Cage Construction (4-5h)
 - [ ] 13.4 Mesh Shader -- B-Spline Evaluation & Tessellation (3-4h)
 - [ ] 13.5 Noise Implementation (2-3h)
 - [ ] 13.6 Fragment Shader (1-2h)
