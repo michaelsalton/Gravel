@@ -149,6 +149,7 @@ void main() {
     }
 
     // ==================== Pathway Culling ====================
+    float pathwayScale = 1.0;
     if (pebbleUbo.usePathway != 0u) {
         vec2 toFaceXZ  = center.xz - pebbleUbo.playerWorldPos.xz;
         vec2 fwdXZ     = normalize(pebbleUbo.playerForward.xz);
@@ -159,8 +160,11 @@ void main() {
                          : pebbleUbo.pathwayRadius * pebbleUbo.pathwayBackScale;
         float dist     = length(vec2(projFwd / radius,
                                      projSide / pebbleUbo.pathwayRadius));
-        OUT.scale = pow(clamp(1.0 - dist, 0.0, 1.0), pebbleUbo.pathwayFalloff);
-        if (OUT.scale < 0.01) return;
+        // pathwayFalloff controls how many "rings" wide the fade band is.
+        // Higher = narrower band (sharper edge). ~8 ≈ 2-3 rows.
+        float t = clamp((1.0 - dist) * pebbleUbo.pathwayFalloff, 0.0, 1.0);
+        pathwayScale = smoothstep(0.0, 1.0, t);
+        if (pathwayScale < 0.01) return;
     }
 
     // ==================== Culling ====================
@@ -199,7 +203,7 @@ void main() {
     // ==================== Emit ====================
     OUT.baseID = groupId;
     OUT.targetSubdivLevel = N;
-    OUT.scale = 1.0;
+    OUT.scale = pathwayScale;
     OUT.skinMatrix = skinMat;
 
     EmitMeshTasksEXT(taskcount, 1, 1);

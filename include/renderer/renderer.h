@@ -201,7 +201,7 @@ public:
     bool      fogOfWar           = false;   // when true, culls pebbles by player distance
     float     pathwayRadius      = 4.0f;
     float     pathwayBackScale   = 1.0f;
-    float     pathwayFalloff     = 2.0f;
+    float     pathwayFalloff     = 8.0f;
     float     groundPebbleScale      = 0.2f;   // multiplier on extrusionAmount for ground pebbles
     float     groundWorldSize        = 30.0f;  // total side length of the ground plane (world units)
     float     groundPlaneCellSize    = 0.2f;

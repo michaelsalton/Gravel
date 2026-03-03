@@ -252,7 +252,7 @@ void ResurfacingPanel::render(Renderer& r) {
             if (r.fogOfWar) {
                 ImGui::Indent();
                 ImGui::SliderFloat("Radius",  &r.pathwayRadius,  0.5f, 30.0f);
-                ImGui::SliderFloat("Falloff", &r.pathwayFalloff, 0.5f,  8.0f);
+                ImGui::SliderFloat("Falloff", &r.pathwayFalloff, 1.0f, 30.0f);
                 ImGui::Unindent();
             }
             ImGui::SliderFloat("Pebble Scale", &r.groundPebbleScale, 0.01f, 1.0f);
