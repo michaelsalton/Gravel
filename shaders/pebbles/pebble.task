@@ -148,6 +148,21 @@ void main() {
         }
     }
 
+    // ==================== Pathway Culling ====================
+    if (pebbleUbo.usePathway != 0u) {
+        vec2 toFaceXZ  = center.xz - pebbleUbo.playerWorldPos.xz;
+        vec2 fwdXZ     = normalize(pebbleUbo.playerForward.xz);
+        float projFwd  = dot(toFaceXZ, fwdXZ);
+        float projSide = length(toFaceXZ - projFwd * fwdXZ);
+        float radius   = (projFwd >= 0.0)
+                         ? pebbleUbo.pathwayRadius
+                         : pebbleUbo.pathwayRadius * pebbleUbo.pathwayBackScale;
+        float dist     = length(vec2(projFwd / radius,
+                                     projSide / pebbleUbo.pathwayRadius));
+        OUT.scale = pow(clamp(1.0 - dist, 0.0, 1.0), pebbleUbo.pathwayFalloff);
+        if (OUT.scale < 0.01) return;
+    }
+
     // ==================== Culling ====================
     bool doRender = true;
     if (pebbleUbo.useCulling != 0) {

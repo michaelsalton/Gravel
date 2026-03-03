@@ -8,6 +8,7 @@
 #include "core/window.h"
 #include <iostream>
 #include <cstring>
+#include <cmath>
 #include <stdexcept>
 #include <filesystem>
 
@@ -535,6 +536,204 @@ void Renderer::loadSecondaryMesh(const std::string& path) {
     dualMeshActive = true;
     std::cout << "  Secondary mesh uploaded: " << mesh.nbFaces << " faces, "
               << mesh.nbVertices << " vertices" << std::endl;
+}
+
+void Renderer::generateGroundPlane(float cellSize) {
+    // Compute grid resolution from desired world size.
+    uint32_t N = static_cast<uint32_t>(std::ceil(groundWorldSize / cellSize));
+    N = std::max(N, 4u);
+
+    // On regeneration: destroy old GPU buffers but KEEP the descriptor set handles.
+    // Re-allocating descriptor sets from the pool on every regeneration would exhaust
+    // the pool's sampler/SSBO slots. Instead, just update the existing sets' writes
+    // to point at the new buffers.
+
+    // --- Free old GPU buffers ---
+    for (auto& buf : groundHeVec4Buffers)  buf.destroy();
+    for (auto& buf : groundHeVec2Buffers)  buf.destroy();
+    for (auto& buf : groundHeIntBuffers)   buf.destroy();
+    for (auto& buf : groundHeFloatBuffers) buf.destroy();
+    groundHeVec4Buffers.clear();
+    groundHeVec2Buffers.clear();
+    groundHeIntBuffers.clear();
+    groundHeFloatBuffers.clear();
+
+    if (groundMeshInfoBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, groundMeshInfoBuffer, nullptr);
+        vkFreeMemory(device, groundMeshInfoMemory, nullptr);
+        groundMeshInfoBuffer = VK_NULL_HANDLE;
+        groundMeshInfoMemory = VK_NULL_HANDLE;
+    }
+    if (groundPebbleUBOBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, groundPebbleUBOBuffer, nullptr);
+        vkFreeMemory(device, groundPebbleUBOMemory, nullptr);
+        groundPebbleUBOBuffer = VK_NULL_HANDLE;
+        groundPebbleUBOMemory = VK_NULL_HANDLE;
+        groundPebbleUBOMapped = nullptr;
+    }
+
+    // --- Build geometry ---
+    uint32_t W = N + 1;
+
+    NGonMesh ngon;
+    ngon.nbVertices = W * W;
+    ngon.nbFaces    = N * N;
+
+    ngon.positions.resize(W * W);
+    ngon.normals.resize(W * W, glm::vec3(0.0f, 1.0f, 0.0f));
+    ngon.texCoords.resize(W * W, glm::vec2(0.0f));
+    ngon.colors.resize(W * W, glm::vec3(1.0f));
+
+    float halfSize = (N * cellSize) * 0.5f;
+    for (uint32_t row = 0; row <= N; ++row) {
+        for (uint32_t col = 0; col <= N; ++col) {
+            uint32_t idx = row * W + col;
+            ngon.positions[idx] = glm::vec3(col * cellSize - halfSize, 0.0f,
+                                             row * cellSize - halfSize);
+            ngon.texCoords[idx] = glm::vec2(static_cast<float>(col) / N,
+                                             static_cast<float>(row) / N);
+        }
+    }
+
+    uint32_t faceVertexOffset = 0;
+    for (uint32_t row = 0; row < N; ++row) {
+        for (uint32_t col = 0; col < N; ++col) {
+            uint32_t v0 = row * W + col;
+            uint32_t v1 = row * W + (col + 1);
+            uint32_t v2 = (row + 1) * W + (col + 1);
+            uint32_t v3 = (row + 1) * W + col;
+
+            NGonFace face;
+            face.vertexIndices = { v0, v1, v2, v3 };
+            face.count  = 4;
+            face.offset = faceVertexOffset;
+            face.normal = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+            glm::vec3 c = (ngon.positions[v0] + ngon.positions[v1] +
+                           ngon.positions[v2] + ngon.positions[v3]) * 0.25f;
+            face.center = glm::vec4(c, 1.0f);
+            face.area   = cellSize * cellSize;
+
+            ngon.faces.push_back(std::move(face));
+            ngon.faceVertexIndices.push_back(v0);
+            ngon.faceVertexIndices.push_back(v1);
+            ngon.faceVertexIndices.push_back(v2);
+            ngon.faceVertexIndices.push_back(v3);
+            faceVertexOffset += 4;
+        }
+    }
+
+    HalfEdgeMesh mesh = HalfEdgeBuilder::build(ngon);
+    computeFace2Coloring(mesh);
+    groundNbFaces = mesh.nbFaces;
+
+    // --- Upload new GPU buffers ---
+    uploadHEBuffers(mesh, groundHeVec4Buffers, groundHeVec2Buffers,
+                    groundHeIntBuffers, groundHeFloatBuffers,
+                    groundMeshInfoBuffer, groundMeshInfoMemory);
+
+    VkDeviceSize pebbleSize = sizeof(PebbleUBO);
+    createBuffer(pebbleSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 groundPebbleUBOBuffer, groundPebbleUBOMemory);
+    vkMapMemory(device, groundPebbleUBOMemory, 0, pebbleSize, 0, &groundPebbleUBOMapped);
+    PebbleUBO initUBO{};
+    memcpy(groundPebbleUBOMapped, &initUBO, sizeof(PebbleUBO));
+
+    // --- Allocate descriptor sets only on first call; reuse on regeneration ---
+    if (groundHeDescriptorSet == VK_NULL_HANDLE) {
+        VkDescriptorSetAllocateInfo heAllocInfo{};
+        heAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        heAllocInfo.descriptorPool = descriptorPool;
+        heAllocInfo.descriptorSetCount = 1;
+        heAllocInfo.pSetLayouts = &halfEdgeSetLayout;
+        if (vkAllocateDescriptorSets(device, &heAllocInfo, &groundHeDescriptorSet) != VK_SUCCESS)
+            throw std::runtime_error("Failed to allocate ground HE descriptor set!");
+    }
+    // Update HE set to point at the new buffers
+    writeHEDescriptorSet(groundHeDescriptorSet, groundHeVec4Buffers,
+                         groundHeVec2Buffers, groundHeIntBuffers, groundHeFloatBuffers);
+
+    if (groundPebbleDescriptorSet == VK_NULL_HANDLE) {
+        VkDescriptorSetAllocateInfo pebbleAllocInfo{};
+        pebbleAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        pebbleAllocInfo.descriptorPool = descriptorPool;
+        pebbleAllocInfo.descriptorSetCount = 1;
+        pebbleAllocInfo.pSetLayouts = &perObjectSetLayout;
+        if (vkAllocateDescriptorSets(device, &pebbleAllocInfo, &groundPebbleDescriptorSet) != VK_SUCCESS)
+            throw std::runtime_error("Failed to allocate ground pebble descriptor set!");
+
+        // Write samplers once (they never change)
+        if (linearSampler != VK_NULL_HANDLE) {
+            VkDescriptorImageInfo samplerInfos[2] = {};
+            samplerInfos[0].sampler = linearSampler;
+            samplerInfos[1].sampler = nearestSampler;
+
+            VkWriteDescriptorSet w{};
+            w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            w.dstSet = groundPebbleDescriptorSet;
+            w.dstBinding = 4;
+            w.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+            w.descriptorCount = 2;
+            w.pImageInfo = samplerInfos;
+            vkUpdateDescriptorSets(device, 1, &w, 0, nullptr);
+        }
+    }
+    // Always update UBO binding (new buffer handle each time)
+    {
+        VkDescriptorBufferInfo uboInfo{};
+        uboInfo.buffer = groundPebbleUBOBuffer;
+        uboInfo.offset = 0;
+        uboInfo.range  = sizeof(PebbleUBO);
+
+        VkWriteDescriptorSet w{};
+        w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w.dstSet = groundPebbleDescriptorSet;
+        w.dstBinding = 0;
+        w.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        w.descriptorCount = 1;
+        w.pBufferInfo = &uboInfo;
+        vkUpdateDescriptorSets(device, 1, &w, 0, nullptr);
+    }
+
+    groundMeshActive = true;
+    std::cout << "Ground plane generated: " << N << "x" << N
+              << " quads (" << groundNbFaces << " faces)" << std::endl;
+}
+
+void Renderer::cleanupGroundMesh() {
+    for (auto& buf : groundHeVec4Buffers)  buf.destroy();
+    for (auto& buf : groundHeVec2Buffers)  buf.destroy();
+    for (auto& buf : groundHeIntBuffers)   buf.destroy();
+    for (auto& buf : groundHeFloatBuffers) buf.destroy();
+    groundHeVec4Buffers.clear();
+    groundHeVec2Buffers.clear();
+    groundHeIntBuffers.clear();
+    groundHeFloatBuffers.clear();
+
+    if (groundMeshInfoBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, groundMeshInfoBuffer, nullptr);
+        vkFreeMemory(device, groundMeshInfoMemory, nullptr);
+        groundMeshInfoBuffer = VK_NULL_HANDLE;
+        groundMeshInfoMemory = VK_NULL_HANDLE;
+    }
+
+    if (groundPebbleUBOBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, groundPebbleUBOBuffer, nullptr);
+        vkFreeMemory(device, groundPebbleUBOMemory, nullptr);
+        groundPebbleUBOBuffer = VK_NULL_HANDLE;
+        groundPebbleUBOMemory = VK_NULL_HANDLE;
+        groundPebbleUBOMapped = nullptr;
+    }
+
+    groundHeDescriptorSet  = VK_NULL_HANDLE;
+    groundPebbleDescriptorSet = VK_NULL_HANDLE;
+    groundNbFaces    = 0;
+    groundMeshActive = false;
+}
+
+glm::vec3 Renderer::playerForwardDir() const {
+    float yawRad = glm::radians(player.yaw);
+    return glm::vec3(-std::sin(yawRad), 0.0f, -std::cos(yawRad));
 }
 
 void Renderer::writeSkeletonDescriptors() {

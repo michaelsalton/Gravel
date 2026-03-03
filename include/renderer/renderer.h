@@ -100,6 +100,16 @@ struct PebbleUBO {
     float    normalOffset = 0.2f;
     uint32_t hasAOTexture = 0;
     uint32_t doSkinning = 0;
+
+    // Pathway fields (must match std140 layout of PebbleUBOBlock)
+    uint32_t  usePathway       = 0;
+    float     pathwayRadius    = 4.0f;
+    float     pathwayBackScale = 0.35f;
+    float     pathwayFalloff   = 2.0f;
+    glm::vec3 playerWorldPos   = {0.0f, 0.0f, 0.0f};
+    float     pad1             = 0.0f;   // std140 vec3 padding
+    glm::vec3 playerForward    = {0.0f, 0.0f, -1.0f};
+    float     pad2             = 0.0f;   // std140 vec3 padding
 };
 
 // Must stay in sync with GLSL push_constant blocks in shader files
@@ -185,6 +195,17 @@ public:
     bool renderPebbles = false;
     bool showControlCage = false;
     PebbleUBO pebbleUBO;
+
+    // Pathway config
+    bool      renderPathway      = false;
+    bool      fogOfWar           = false;   // when true, culls pebbles by player distance
+    float     pathwayRadius      = 4.0f;
+    float     pathwayBackScale   = 1.0f;
+    float     pathwayFalloff     = 2.0f;
+    float     groundPebbleScale      = 0.2f;   // multiplier on extrusionAmount for ground pebbles
+    float     groundWorldSize        = 30.0f;  // total side length of the ground plane (world units)
+    float     groundPlaneCellSize    = 0.2f;
+    bool      pendingGroundRegenerate = false;
 
     // Cameras
     FreeFlyCamera freeFlyCamera;
@@ -282,6 +303,9 @@ private:
     void cleanupMeshSkeleton();
     void loadSecondaryMesh(const std::string& path);
     void cleanupSecondaryMesh();
+    void generateGroundPlane(float cellSize);
+    void cleanupGroundMesh();
+    glm::vec3 playerForwardDir() const;
     void loadAndUploadTexture(const std::string& path, VulkanTexture& texture,
                                VkFormat format, bool& loadedFlag);
     size_t calculateVRAM() const;
@@ -436,6 +460,22 @@ private:
     StorageBuffer jointIndicesBuffer;
     StorageBuffer jointWeightsBuffer;
     StorageBuffer boneMatricesBuffer;
+
+    // Ground plane mesh (pathway pebbles)
+    std::vector<StorageBuffer> groundHeVec4Buffers;
+    std::vector<StorageBuffer> groundHeVec2Buffers;
+    std::vector<StorageBuffer> groundHeIntBuffers;
+    std::vector<StorageBuffer> groundHeFloatBuffers;
+    VkBuffer groundMeshInfoBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory groundMeshInfoMemory = VK_NULL_HANDLE;
+    VkDescriptorSet groundHeDescriptorSet = VK_NULL_HANDLE;
+    VkDescriptorSet groundPebbleDescriptorSet = VK_NULL_HANDLE;
+    VkBuffer groundPebbleUBOBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory groundPebbleUBOMemory = VK_NULL_HANDLE;
+    void* groundPebbleUBOMapped = nullptr;
+    uint32_t groundNbFaces = 0;
+    bool groundMeshActive = false;
+    PebbleUBO groundPebbleUBO;
 
     // Secondary mesh (base dragon rendered under coat)
     std::vector<StorageBuffer> secondaryHeVec4Buffers;

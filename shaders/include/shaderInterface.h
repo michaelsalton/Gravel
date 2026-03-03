@@ -230,6 +230,14 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform PebbleUBOBlock {
     float normalOffset;
     uint  hasAOTexture;
     uint  doSkinning;
+
+    // Pathway fields
+    uint  usePathway;        // 0=off, 1=enable player-distance culling
+    float pathwayRadius;     // zone radius in forward/lateral direction
+    float pathwayBackScale;  // rear radius = pathwayRadius * pathwayBackScale
+    float pathwayFalloff;    // power curve exponent for edge softness
+    vec3  playerWorldPos;    // player world-space position (Y ignored)
+    vec3  playerForward;     // normalised forward direction (XZ plane)
 } pebbleUbo;
 
 #else

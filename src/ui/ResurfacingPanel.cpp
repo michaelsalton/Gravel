@@ -244,4 +244,31 @@ void ResurfacingPanel::render(Renderer& r) {
             ImGui::Text("Faces: %u", r.heNbFaces);
         }
     }
+
+    if (r.thirdPersonMode && ImGui::CollapsingHeader("Pathway")) {
+        ImGui::Checkbox("Enable Ground Pebbles", &r.renderPathway);
+        if (r.renderPathway) {
+            ImGui::Checkbox("Fog of War", &r.fogOfWar);
+            if (r.fogOfWar) {
+                ImGui::Indent();
+                ImGui::SliderFloat("Radius",  &r.pathwayRadius,  0.5f, 30.0f);
+                ImGui::SliderFloat("Falloff", &r.pathwayFalloff, 0.5f,  8.0f);
+                ImGui::Unindent();
+            }
+            ImGui::SliderFloat("Pebble Scale", &r.groundPebbleScale, 0.01f, 1.0f);
+            ImGui::Separator();
+            ImGui::Text("Ground mesh");
+            ImGui::SliderFloat("World Size", &r.groundWorldSize,     5.0f, 200.0f, "%.0f m");
+            if (ImGui::IsItemDeactivatedAfterEdit()) r.pendingGroundRegenerate = true;
+            ImGui::SliderFloat("Cell Size",  &r.groundPlaneCellSize, 0.05f,   2.0f);
+            if (ImGui::IsItemDeactivatedAfterEdit()) r.pendingGroundRegenerate = true;
+            {
+                uint32_t computedN = static_cast<uint32_t>(
+                    std::ceil(r.groundWorldSize / r.groundPlaneCellSize));
+                computedN = std::max(computedN, 4u);
+                ImGui::Text("Grid: %ux%u (%u faces)", computedN, computedN, computedN * computedN);
+            }
+            if (ImGui::Button("Regenerate Ground")) r.pendingGroundRegenerate = true;
+        }
+    }
 }

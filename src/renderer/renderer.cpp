@@ -29,11 +29,13 @@ Renderer::Renderer(Window& window) : window(window) {
     createDescriptorSets();
     createGraphicsPipeline();
     createSamplers();
+    generateGroundPlane(groundPlaneCellSize);
     initImGui();
 }
 
 Renderer::~Renderer() {
     cleanupImGui();
+    cleanupGroundMesh();
     vkDestroyPipeline(device, pebbleCagePipeline, nullptr);
     vkDestroyPipeline(device, pebblePipeline, nullptr);
     vkDestroyPipeline(device, baseMeshSolidPipeline, nullptr);
@@ -121,6 +123,12 @@ Renderer::~Renderer() {
 void Renderer::beginFrame() {
     // Process deferred mesh load between frames (before recording command buffers)
     // to avoid updating descriptor sets while a command buffer is being recorded
+    if (pendingGroundRegenerate) {
+        pendingGroundRegenerate = false;
+        vkDeviceWaitIdle(device);
+        generateGroundPlane(groundPlaneCellSize);
+    }
+
     if (!pendingMeshLoad.empty()) {
         std::string path = std::move(pendingMeshLoad);
         pendingMeshLoad.clear();
@@ -347,6 +355,47 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                             VK_SHADER_STAGE_FRAGMENT_BIT,
                             0, sizeof(PushConstants), &pushConstants);
         pfnCmdDrawMeshTasksEXT(cmd, heNbFaces, 1, 1);
+    }
+
+    // Ground pathway pebbles
+    if (renderPathway && groundMeshActive) {
+        // Copy pebble appearance settings, then override pathway fields
+        groundPebbleUBO = pebbleUBO;
+        groundPebbleUBO.usePathway       = fogOfWar ? 1u : 0u;
+        groundPebbleUBO.playerWorldPos   = player.position;
+        groundPebbleUBO.pad1             = 0.0f;
+        groundPebbleUBO.playerForward    = playerForwardDir();
+        groundPebbleUBO.pad2             = 0.0f;
+        groundPebbleUBO.pathwayRadius    = pathwayRadius;
+        groundPebbleUBO.pathwayBackScale = pathwayBackScale;
+        groundPebbleUBO.pathwayFalloff   = pathwayFalloff;
+        groundPebbleUBO.extrusionAmount  *= groundPebbleScale;
+        groundPebbleUBO.doSkinning       = 0;
+        groundPebbleUBO.hasAOTexture     = 0;
+        memcpy(groundPebbleUBOMapped, &groundPebbleUBO, sizeof(PebbleUBO));
+
+        // Ground plane is stationary — model matrix stays at world origin
+        PushConstants groundPush = pushConstants;
+        groundPush.model        = glm::mat4(1.0f);
+        groundPush.nbFaces      = groundNbFaces;
+        groundPush.nbVertices   = 0;
+        groundPush.enableCulling &= ~4u;  // no mask texture on ground plane
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pebblePipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 0, 1,
+                                 &sceneDescriptorSets[currentFrame], 0, nullptr);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 1, 1,
+                                 &groundHeDescriptorSet, 0, nullptr);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 2, 1,
+                                 &groundPebbleDescriptorSet, 0, nullptr);
+        vkCmdPushConstants(cmd, pipelineLayout,
+                            VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
+                            VK_SHADER_STAGE_FRAGMENT_BIT,
+                            0, sizeof(PushConstants), &groundPush);
+        pfnCmdDrawMeshTasksEXT(cmd, groundNbFaces, 1, 1);
     }
 
     // Dual-mesh: render secondary mesh as solid base under coat

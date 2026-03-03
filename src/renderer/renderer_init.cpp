@@ -1025,17 +1025,17 @@ void Renderer::createUniformBuffers() {
 void Renderer::createDescriptorPool() {
     std::array<VkDescriptorPoolSize, 4> poolSizes{};
 
-    // UBOs: 2 per scene frame + 1 ResurfacingUBO + 1 PebbleUBO + 1 secondary perObject
+    // UBOs: 2 per scene frame + 1 ResurfacingUBO + 1 PebbleUBO + 1 secondary perObject + 1 groundPebbleUBO
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2 + 3);
+    poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2 + 4);
 
-    // SSBOs: 17 HE + 3 skeleton + 17 secondary HE + 2 secondary skeleton joints/weights + 1 shared bone matrices
+    // SSBOs: 17 HE + 3 skeleton + 17 secondary HE + 2 secondary skeleton joints/weights + 1 shared bone matrices + 17 ground HE
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[1].descriptorCount = 17 + 3 + 17 + 3;
+    poolSizes[1].descriptorCount = 17 + 3 + 17 + 3 + 17;
 
-    // Samplers: 2 primary + 2 secondary
+    // Samplers: 2 primary + 2 secondary + 2 ground
     poolSizes[2].type = VK_DESCRIPTOR_TYPE_SAMPLER;
-    poolSizes[2].descriptorCount = 4;
+    poolSizes[2].descriptorCount = 6;
 
     // Sampled images: 4 primary + 4 secondary
     poolSizes[3].type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
@@ -1046,8 +1046,8 @@ void Renderer::createDescriptorPool() {
     poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    // scene sets + 1 HE set + 1 per-object set + 1 pebble per-object set + 1 secondary HE set + 1 secondary per-object set
-    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT + 5);
+    // scene sets + 1 HE set + 1 per-object set + 1 pebble per-object set + 1 secondary HE set + 1 secondary per-object set + 1 ground HE set + 1 ground pebble set
+    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT + 7);
 
     if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create descriptor pool!");
