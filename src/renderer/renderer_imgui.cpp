@@ -97,11 +97,12 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     }
     ImGui::Separator();
 
-    const char* meshNames[] = { "Cube", "Plane (3x3)", "Plane (5x5)", "Sphere", "Sphere HD", "Icosphere", "Dragon 8K", "Dragon Coat", "Boy", "Man", "Man 2" };
+    const char* meshNames[] = { "Cube", "Plane (3x3)", "Plane (5x5)", "Plane (Pentagon)", "Sphere", "Sphere HD", "Icosphere", "Dragon 8K", "Dragon Coat", "Boy", "Man", "Man 2" };
     const char* meshPaths[] = {
         ASSETS_DIR "shapes/cube.obj",
         ASSETS_DIR "shapes/plane.obj",
         ASSETS_DIR "shapes/plane5x5.obj",
+        ASSETS_DIR "shapes/plane_pentagon.obj",
         ASSETS_DIR "shapes/sphere.obj",
         ASSETS_DIR "shapes/sphere_hd.obj",
         ASSETS_DIR "shapes/icosphere.obj",
@@ -111,7 +112,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ASSETS_DIR "man/man.obj",
         ASSETS_DIR "man2/man2.obj"
     };
-    constexpr int meshCount = 11;
+    constexpr int meshCount = 12;
 
     // Base mesh selector
     if (ImGui::CollapsingHeader("Base Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {

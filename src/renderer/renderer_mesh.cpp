@@ -135,6 +135,7 @@ void Renderer::uploadHalfEdgeMesh(const HalfEdgeMesh& mesh) {
     cpuFaceCenters.resize(mesh.nbFaces);
     cpuFaceNormals.resize(mesh.nbFaces);
     cpuFaceAreas = mesh.faceAreas;
+    cpuFaceVertCounts = mesh.faceVertCounts;
     cpuVertexPositions.resize(mesh.nbVertices);
     cpuVertexNormals.resize(mesh.nbVertices);
     cpuVertexFaceAreas.resize(mesh.nbVertices);
@@ -573,52 +574,166 @@ void Renderer::generateGroundPlane(float cellSize) {
     }
 
     // --- Build geometry ---
-    uint32_t W = N + 1;
-
     NGonMesh ngon;
-    ngon.nbVertices = W * W;
-    ngon.nbFaces    = N * N;
 
-    ngon.positions.resize(W * W);
-    ngon.normals.resize(W * W, glm::vec3(0.0f, 1.0f, 0.0f));
-    ngon.texCoords.resize(W * W, glm::vec2(0.0f));
-    ngon.colors.resize(W * W, glm::vec3(1.0f));
+    if (groundMeshType == 0) {
+        // ---- Quad grid ----
+        uint32_t W = N + 1;
+        ngon.nbVertices = W * W;
+        ngon.nbFaces    = N * N;
 
-    float halfSize = (N * cellSize) * 0.5f;
-    for (uint32_t row = 0; row <= N; ++row) {
-        for (uint32_t col = 0; col <= N; ++col) {
-            uint32_t idx = row * W + col;
-            ngon.positions[idx] = glm::vec3(col * cellSize - halfSize, 0.0f,
-                                             row * cellSize - halfSize);
-            ngon.texCoords[idx] = glm::vec2(static_cast<float>(col) / N,
-                                             static_cast<float>(row) / N);
+        ngon.positions.resize(W * W);
+        ngon.normals.resize(W * W, glm::vec3(0.0f, 1.0f, 0.0f));
+        ngon.texCoords.resize(W * W, glm::vec2(0.0f));
+        ngon.colors.resize(W * W, glm::vec3(1.0f));
+
+        float halfSize = (N * cellSize) * 0.5f;
+        for (uint32_t row = 0; row <= N; ++row) {
+            for (uint32_t col = 0; col <= N; ++col) {
+                uint32_t idx = row * W + col;
+                ngon.positions[idx] = glm::vec3(col * cellSize - halfSize, 0.0f,
+                                                 row * cellSize - halfSize);
+                ngon.texCoords[idx] = glm::vec2(static_cast<float>(col) / N,
+                                                 static_cast<float>(row) / N);
+            }
         }
-    }
 
-    uint32_t faceVertexOffset = 0;
-    for (uint32_t row = 0; row < N; ++row) {
-        for (uint32_t col = 0; col < N; ++col) {
-            uint32_t v0 = row * W + col;
-            uint32_t v1 = row * W + (col + 1);
-            uint32_t v2 = (row + 1) * W + (col + 1);
-            uint32_t v3 = (row + 1) * W + col;
+        uint32_t faceVertexOffset = 0;
+        for (uint32_t row = 0; row < N; ++row) {
+            for (uint32_t col = 0; col < N; ++col) {
+                uint32_t v0 = row * W + col;
+                uint32_t v1 = row * W + (col + 1);
+                uint32_t v2 = (row + 1) * W + (col + 1);
+                uint32_t v3 = (row + 1) * W + col;
 
-            NGonFace face;
-            face.vertexIndices = { v0, v1, v2, v3 };
-            face.count  = 4;
-            face.offset = faceVertexOffset;
-            face.normal = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
-            glm::vec3 c = (ngon.positions[v0] + ngon.positions[v1] +
-                           ngon.positions[v2] + ngon.positions[v3]) * 0.25f;
-            face.center = glm::vec4(c, 1.0f);
-            face.area   = cellSize * cellSize;
+                NGonFace face;
+                face.vertexIndices = { v0, v1, v2, v3 };
+                face.count  = 4;
+                face.offset = faceVertexOffset;
+                face.normal = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+                glm::vec3 c = (ngon.positions[v0] + ngon.positions[v1] +
+                               ngon.positions[v2] + ngon.positions[v3]) * 0.25f;
+                face.center = glm::vec4(c, 1.0f);
+                face.area   = cellSize * cellSize;
 
-            ngon.faces.push_back(std::move(face));
-            ngon.faceVertexIndices.push_back(v0);
-            ngon.faceVertexIndices.push_back(v1);
-            ngon.faceVertexIndices.push_back(v2);
-            ngon.faceVertexIndices.push_back(v3);
-            faceVertexOffset += 4;
+                ngon.faces.push_back(std::move(face));
+                ngon.faceVertexIndices.push_back(v0);
+                ngon.faceVertexIndices.push_back(v1);
+                ngon.faceVertexIndices.push_back(v2);
+                ngon.faceVertexIndices.push_back(v3);
+                faceVertexOffset += 4;
+            }
+        }
+    } else {
+        // ---- Pentagon tiling ----
+        // Pairs of adjacent columns (2*pc, 2*pc+1) each become 2 pentagons sharing
+        // one midpoint vertex placed at the CENTER X of the left cell (off the shared
+        // edge), so the resulting faces are visually non-rectangular pentagons.
+        // N is rounded up to even so all columns pair cleanly.
+        if (N % 2 != 0) N += 1;
+
+        uint32_t W         = N + 1;
+        uint32_t numPairs  = N / 2;
+        uint32_t numMidpts = numPairs * N;  // one midpoint per row per pair
+
+        ngon.nbVertices = W * W + numMidpts;
+        ngon.nbFaces    = N * N;
+
+        ngon.positions.resize(ngon.nbVertices);
+        ngon.normals.resize(ngon.nbVertices, glm::vec3(0.0f, 1.0f, 0.0f));
+        ngon.texCoords.resize(ngon.nbVertices, glm::vec2(0.0f));
+        ngon.colors.resize(ngon.nbVertices, glm::vec3(1.0f));
+
+        float halfSize = (N * cellSize) * 0.5f;
+
+        // Corner vertices
+        for (uint32_t row = 0; row <= N; ++row) {
+            for (uint32_t col = 0; col <= N; ++col) {
+                uint32_t idx = row * W + col;
+                ngon.positions[idx] = glm::vec3(col * cellSize - halfSize, 0.0f,
+                                                 row * cellSize - halfSize);
+                ngon.texCoords[idx] = glm::vec2(float(col) / N, float(row) / N);
+            }
+        }
+
+        // Midpoint vertices: placed at the CENTER X of the left cell (not on the shared edge)
+        // so that each pentagon is visually non-rectangular.
+        auto midIdx = [&](uint32_t pc, uint32_t row) -> uint32_t {
+            return W * W + pc * N + row;
+        };
+        for (uint32_t pc = 0; pc < numPairs; ++pc) {
+            uint32_t col_right = 2 * pc + 1;
+            float x = (col_right - 0.5f) * cellSize - halfSize;  // center of left cell
+            for (uint32_t row = 0; row < N; ++row) {
+                uint32_t idx = midIdx(pc, row);
+                float z = (row + 0.5f) * cellSize - halfSize;
+                ngon.positions[idx] = glm::vec3(x, 0.0f, z);
+                ngon.texCoords[idx] = glm::vec2(float(col_right) / N,
+                                                 float(row + 0.5f) / N);
+            }
+        }
+
+        auto cornerIdx = [&](uint32_t row, uint32_t col) -> uint32_t {
+            return row * W + col;
+        };
+
+        uint32_t faceVertexOffset = 0;
+        for (uint32_t pc = 0; pc < numPairs; ++pc) {
+            uint32_t col_l = 2 * pc;
+            uint32_t col_r = 2 * pc + 1;
+            for (uint32_t row = 0; row < N; ++row) {
+                uint32_t M = midIdx(pc, row);
+
+                // Pentagon 1 (left cell): TL → TR → midpoint → BR → BL
+                {
+                    uint32_t v0 = cornerIdx(row,   col_l);
+                    uint32_t v1 = cornerIdx(row,   col_r);
+                    uint32_t v2 = M;
+                    uint32_t v3 = cornerIdx(row+1, col_r);
+                    uint32_t v4 = cornerIdx(row+1, col_l);
+
+                    glm::vec3 c = (ngon.positions[v0] + ngon.positions[v1] +
+                                   ngon.positions[v2] + ngon.positions[v3] +
+                                   ngon.positions[v4]) / 5.0f;
+                    NGonFace face;
+                    face.vertexIndices = { v0, v1, v2, v3, v4 };
+                    face.count  = 5;
+                    face.offset = faceVertexOffset;
+                    face.normal = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+                    face.center = glm::vec4(c, 1.0f);
+                    face.area   = cellSize * cellSize;
+
+                    ngon.faces.push_back(std::move(face));
+                    for (auto vi : {v0, v1, v2, v3, v4})
+                        ngon.faceVertexIndices.push_back(vi);
+                    faceVertexOffset += 5;
+                }
+
+                // Pentagon 2 (right cell): TL → TR → BR → BL → midpoint
+                {
+                    uint32_t v0 = cornerIdx(row,   col_r);
+                    uint32_t v1 = cornerIdx(row,   col_r + 1);
+                    uint32_t v2 = cornerIdx(row+1, col_r + 1);
+                    uint32_t v3 = cornerIdx(row+1, col_r);
+                    uint32_t v4 = M;
+
+                    glm::vec3 c = (ngon.positions[v0] + ngon.positions[v1] +
+                                   ngon.positions[v2] + ngon.positions[v3] +
+                                   ngon.positions[v4]) / 5.0f;
+                    NGonFace face;
+                    face.vertexIndices = { v0, v1, v2, v3, v4 };
+                    face.count  = 5;
+                    face.offset = faceVertexOffset;
+                    face.normal = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+                    face.center = glm::vec4(c, 1.0f);
+                    face.area   = cellSize * cellSize;
+
+                    ngon.faces.push_back(std::move(face));
+                    for (auto vi : {v0, v1, v2, v3, v4})
+                        ngon.faceVertexIndices.push_back(vi);
+                    faceVertexOffset += 5;
+                }
+            }
         }
     }
 
@@ -697,7 +812,8 @@ void Renderer::generateGroundPlane(float cellSize) {
 
     groundMeshActive = true;
     std::cout << "Ground plane generated: " << N << "x" << N
-              << " quads (" << groundNbFaces << " faces)" << std::endl;
+              << (groundMeshType == 0 ? " quads" : " pentagons")
+              << " (" << groundNbFaces << " faces)" << std::endl;
 }
 
 void Renderer::cleanupGroundMesh() {

@@ -8,7 +8,7 @@ const LevelPreset LEVEL_PRESETS[] = {
     {
         .name               = "Sphere World",
 
-        .selectedMesh       = 5,
+        .selectedMesh       = 6,
         .meshPath           = ASSETS_DIR "shapes/icosphere.obj",
         .triangulateMesh    = false,
         .baseMeshMode       = 0,
@@ -46,7 +46,7 @@ const LevelPreset LEVEL_PRESETS[] = {
     {
         .name               = "Chainmail Man",
 
-        .selectedMesh       = 9,
+        .selectedMesh       = 10,
         .meshPath           = ASSETS_DIR "man/man.obj",
         .triangulateMesh    = false,
         .baseMeshMode       = 5,        // Skin

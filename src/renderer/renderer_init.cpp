@@ -813,29 +813,29 @@ void Renderer::createDescriptorSetLayouts() {
     // Binding 2: int  buffers[10] (topology arrays)
     // Binding 3: float buffers[1] (faceAreas)
     std::array<VkDescriptorSetLayoutBinding, 4> heBindings{};
+    VkShaderStageFlags heStages = VK_SHADER_STAGE_TASK_BIT_EXT |
+                                   VK_SHADER_STAGE_MESH_BIT_EXT |
+                                   VK_SHADER_STAGE_COMPUTE_BIT;
+
     heBindings[0].binding = 0;
     heBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     heBindings[0].descriptorCount = 5;
-    heBindings[0].stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
-                                VK_SHADER_STAGE_MESH_BIT_EXT;
+    heBindings[0].stageFlags = heStages;
 
     heBindings[1].binding = 1;
     heBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     heBindings[1].descriptorCount = 1;
-    heBindings[1].stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
-                                VK_SHADER_STAGE_MESH_BIT_EXT;
+    heBindings[1].stageFlags = heStages;
 
     heBindings[2].binding = 2;
     heBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     heBindings[2].descriptorCount = 10;
-    heBindings[2].stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
-                                VK_SHADER_STAGE_MESH_BIT_EXT;
+    heBindings[2].stageFlags = heStages;
 
     heBindings[3].binding = 3;
     heBindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     heBindings[3].descriptorCount = 1;
-    heBindings[3].stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT |
-                                VK_SHADER_STAGE_MESH_BIT_EXT;
+    heBindings[3].stageFlags = heStages;
 
     VkDescriptorSetLayoutCreateInfo heLayoutInfo{};
     heLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -850,9 +850,11 @@ void Renderer::createDescriptorSetLayouts() {
     // Set 2: PerObject (6 bindings, partial binding for optional resources)
     VkShaderStageFlags taskMeshFrag = VK_SHADER_STAGE_TASK_BIT_EXT |
                                        VK_SHADER_STAGE_MESH_BIT_EXT |
-                                       VK_SHADER_STAGE_FRAGMENT_BIT;
+                                       VK_SHADER_STAGE_FRAGMENT_BIT |
+                                       VK_SHADER_STAGE_COMPUTE_BIT;
     VkShaderStageFlags taskMesh = VK_SHADER_STAGE_TASK_BIT_EXT |
-                                   VK_SHADER_STAGE_MESH_BIT_EXT;
+                                   VK_SHADER_STAGE_MESH_BIT_EXT |
+                                   VK_SHADER_STAGE_COMPUTE_BIT;
 
     std::array<VkDescriptorSetLayoutBinding, 6> objBindings{};
 
@@ -1652,4 +1654,125 @@ void Renderer::createSamplers() {
     }
 
     std::cout << "Samplers created (linear + nearest)" << std::endl;
+}
+
+// ============================================================================
+// Export Compute Pipelines
+// ============================================================================
+
+void Renderer::createExportComputePipelines() {
+    if (exportPipelinesCreated) return;
+
+    // --- Descriptor Set Layout for export output (Set 3) ---
+    std::array<VkDescriptorSetLayoutBinding, 5> exportBindings{};
+
+    // Binding 0: positions (writeonly)
+    exportBindings[0].binding = 0;
+    exportBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    exportBindings[0].descriptorCount = 1;
+    exportBindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    // Binding 1: normals (writeonly)
+    exportBindings[1].binding = 1;
+    exportBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    exportBindings[1].descriptorCount = 1;
+    exportBindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    // Binding 2: uvs (writeonly)
+    exportBindings[2].binding = 2;
+    exportBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    exportBindings[2].descriptorCount = 1;
+    exportBindings[2].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    // Binding 3: indices (writeonly)
+    exportBindings[3].binding = 3;
+    exportBindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    exportBindings[3].descriptorCount = 1;
+    exportBindings[3].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    // Binding 4: element offsets (readonly)
+    exportBindings[4].binding = 4;
+    exportBindings[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    exportBindings[4].descriptorCount = 1;
+    exportBindings[4].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    VkDescriptorSetLayoutCreateInfo exportLayoutInfo{};
+    exportLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    exportLayoutInfo.bindingCount = static_cast<uint32_t>(exportBindings.size());
+    exportLayoutInfo.pBindings = exportBindings.data();
+
+    if (vkCreateDescriptorSetLayout(device, &exportLayoutInfo, nullptr,
+                                     &exportOutputSetLayout) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create export output descriptor set layout!");
+    }
+
+    // --- Compute Pipeline Layout (Sets 0-3 + push constants) ---
+    std::array<VkDescriptorSetLayout, 4> setLayouts = {
+        sceneSetLayout,
+        halfEdgeSetLayout,
+        perObjectSetLayout,
+        exportOutputSetLayout
+    };
+
+    VkPushConstantRange pushRange{};
+    pushRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    pushRange.offset = 0;
+    pushRange.size = sizeof(PushConstants);
+
+    VkPipelineLayoutCreateInfo layoutInfo{};
+    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
+    layoutInfo.pSetLayouts = setLayouts.data();
+    layoutInfo.pushConstantRangeCount = 1;
+    layoutInfo.pPushConstantRanges = &pushRange;
+
+    if (vkCreatePipelineLayout(device, &layoutInfo, nullptr,
+                                &computePipelineLayout) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create compute pipeline layout!");
+    }
+
+    // --- Parametric Export Compute Pipeline ---
+    auto compCode = readFile(std::string(SHADER_DIR) + "parametric_export.comp.spv");
+    VkShaderModule compModule = createShaderModule(compCode);
+
+    VkPipelineShaderStageCreateInfo compStage{};
+    compStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    compStage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+    compStage.module = compModule;
+    compStage.pName = "main";
+
+    VkComputePipelineCreateInfo compPipelineInfo{};
+    compPipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+    compPipelineInfo.stage = compStage;
+    compPipelineInfo.layout = computePipelineLayout;
+
+    if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &compPipelineInfo,
+                                  nullptr, &parametricExportPipeline) != VK_SUCCESS) {
+        vkDestroyShaderModule(device, compModule, nullptr);
+        throw std::runtime_error("Failed to create parametric export compute pipeline!");
+    }
+
+    vkDestroyShaderModule(device, compModule, nullptr);
+
+    exportPipelinesCreated = true;
+    std::cout << "Export compute pipelines created" << std::endl;
+}
+
+void Renderer::cleanupExportPipelines() {
+    if (!exportPipelinesCreated) return;
+
+    if (parametricExportPipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(device, parametricExportPipeline, nullptr);
+        parametricExportPipeline = VK_NULL_HANDLE;
+    }
+    if (computePipelineLayout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(device, computePipelineLayout, nullptr);
+        computePipelineLayout = VK_NULL_HANDLE;
+    }
+    if (exportOutputSetLayout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(device, exportOutputSetLayout, nullptr);
+        exportOutputSetLayout = VK_NULL_HANDLE;
+    }
+
+    exportPipelinesCreated = false;
 }

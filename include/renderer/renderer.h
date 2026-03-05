@@ -10,6 +10,7 @@
 #include <array>
 
 #include "vulkan/vkHelper.h"
+#include "renderer/MeshExport.h"
 #include "camera/FreeFlyCamera.h"
 #include "camera/OrbitCamera.h"
 #include "renderer/renderer_init.h"
@@ -198,6 +199,7 @@ public:
 
     // Pathway config
     bool      renderPathway      = false;
+    bool      showGroundMesh     = false;   // wireframe overlay of the ground plane grid
     bool      fogOfWar           = false;   // when true, culls pebbles by player distance
     float     pathwayRadius      = 4.0f;
     float     pathwayBackScale   = 1.0f;
@@ -205,7 +207,14 @@ public:
     float     groundPebbleScale      = 0.2f;   // multiplier on extrusionAmount for ground pebbles
     float     groundWorldSize        = 30.0f;  // total side length of the ground plane (world units)
     float     groundPlaneCellSize    = 0.2f;
+    int       groundMeshType         = 0;   // 0=quads, 1=pentagons
     bool      pendingGroundRegenerate = false;
+
+    // Export state
+    bool pendingExport = false;
+    std::string exportFilePath = "export.obj";
+    int exportMode = 0;  // 0=parametric, 1=pebble
+    std::string lastExportStatus;
 
     // Cameras
     FreeFlyCamera freeFlyCamera;
@@ -253,6 +262,7 @@ public:
     std::vector<glm::vec3> cpuVertexNormals;
     std::vector<float>     cpuVertexFaceAreas;  // area of adjacent face, for bounding radius
     std::vector<glm::vec2> cpuFaceUVs;          // base UV per face element (first vertex texcoord)
+    std::vector<int>       cpuFaceVertCounts;   // polygon vertex count per face (for pebble export)
     std::vector<glm::vec2> cpuVertexUVs;        // base UV per vertex element (vertex texcoord)
     std::vector<uint8_t>   cpuMaskPixels;       // mask texture R channel on CPU
     uint32_t cpuMaskWidth = 0, cpuMaskHeight = 0;
@@ -306,6 +316,9 @@ private:
     void generateGroundPlane(float cellSize);
     void cleanupGroundMesh();
     glm::vec3 playerForwardDir() const;
+    void exportProceduralMesh(const std::string& filepath, int mode);
+    void createExportComputePipelines();
+    void cleanupExportPipelines();
     void loadAndUploadTexture(const std::string& path, VulkanTexture& texture,
                                VkFormat format, bool& loadedFlag);
     size_t calculateVRAM() const;
@@ -389,6 +402,12 @@ private:
 
     // Mesh shader function pointer
     PFN_vkCmdDrawMeshTasksEXT pfnCmdDrawMeshTasksEXT = nullptr;
+
+    // Export compute pipeline
+    VkDescriptorSetLayout exportOutputSetLayout = VK_NULL_HANDLE;
+    VkPipelineLayout      computePipelineLayout = VK_NULL_HANDLE;
+    VkPipeline            parametricExportPipeline = VK_NULL_HANDLE;
+    bool                  exportPipelinesCreated = false;
 
     // ImGui
     VkDescriptorPool imguiDescriptorPool = VK_NULL_HANDLE;

@@ -100,6 +100,7 @@ void ResurfacingPanel::render(Renderer& r) {
                     ASSETS_DIR "shapes/cube.obj",
                     ASSETS_DIR "shapes/plane.obj",
                     ASSETS_DIR "shapes/plane5x5.obj",
+                    ASSETS_DIR "shapes/plane_pentagon.obj",
                     ASSETS_DIR "shapes/sphere.obj",
                     ASSETS_DIR "shapes/sphere_hd.obj",
                     ASSETS_DIR "shapes/icosphere.obj",
@@ -245,8 +246,40 @@ void ResurfacingPanel::render(Renderer& r) {
         }
     }
 
+    if (r.heMeshUploaded && (r.renderResurfacing || r.renderPebbles) &&
+        ImGui::CollapsingHeader("Export")) {
+        static char exportPath[256] = "export.obj";
+        ImGui::InputText("File Path", exportPath, sizeof(exportPath));
+
+        // Estimated size
+        if (r.renderResurfacing && !r.renderPebbles) {
+            uint32_t M = r.resolutionM, N = r.resolutionN;
+            uint32_t numElements = r.heNbFaces + r.heNbVertices;
+            uint32_t estVerts = numElements * (M + 1) * (N + 1);
+            uint32_t estTris = numElements * M * N * 2;
+            float estMB = (estVerts * (sizeof(float) * 10) + estTris * 3 * sizeof(float) * 4) / 1e6f;
+            ImGui::Text("Est: %u verts, %u tris (~%.1f MB file)", estVerts, estTris, estMB);
+
+            if (ImGui::Button("Export Parametric Mesh")) {
+                r.exportFilePath = exportPath;
+                r.exportMode = 0;
+                r.pendingExport = true;
+            }
+        }
+
+        if (r.renderPebbles) {
+            ImGui::Text("Pebble export: coming soon");
+        }
+
+        if (!r.lastExportStatus.empty()) {
+            ImGui::TextWrapped("%s", r.lastExportStatus.c_str());
+        }
+    }
+
     if (r.thirdPersonMode && ImGui::CollapsingHeader("Pathway")) {
         ImGui::Checkbox("Enable Ground Pebbles", &r.renderPathway);
+        ImGui::SameLine();
+        ImGui::Checkbox("Show Grid", &r.showGroundMesh);
         if (r.renderPathway) {
             ImGui::Checkbox("Fog of War", &r.fogOfWar);
             if (r.fogOfWar) {
@@ -258,6 +291,12 @@ void ResurfacingPanel::render(Renderer& r) {
             ImGui::SliderFloat("Pebble Scale", &r.groundPebbleScale, 0.01f, 1.0f);
             ImGui::Separator();
             ImGui::Text("Ground mesh");
+            ImGui::Text("Mesh Type:");
+            ImGui::SameLine();
+            int mt = r.groundMeshType;
+            if (ImGui::RadioButton("Quads",     &mt, 0)) { r.groundMeshType = 0; r.pendingGroundRegenerate = true; }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Pentagons", &mt, 1)) { r.groundMeshType = 1; r.pendingGroundRegenerate = true; }
             ImGui::SliderFloat("World Size", &r.groundWorldSize,     5.0f, 200.0f, "%.0f m");
             if (ImGui::IsItemDeactivatedAfterEdit()) r.pendingGroundRegenerate = true;
             ImGui::SliderFloat("Cell Size",  &r.groundPlaneCellSize, 0.05f,   2.0f);

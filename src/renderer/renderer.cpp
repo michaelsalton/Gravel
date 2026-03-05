@@ -1,4 +1,6 @@
 #include "renderer/renderer.h"
+#include "renderer/MeshExport.h"
+#include "loaders/ObjWriter.h"
 #include "loaders/GltfLoader.h"
 #include "core/window.h"
 #include <stdexcept>
@@ -35,6 +37,7 @@ Renderer::Renderer(Window& window) : window(window) {
 
 Renderer::~Renderer() {
     cleanupImGui();
+    cleanupExportPipelines();
     cleanupGroundMesh();
     vkDestroyPipeline(device, pebbleCagePipeline, nullptr);
     vkDestroyPipeline(device, pebblePipeline, nullptr);
@@ -141,6 +144,16 @@ void Renderer::beginFrame() {
             animationSpeed = pendingPreset->animationSpeed;
             baseMeshMode = pendingPreset->baseMeshMode;
             pendingPreset = nullptr;
+        }
+    }
+
+    if (pendingExport) {
+        pendingExport = false;
+        try {
+            exportProceduralMesh(exportFilePath, exportMode);
+            lastExportStatus = "Exported: " + exportFilePath;
+        } catch (const std::exception& e) {
+            lastExportStatus = std::string("Export failed: ") + e.what();
         }
     }
 
@@ -398,6 +411,30 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         pfnCmdDrawMeshTasksEXT(cmd, groundNbFaces, 1, 1);
     }
 
+    // Ground plane wireframe overlay
+    if (showGroundMesh && groundMeshActive) {
+        PushConstants gp = pushConstants;
+        gp.model    = glm::mat4(1.0f);
+        gp.nbFaces  = groundNbFaces;
+        gp.nbVertices = 0;
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, baseMeshPipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 0, 1,
+                                 &sceneDescriptorSets[currentFrame], 0, nullptr);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 1, 1,
+                                 &groundHeDescriptorSet, 0, nullptr);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 2, 1,
+                                 &groundPebbleDescriptorSet, 0, nullptr);
+        vkCmdPushConstants(cmd, pipelineLayout,
+                            VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
+                            VK_SHADER_STAGE_FRAGMENT_BIT,
+                            0, sizeof(PushConstants), &gp);
+        pfnCmdDrawMeshTasksEXT(cmd, groundNbFaces, 1, 1);
+    }
+
     // Dual-mesh: render secondary mesh as solid base under coat
     if (renderResurfacing && dualMeshActive && heMeshUploaded) {
         PushConstants basePush = pushConstants;
@@ -542,4 +579,212 @@ void Renderer::recreateSwapChain() {
 
 void Renderer::waitIdle() {
     vkDeviceWaitIdle(device);
+}
+
+// ============================================================================
+// Procedural Mesh Export
+// ============================================================================
+
+void Renderer::exportProceduralMesh(const std::string& filepath, int mode) {
+    if (!heMeshUploaded) {
+        throw std::runtime_error("No mesh loaded");
+    }
+
+    vkDeviceWaitIdle(device);
+
+    // Ensure compute pipelines are created (lazy init)
+    createExportComputePipelines();
+
+    // --- 1. Calculate total counts and build offset buffer ---
+    uint32_t totalVerts = 0, totalTris = 0;
+    std::vector<ExportElementOffset> offsets;
+
+    if (mode == 0) {
+        // Parametric: fixed geometry per element
+        uint32_t M = resolutionM, N = resolutionN;
+        uint32_t vertsPerElement = (M + 1) * (N + 1);
+        uint32_t trisPerElement = M * N * 2;
+        uint32_t numElements = heNbFaces + heNbVertices;
+
+        offsets.resize(numElements);
+        for (uint32_t i = 0; i < numElements; i++) {
+            offsets[i].vertexOffset = totalVerts;
+            offsets[i].triangleOffset = totalTris;
+            offsets[i].isVertex = (i >= heNbFaces) ? 1 : 0;
+            offsets[i].faceId = (i >= heNbFaces) ? (i - heNbFaces) : i;
+            totalVerts += vertsPerElement;
+            totalTris += trisPerElement;
+        }
+    } else {
+        throw std::runtime_error("Pebble export not yet implemented");
+    }
+
+    std::cout << "Export: " << totalVerts << " vertices, "
+              << totalTris << " triangles" << std::endl;
+
+    // --- 2. Allocate export buffers ---
+    MeshExportBuffers exportBufs;
+    exportBufs.allocate(device, physicalDevice, totalVerts, totalTris, offsets);
+
+    // --- 3. Create on-demand descriptor pool + set ---
+    VkDescriptorPool exportPool = VK_NULL_HANDLE;
+    VkDescriptorSet exportSet = VK_NULL_HANDLE;
+
+    {
+        VkDescriptorPoolSize poolSize{};
+        poolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        poolSize.descriptorCount = 5;
+
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
+        poolInfo.maxSets = 1;
+
+        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &exportPool) != VK_SUCCESS) {
+            exportBufs.destroy();
+            throw std::runtime_error("Failed to create export descriptor pool");
+        }
+
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = exportPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &exportOutputSetLayout;
+
+        if (vkAllocateDescriptorSets(device, &allocInfo, &exportSet) != VK_SUCCESS) {
+            vkDestroyDescriptorPool(device, exportPool, nullptr);
+            exportBufs.destroy();
+            throw std::runtime_error("Failed to allocate export descriptor set");
+        }
+
+        // Write descriptor set
+        std::array<VkDescriptorBufferInfo, 5> bufInfos{};
+        bufInfos[0] = {exportBufs.positions.getBuffer(), 0, exportBufs.positions.getSize()};
+        bufInfos[1] = {exportBufs.normals.getBuffer(), 0, exportBufs.normals.getSize()};
+        bufInfos[2] = {exportBufs.uvs.getBuffer(), 0, exportBufs.uvs.getSize()};
+        bufInfos[3] = {exportBufs.indices.getBuffer(), 0, exportBufs.indices.getSize()};
+        bufInfos[4] = {exportBufs.offsets.getBuffer(), 0, exportBufs.offsets.getSize()};
+
+        std::array<VkWriteDescriptorSet, 5> writes{};
+        for (uint32_t i = 0; i < 5; i++) {
+            writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[i].dstSet = exportSet;
+            writes[i].dstBinding = i;
+            writes[i].dstArrayElement = 0;
+            writes[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+            writes[i].descriptorCount = 1;
+            writes[i].pBufferInfo = &bufInfos[i];
+        }
+
+        vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
+                               writes.data(), 0, nullptr);
+    }
+
+    // --- 4. Record and submit compute command buffer ---
+    VkCommandBufferAllocateInfo cmdAllocInfo{};
+    cmdAllocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cmdAllocInfo.commandPool = commandPool;
+    cmdAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cmdAllocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer cmd;
+    vkAllocateCommandBuffers(device, &cmdAllocInfo, &cmd);
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cmd, &beginInfo);
+
+    VkPipeline pipeline = (mode == 0) ? parametricExportPipeline : parametricExportPipeline; // TODO: pebble
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+
+    // Bind descriptor sets 0-3
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                            computePipelineLayout, 0, 1,
+                            &sceneDescriptorSets[currentFrame], 0, nullptr);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                            computePipelineLayout, 1, 1,
+                            &heDescriptorSet, 0, nullptr);
+
+    VkDescriptorSet perObjSet = (mode == 0) ? perObjectDescriptorSet
+                                            : pebblePerObjectDescriptorSet;
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                            computePipelineLayout, 2, 1,
+                            &perObjSet, 0, nullptr);
+
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE,
+                            computePipelineLayout, 3, 1,
+                            &exportSet, 0, nullptr);
+
+    // Push constants
+    PushConstants pc{};
+    pc.model = glm::mat4(1.0f);
+    pc.nbFaces = heNbFaces;
+    pc.nbVertices = heNbVertices;
+    pc.elementType = elementType;
+    pc.userScaling = userScaling;
+    pc.torusMajorR = torusMajorR;
+    pc.torusMinorR = torusMinorR;
+    pc.sphereRadius = sphereRadius;
+    pc.resolutionM = resolutionM;
+    pc.resolutionN = resolutionN;
+    pc.debugMode = 0;
+    pc.enableCulling = 0;       // No culling for export
+    pc.cullingThreshold = 0.0f;
+    pc.enableLod = 0;           // No LOD for export
+    pc.lodFactor = 1.0f;
+    pc.chainmailMode = chainmailMode ? 1 : 0;
+    pc.chainmailTiltAngle = chainmailTiltAngle;
+
+    vkCmdPushConstants(cmd, computePipelineLayout,
+                       VK_SHADER_STAGE_COMPUTE_BIT,
+                       0, sizeof(PushConstants), &pc);
+
+    uint32_t numWorkgroups = static_cast<uint32_t>(offsets.size());
+    vkCmdDispatch(cmd, numWorkgroups, 1, 1);
+
+    vkEndCommandBuffer(cmd);
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &cmd;
+    vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(graphicsQueue);
+
+    vkFreeCommandBuffers(device, commandPool, 1, &cmd);
+
+    // --- 5. Read back and write OBJ ---
+    void* posData = nullptr;
+    void* normData = nullptr;
+    void* uvData = nullptr;
+    void* idxData = nullptr;
+
+    vkMapMemory(device, exportBufs.positions.getMemory(), 0,
+                totalVerts * sizeof(glm::vec4), 0, &posData);
+    vkMapMemory(device, exportBufs.normals.getMemory(), 0,
+                totalVerts * sizeof(glm::vec4), 0, &normData);
+    vkMapMemory(device, exportBufs.uvs.getMemory(), 0,
+                totalVerts * sizeof(glm::vec2), 0, &uvData);
+    vkMapMemory(device, exportBufs.indices.getMemory(), 0,
+                totalTris * 3 * sizeof(uint32_t), 0, &idxData);
+
+    ObjWriter::write(filepath,
+                     static_cast<const glm::vec4*>(posData),
+                     static_cast<const glm::vec4*>(normData),
+                     static_cast<const glm::vec2*>(uvData),
+                     static_cast<const uint32_t*>(idxData),
+                     totalVerts, totalTris);
+
+    vkUnmapMemory(device, exportBufs.positions.getMemory());
+    vkUnmapMemory(device, exportBufs.normals.getMemory());
+    vkUnmapMemory(device, exportBufs.uvs.getMemory());
+    vkUnmapMemory(device, exportBufs.indices.getMemory());
+
+    // --- 6. Cleanup ---
+    vkDestroyDescriptorPool(device, exportPool, nullptr);
+    exportBufs.destroy();
+
+    std::cout << "Export complete: " << filepath << std::endl;
 }

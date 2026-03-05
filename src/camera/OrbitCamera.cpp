@@ -27,7 +27,7 @@ void OrbitCamera::processInput(Window& win, float deltaTime) {
 
     // Right-click drag: orbit yaw/pitch
     if (!io.WantCaptureMouse && kb.getMouseButton(GLFW_MOUSE_BUTTON_RIGHT)) {
-        yaw += dx * sensitivity;
+        yaw -= dx * sensitivity;
         pitch -= dy * sensitivity;
         pitch = glm::clamp(pitch, -80.0f, 80.0f);
     }

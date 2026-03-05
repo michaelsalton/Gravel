@@ -77,6 +77,8 @@ set(SOURCES
     src/ui/AnimationPanel.cpp
     src/geometry/HalfEdge.cpp
     src/vulkan/vkHelper.cpp
+    src/loaders/ObjWriter.cpp
+    src/renderer/MeshExport.cpp
     ${IMGUI_SOURCES}
     # src/AppResources.cpp
 )
@@ -164,6 +166,7 @@ file(GLOB_RECURSE SHADER_SOURCES
     ${CMAKE_SOURCE_DIR}/shaders/*.frag
     ${CMAKE_SOURCE_DIR}/shaders/*.task
     ${CMAKE_SOURCE_DIR}/shaders/*.mesh
+    ${CMAKE_SOURCE_DIR}/shaders/*.comp
 )
 
 # Shader include files (tracked as dependencies so changes trigger recompilation)

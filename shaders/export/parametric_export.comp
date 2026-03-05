@@ -1,0 +1,179 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "shaderInterface.h"
+#include "common.glsl"
+#include "parametric/parametricSurfaces.glsl"
+
+layout(local_size_x = 32) in;
+
+// ============================================================================
+// Push Constants (same layout as graphics pipeline)
+// ============================================================================
+
+layout(push_constant) uniform PushConstants {
+    mat4 model;
+    uint nbFaces;
+    uint nbVertices;
+    uint elementType;
+    float userScaling;
+    float torusMajorR;
+    float torusMinorR;
+    float sphereRadius;
+    uint resolutionM;
+    uint resolutionN;
+    uint debugMode;
+    uint enableCulling;
+    float cullingThreshold;
+    uint enableLod;
+    float lodFactor;
+    uint chainmailMode;
+    float chainmailTiltAngle;
+} push;
+
+// ============================================================================
+// Export Output Buffers (Set 3)
+// ============================================================================
+
+layout(std430, set = 3, binding = 0) writeonly buffer ExportPositions {
+    vec4 outPositions[];
+};
+
+layout(std430, set = 3, binding = 1) writeonly buffer ExportNormals {
+    vec4 outNormals[];
+};
+
+layout(std430, set = 3, binding = 2) writeonly buffer ExportUVs {
+    vec2 outUVs[];
+};
+
+layout(std430, set = 3, binding = 3) writeonly buffer ExportIndices {
+    uint outIndices[];
+};
+
+struct ExportElementOffset {
+    uint vertexOffset;
+    uint triangleOffset;
+    uint faceId;
+    uint isVertex;
+};
+
+layout(std430, set = 3, binding = 4) readonly buffer ExportOffsets {
+    ExportElementOffset elementOffsets[];
+};
+
+// ============================================================================
+// Main: One workgroup per element (face or vertex)
+// ============================================================================
+
+void main() {
+    uint elementId = gl_WorkGroupID.x;
+    ExportElementOffset eo = elementOffsets[elementId];
+
+    uint M = push.resolutionM;
+    uint N = push.resolutionN;
+
+    // Fetch element data (mirrors parametric.task logic)
+    vec3 position, normal, edgeTangent;
+    float area, faceColor;
+
+    if (eo.isVertex != 0u) {
+        uint vertId = eo.faceId;
+        position = readVertexPosition(vertId);
+        normal = readVertexNormal(vertId);
+
+        int edge = readVertexEdge(vertId);
+        uint adjFace = 0u;
+        if (edge >= 0) {
+            adjFace = uint(readHalfEdgeFace(uint(edge)));
+        }
+        area = readFaceArea(adjFace);
+        faceColor = 1.0 - readFaceColor(adjFace);
+
+        // Edge tangent from outgoing edge
+        if (edge >= 0) {
+            int nextHE = getHalfEdgeNext(uint(edge));
+            vec3 v1 = readVertexPosition(uint(getHalfEdgeVertex(uint(nextHE))));
+            vec3 edgeDir = v1 - position;
+            edgeTangent = normalize(edgeDir - dot(edgeDir, normal) * normal);
+        } else {
+            edgeTangent = vec3(1, 0, 0);
+        }
+    } else {
+        uint faceId = eo.faceId;
+        position = readFaceCenter(faceId);
+        normal = readFaceNormal(faceId);
+        area = readFaceArea(faceId);
+        faceColor = readFaceColor(faceId);
+
+        // Edge tangent from first edge
+        int edge = readFaceEdge(faceId);
+        int v0id = getHalfEdgeVertex(uint(edge));
+        int nextHE = getHalfEdgeNext(uint(edge));
+        int v1id = getHalfEdgeVertex(uint(nextHE));
+        vec3 edgeDir = readVertexPosition(uint(v1id)) - readVertexPosition(uint(v0id));
+        edgeTangent = normalize(edgeDir - dot(edgeDir, normal) * normal);
+    }
+
+    uint numVerts = (M + 1) * (N + 1);
+    uint numQuads = M * N;
+    uint localId = gl_LocalInvocationID.x;
+
+    // Generate vertices in parallel (32 threads)
+    for (uint i = localId; i < numVerts; i += 32) {
+        uint u = i % (M + 1);
+        uint v = i / (M + 1);
+
+        vec2 uv = vec2(u, v) / vec2(M, N);
+
+        // Evaluate parametric surface in local space
+        vec3 localPos, localNormal;
+        evaluateParametricSurface(uv, localPos, localNormal, push.elementType,
+                                  push.torusMajorR, push.torusMinorR, push.sphereRadius);
+
+        // Transform to world space
+        vec3 worldPos, worldNormal;
+        if (push.chainmailMode != 0u) {
+            offsetVertexChainmail(localPos, localNormal,
+                                  position, normal, edgeTangent,
+                                  area, push.userScaling,
+                                  faceColor, push.chainmailTiltAngle,
+                                  worldPos, worldNormal);
+        } else {
+            offsetVertex(localPos, localNormal,
+                         position, normal, area, push.userScaling,
+                         worldPos, worldNormal);
+        }
+
+        // Apply model matrix
+        worldPos = (push.model * vec4(worldPos, 1.0)).xyz;
+        worldNormal = normalize((push.model * vec4(worldNormal, 0.0)).xyz);
+
+        uint idx = eo.vertexOffset + i;
+        outPositions[idx] = vec4(worldPos, 1.0);
+        outNormals[idx] = vec4(worldNormal, 0.0);
+        outUVs[idx] = uv;
+    }
+
+    // Generate triangle indices in parallel
+    for (uint q = localId; q < numQuads; q += 32) {
+        uint qu = q % M;
+        uint qv = q / M;
+
+        uint v00 = qv * (M + 1) + qu;
+        uint v10 = v00 + 1;
+        uint v01 = v00 + (M + 1);
+        uint v11 = v01 + 1;
+
+        // Add global vertex offset so indices are absolute
+        uint base = eo.vertexOffset;
+        uint triBase = eo.triangleOffset * 3 + q * 6;
+
+        outIndices[triBase + 0] = base + v00;
+        outIndices[triBase + 1] = base + v10;
+        outIndices[triBase + 2] = base + v11;
+        outIndices[triBase + 3] = base + v00;
+        outIndices[triBase + 4] = base + v11;
+        outIndices[triBase + 5] = base + v01;
+    }
+}
