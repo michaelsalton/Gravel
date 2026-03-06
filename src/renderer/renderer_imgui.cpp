@@ -5,6 +5,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 void Renderer::initImGui() {
     // Create dedicated descriptor pool for ImGui
@@ -127,6 +128,31 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         if (maskTextureLoaded) modeCount = 5;
         if (skinTextureLoaded) modeCount = 6;
         ImGui::Combo("Display", &baseMeshMode, baseMeshModes, modeCount);
+    }
+    ImGui::Separator();
+
+    // Benchmark mesh (static OBJ for A/B comparison)
+    if (ImGui::CollapsingHeader("Benchmark Mesh")) {
+        static char benchPath[256];
+        if (benchPath[0] == '\0') {
+            strncpy(benchPath, benchmarkMeshPath.c_str(), sizeof(benchPath) - 1);
+        }
+        ImGui::InputText("OBJ Path", benchPath, sizeof(benchPath));
+        if (ImGui::Button("Load Benchmark")) {
+            benchmarkMeshPath = benchPath;
+            pendingBenchmarkLoad = benchmarkMeshPath;
+        }
+        if (benchmarkMeshLoaded) {
+            ImGui::SameLine();
+            if (ImGui::Button("Unload")) {
+                pendingBenchmarkLoad = "__unload__";
+            }
+        }
+        if (benchmarkMeshLoaded) {
+            ImGui::Checkbox("Render Benchmark", &renderBenchmarkMesh);
+            ImGui::Text("Triangles: %u", benchmarkTriCount);
+            ImGui::Text("Faces (HE): %u  Vertices: %u", benchmarkNbFaces, benchmarkNbVertices);
+        }
     }
     ImGui::Separator();
 

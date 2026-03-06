@@ -400,6 +400,91 @@ void Renderer::cleanupSecondaryMesh() {
     dualMeshActive = false;
 }
 
+void Renderer::cleanupBenchmarkMesh() {
+    for (auto& buf : benchmarkHeVec4Buffers) buf.destroy();
+    for (auto& buf : benchmarkHeVec2Buffers) buf.destroy();
+    for (auto& buf : benchmarkHeIntBuffers) buf.destroy();
+    for (auto& buf : benchmarkHeFloatBuffers) buf.destroy();
+    benchmarkHeVec4Buffers.clear();
+    benchmarkHeVec2Buffers.clear();
+    benchmarkHeIntBuffers.clear();
+    benchmarkHeFloatBuffers.clear();
+    if (benchmarkMeshInfoBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, benchmarkMeshInfoBuffer, nullptr);
+        vkFreeMemory(device, benchmarkMeshInfoMemory, nullptr);
+        benchmarkMeshInfoBuffer = VK_NULL_HANDLE;
+        benchmarkMeshInfoMemory = VK_NULL_HANDLE;
+    }
+    benchmarkHeDescriptorSet = VK_NULL_HANDLE;
+    benchmarkPerObjectDescriptorSet = VK_NULL_HANDLE;
+    benchmarkNbFaces = 0;
+    benchmarkNbVertices = 0;
+    benchmarkTriCount = 0;
+    benchmarkMeshLoaded = false;
+}
+
+void Renderer::loadBenchmarkMesh(const std::string& path) {
+    std::cout << "Loading benchmark mesh: " << path << std::endl;
+
+    vkDeviceWaitIdle(device);
+    cleanupBenchmarkMesh();
+
+    NGonMesh ngon = ObjLoader::load(path);
+    ObjLoader::triangulate(ngon);
+    benchmarkTriCount = ngon.nbFaces;
+
+    HalfEdgeMesh mesh = HalfEdgeBuilder::build(ngon);
+    computeFace2Coloring(mesh);
+
+    benchmarkNbFaces = mesh.nbFaces;
+    benchmarkNbVertices = mesh.nbVertices;
+
+    uploadHEBuffers(mesh, benchmarkHeVec4Buffers, benchmarkHeVec2Buffers,
+                    benchmarkHeIntBuffers, benchmarkHeFloatBuffers,
+                    benchmarkMeshInfoBuffer, benchmarkMeshInfoMemory);
+
+    // Allocate HE descriptor set
+    VkDescriptorSetAllocateInfo heAllocInfo{};
+    heAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    heAllocInfo.descriptorPool = descriptorPool;
+    heAllocInfo.descriptorSetCount = 1;
+    heAllocInfo.pSetLayouts = &halfEdgeSetLayout;
+    if (vkAllocateDescriptorSets(device, &heAllocInfo, &benchmarkHeDescriptorSet) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate benchmark HE descriptor set!");
+    }
+    writeHEDescriptorSet(benchmarkHeDescriptorSet, benchmarkHeVec4Buffers,
+                         benchmarkHeVec2Buffers, benchmarkHeIntBuffers, benchmarkHeFloatBuffers);
+
+    // Allocate per-object descriptor set
+    VkDescriptorSetAllocateInfo objAllocInfo{};
+    objAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    objAllocInfo.descriptorPool = descriptorPool;
+    objAllocInfo.descriptorSetCount = 1;
+    objAllocInfo.pSetLayouts = &perObjectSetLayout;
+    if (vkAllocateDescriptorSets(device, &objAllocInfo, &benchmarkPerObjectDescriptorSet) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate benchmark per-object descriptor set!");
+    }
+
+    // Write binding 0: shared ResurfacingUBO
+    VkDescriptorBufferInfo uboInfo{};
+    uboInfo.buffer = resurfacingUBOBuffer;
+    uboInfo.offset = 0;
+    uboInfo.range = sizeof(ResurfacingUBO);
+
+    VkWriteDescriptorSet w{};
+    w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    w.dstSet = benchmarkPerObjectDescriptorSet;
+    w.dstBinding = 0;
+    w.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    w.descriptorCount = 1;
+    w.pBufferInfo = &uboInfo;
+    vkUpdateDescriptorSets(device, 1, &w, 0, nullptr);
+
+    benchmarkMeshLoaded = true;
+    std::cout << "Benchmark mesh loaded: " << benchmarkNbFaces << " faces, "
+              << benchmarkTriCount << " triangles" << std::endl;
+}
+
 void Renderer::loadSecondaryMesh(const std::string& path) {
     std::cout << "  Loading secondary mesh: " << path << std::endl;
 

@@ -38,6 +38,7 @@ Renderer::Renderer(Window& window) : window(window) {
 Renderer::~Renderer() {
     cleanupImGui();
     cleanupExportPipelines();
+    cleanupBenchmarkMesh();
     cleanupGroundMesh();
     vkDestroyPipeline(device, pebbleCagePipeline, nullptr);
     vkDestroyPipeline(device, pebblePipeline, nullptr);
@@ -144,6 +145,18 @@ void Renderer::beginFrame() {
             animationSpeed = pendingPreset->animationSpeed;
             baseMeshMode = pendingPreset->baseMeshMode;
             pendingPreset = nullptr;
+        }
+    }
+
+    if (!pendingBenchmarkLoad.empty()) {
+        std::string path = std::move(pendingBenchmarkLoad);
+        pendingBenchmarkLoad.clear();
+        if (path == "__unload__") {
+            vkDeviceWaitIdle(device);
+            cleanupBenchmarkMesh();
+            renderBenchmarkMesh = false;
+        } else {
+            loadBenchmarkMesh(path);
         }
     }
 
@@ -495,6 +508,30 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         }
         if (baseMeshMode == 1 || baseMeshMode == 3)
             drawBaseMesh(baseMeshPipeline);
+    }
+
+    // Benchmark mesh (static OBJ solid rendering)
+    if (renderBenchmarkMesh && benchmarkMeshLoaded) {
+        PushConstants benchPush = pushConstants;
+        benchPush.model = glm::mat4(1.0f);
+        benchPush.nbFaces = benchmarkNbFaces;
+        benchPush.nbVertices = benchmarkNbVertices;
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, baseMeshSolidPipeline);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 0, 1,
+                                 &sceneDescriptorSets[currentFrame], 0, nullptr);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 1, 1,
+                                 &benchmarkHeDescriptorSet, 0, nullptr);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                 pipelineLayout, 2, 1,
+                                 &benchmarkPerObjectDescriptorSet, 0, nullptr);
+        vkCmdPushConstants(cmd, pipelineLayout,
+                            VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
+                            VK_SHADER_STAGE_FRAGMENT_BIT,
+                            0, sizeof(PushConstants), &benchPush);
+        pfnCmdDrawMeshTasksEXT(cmd, benchmarkNbFaces, 1, 1);
     }
 
     // Draw ImGui on top

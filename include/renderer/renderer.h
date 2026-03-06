@@ -216,6 +216,15 @@ public:
     int exportMode = 0;  // 0=parametric, 1=pebble
     std::string lastExportStatus;
 
+    // Benchmark mesh state (static OBJ loaded for A/B performance comparison)
+    bool renderBenchmarkMesh = false;
+    bool benchmarkMeshLoaded = false;
+    uint32_t benchmarkNbFaces = 0;
+    uint32_t benchmarkNbVertices = 0;
+    uint32_t benchmarkTriCount = 0;
+    std::string benchmarkMeshPath = "export_2.obj";
+    std::string pendingBenchmarkLoad;
+
     // Cameras
     FreeFlyCamera freeFlyCamera;
     OrbitCamera   orbitCamera;
@@ -313,6 +322,8 @@ private:
     void cleanupMeshSkeleton();
     void loadSecondaryMesh(const std::string& path);
     void cleanupSecondaryMesh();
+    void loadBenchmarkMesh(const std::string& path);
+    void cleanupBenchmarkMesh();
     void generateGroundPlane(float cellSize);
     void cleanupGroundMesh();
     glm::vec3 playerForwardDir() const;
@@ -495,6 +506,16 @@ private:
     uint32_t groundNbFaces = 0;
     bool groundMeshActive = false;
     PebbleUBO groundPebbleUBO;
+
+    // Benchmark mesh (static OBJ for performance comparison)
+    std::vector<StorageBuffer> benchmarkHeVec4Buffers;
+    std::vector<StorageBuffer> benchmarkHeVec2Buffers;
+    std::vector<StorageBuffer> benchmarkHeIntBuffers;
+    std::vector<StorageBuffer> benchmarkHeFloatBuffers;
+    VkBuffer benchmarkMeshInfoBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory benchmarkMeshInfoMemory = VK_NULL_HANDLE;
+    VkDescriptorSet benchmarkHeDescriptorSet = VK_NULL_HANDLE;
+    VkDescriptorSet benchmarkPerObjectDescriptorSet = VK_NULL_HANDLE;
 
     // Secondary mesh (base dragon rendered under coat)
     std::vector<StorageBuffer> secondaryHeVec4Buffers;
