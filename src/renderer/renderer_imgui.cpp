@@ -81,23 +81,193 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    ImGui::Begin("Gravel Controls");
+    // ===================== Performance Stats Panel =====================
+    ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(300, 0), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Performance", nullptr, ImGuiWindowFlags_NoCollapse);
 
-    // FPS Counter
-    ImGui::Text("FPS: %.1f (%.3f ms/frame)",
-                ImGui::GetIO().Framerate,
-                1000.0f / ImGui::GetIO().Framerate);
+    // FPS (displayed value updates every 0.5s for readability)
+    static float displayFps = 0.0f;
+    static float displayMs = 0.0f;
+    static float displayAvg = 0.0f;
+    static float fpsTimer = 0.0f;
+    static float fpsAccum = 0.0f;
+    static int   fpsSamples = 0;
+    // All-time min/max (only update when a new extreme is hit)
+    static float allTimeMin = 1e9f;
+    static float allTimeMax = 0.0f;
+    static bool  fpsWarmedUp = false;  // skip first second to avoid startup spikes
+
+    float currentFps = ImGui::GetIO().Framerate;
+    fpsTimer += ImGui::GetIO().DeltaTime;
+    fpsAccum += currentFps;
+    fpsSamples++;
+
+    // Start tracking min/max after 1s warmup
+    static float warmupTimer = 0.0f;
+    if (!fpsWarmedUp) {
+        warmupTimer += ImGui::GetIO().DeltaTime;
+        if (warmupTimer >= 1.0f) fpsWarmedUp = true;
+    }
+    if (fpsWarmedUp) {
+        if (currentFps < allTimeMin) allTimeMin = currentFps;
+        if (currentFps > allTimeMax) allTimeMax = currentFps;
+    }
+
+    if (fpsTimer >= 0.5f) {
+        displayFps = currentFps;
+        displayMs = 1000.0f / displayFps;
+        displayAvg = fpsAccum / fpsSamples;
+        fpsTimer = 0.0f;
+        fpsAccum = 0.0f;
+        fpsSamples = 0;
+    }
+    ImGui::Text("FPS: %.1f (%.3f ms)", displayFps, displayMs);
+    ImGui::Text("Avg: %.1f  Min: %.1f  Max: %.1f", displayAvg, allTimeMin == 1e9f ? 0.0f : allTimeMin, allTimeMax);
+
+    // Frame time graph
+    static float fpsHistory[120] = {};
+    static int fpsOffset = 0;
+    fpsHistory[fpsOffset] = 1000.0f / ImGui::GetIO().Framerate;
+    fpsOffset = (fpsOffset + 1) % 120;
+    float maxMs = 0.0f;
+    for (int i = 0; i < 120; i++) maxMs = std::max(maxMs, fpsHistory[i]);
+    ImGui::PlotLines("##frametime", fpsHistory, 120, fpsOffset,
+                     nullptr, 0.0f, maxMs * 1.2f, ImVec2(0, 40));
+
     ImGui::Separator();
 
-    // Presets
-    if (ImGui::CollapsingHeader("Presets", ImGuiTreeNodeFlags_DefaultOpen)) {
-        for (int i = 0; i < LEVEL_PRESET_COUNT; i++) {
-            if (i > 0) ImGui::SameLine();
-            if (ImGui::Button(LEVEL_PRESETS[i].name)) applyPreset(LEVEL_PRESETS[i]);
+    // VRAM
+    size_t meshVram = calculateVRAM();
+    if (meshVram >= 1024 * 1024)
+        ImGui::Text("Mesh VRAM:  %.2f MB", meshVram / (1024.0f * 1024.0f));
+    else
+        ImGui::Text("Mesh VRAM:  %.1f KB", meshVram / 1024.0f);
+
+    VkPhysicalDeviceMemoryBudgetPropertiesEXT budgetProps{};
+    budgetProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT;
+    VkPhysicalDeviceMemoryProperties2 memProps2{};
+    memProps2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2;
+    memProps2.pNext = &budgetProps;
+    vkGetPhysicalDeviceMemoryProperties2(physicalDevice, &memProps2);
+
+    VkDeviceSize totalUsage = 0, totalBudget = 0;
+    for (uint32_t i = 0; i < memProps2.memoryProperties.memoryHeapCount; i++) {
+        if (memProps2.memoryProperties.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
+            totalUsage += budgetProps.heapUsage[i];
+            totalBudget += budgetProps.heapBudget[i];
         }
     }
+    if (totalBudget > 0) {
+        float usageMB = static_cast<float>(totalUsage / (1024.0 * 1024.0));
+        float budgetMB = static_cast<float>(totalBudget / (1024.0 * 1024.0));
+        ImGui::Text("GPU VRAM:   %.0f / %.0f MB", usageMB, budgetMB);
+        ImGui::ProgressBar(usageMB / budgetMB, ImVec2(-1, 0), "");
+    }
+
     ImGui::Separator();
 
+    // Mesh stats
+    ImGui::Text("Base Mesh:");
+    ImGui::Indent();
+    ImGui::Text("Faces:     %u", heNbFaces);
+    ImGui::Text("Vertices:  %u", heNbVertices);
+    ImGui::Text("Triangles: %u", baseMeshTriCount);
+    ImGui::Unindent();
+
+    // Procedural stats (when resurfacing is active)
+    if (renderResurfacing && heMeshUploaded) {
+        ImGui::Separator();
+        ImGui::Text("Procedural:");
+        ImGui::Indent();
+
+        bool doMaskCull = useMaskTexture && maskTextureLoaded && !cpuMaskPixels.empty();
+        bool doCulling = enableFrustumCulling || enableBackfaceCulling;
+
+        auto isMasked = [&](glm::vec2 uv) -> bool {
+            if (!doMaskCull) return false;
+            uint32_t x = static_cast<uint32_t>(uv.x * cpuMaskWidth) % cpuMaskWidth;
+            uint32_t y = static_cast<uint32_t>(uv.y * cpuMaskHeight) % cpuMaskHeight;
+            return cpuMaskPixels[y * cpuMaskWidth + x] < 128;
+        };
+
+        uint32_t totalElements = 0;
+        uint32_t visibleElements = 0;
+
+        glm::mat4 mvp;
+        if (doCulling) {
+            float aspect = static_cast<float>(swapChainExtent.width) /
+                           static_cast<float>(swapChainExtent.height);
+            mvp = activeCamera->getProjectionMatrix(aspect) * activeCamera->getViewMatrix();
+        }
+
+        auto testElement = [&](glm::vec3 pos, glm::vec3 normal, float area) -> bool {
+            float radius = std::sqrt(area) * userScaling * 2.0f;
+            if (enableFrustumCulling) {
+                glm::vec4 clip = mvp * glm::vec4(pos, 1.0f);
+                if (clip.w <= 0.0f) return false;
+                float cr = radius / clip.w * 2.0f * 1.1f;
+                glm::vec3 ndc = glm::vec3(clip) / clip.w;
+                if (ndc.x + cr < -1.0f || ndc.x - cr > 1.0f) return false;
+                if (ndc.y + cr < -1.0f || ndc.y - cr > 1.0f) return false;
+                if (ndc.z + cr <  0.0f || ndc.z - cr > 1.0f) return false;
+            }
+            if (enableBackfaceCulling) {
+                glm::vec3 viewDir = glm::normalize(activeCamera->getPosition() - pos);
+                if (glm::dot(viewDir, normal) <= cullingThreshold) return false;
+            }
+            return true;
+        };
+
+        for (uint32_t i = 0; i < heNbFaces; i++) {
+            if (isMasked(cpuFaceUVs[i])) continue;
+            totalElements++;
+            if (!doCulling || testElement(cpuFaceCenters[i], cpuFaceNormals[i], cpuFaceAreas[i]))
+                visibleElements++;
+        }
+        for (uint32_t i = 0; i < heNbVertices; i++) {
+            if (isMasked(cpuVertexUVs[i])) continue;
+            totalElements++;
+            if (!doCulling || testElement(cpuVertexPositions[i], cpuVertexNormals[i], cpuVertexFaceAreas[i]))
+                visibleElements++;
+        }
+
+        uint32_t culledElements = totalElements - visibleElements;
+        uint32_t trisPerElement = resolutionM * resolutionN * 2;
+        uint32_t proceduralTris = visibleElements * trisPerElement;
+
+        ImGui::Text("Elements:  %u / %u visible", visibleElements, totalElements);
+        if (totalElements > 0) {
+            float pct = 100.0f * culledElements / totalElements;
+            ImGui::Text("Culled:    %u (%.1f%%)", culledElements, pct);
+        }
+        ImGui::Text("Triangles: %u  (%u/elem)", proceduralTris, trisPerElement);
+        ImGui::Unindent();
+
+        ImGui::Separator();
+        uint32_t totalTris = baseMeshTriCount + proceduralTris;
+        ImGui::Text("Total Triangles: %u", totalTris);
+    }
+
+    if (benchmarkMeshLoaded) {
+        ImGui::Separator();
+        ImGui::Text("Benchmark Mesh:");
+        ImGui::Indent();
+        ImGui::Text("Faces:     %u", benchmarkNbFaces);
+        ImGui::Text("Vertices:  %u", benchmarkNbVertices);
+        ImGui::Text("Triangles: %u", benchmarkTriCount);
+        ImGui::Unindent();
+    }
+
+    ImGui::Separator();
+    ImGui::Text("Resolution: %ux%u", swapChainExtent.width, swapChainExtent.height);
+
+    ImGui::End();
+
+    // ===================== Gravel Controls Panel =====================
+    ImGui::Begin("Gravel Controls");
+
+    // Mesh name/path tables (shared across tabs)
     const char* meshNames[] = { "Cube", "Plane (3x3)", "Plane (5x5)", "Plane (Pentagon)", "Sphere", "Sphere HD", "Icosphere", "Dragon 8K", "Dragon Coat", "Boy", "Man", "Man 2" };
     const char* meshPaths[] = {
         ASSETS_DIR "shapes/cube.obj",
@@ -115,52 +285,143 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     };
     constexpr int meshCount = 12;
 
-    // Base mesh selector
-    if (ImGui::CollapsingHeader("Base Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
-        int prev = selectedMesh;
-        ImGui::Combo("Mesh", &selectedMesh, meshNames, meshCount);
-        bool prevTri = triangulateMesh;
-        ImGui::Checkbox("Triangulate", &triangulateMesh);
-        if (selectedMesh != prev || triangulateMesh != prevTri)
-            pendingMeshLoad = meshPaths[selectedMesh];
-        const char* baseMeshModes[] = { "Off", "Wireframe", "Solid", "Both", "Mask", "Skin" };
-        int modeCount = 4;
-        if (maskTextureLoaded) modeCount = 5;
-        if (skinTextureLoaded) modeCount = 6;
-        ImGui::Combo("Display", &baseMeshMode, baseMeshModes, modeCount);
-    }
-    ImGui::Separator();
+    // ===================== Tab Bar =====================
+    if (ImGui::BeginTabBar("ModeTabs")) {
 
-    // Benchmark mesh (static OBJ for A/B comparison)
-    if (ImGui::CollapsingHeader("Benchmark Mesh")) {
-        static char benchPath[256];
-        if (benchPath[0] == '\0') {
-            strncpy(benchPath, benchmarkMeshPath.c_str(), sizeof(benchPath) - 1);
-        }
-        ImGui::InputText("OBJ Path", benchPath, sizeof(benchPath));
-        if (ImGui::Button("Load Benchmark")) {
-            benchmarkMeshPath = benchPath;
-            pendingBenchmarkLoad = benchmarkMeshPath;
-        }
-        if (benchmarkMeshLoaded) {
-            ImGui::SameLine();
-            if (ImGui::Button("Unload")) {
-                pendingBenchmarkLoad = "__unload__";
+        // -------------------- Resurfacing Tab --------------------
+        if (ImGui::BeginTabItem("Resurfacing")) {
+            uiMode = 0;
+
+            // Presets
+            if (ImGui::CollapsingHeader("Presets", ImGuiTreeNodeFlags_DefaultOpen)) {
+                for (int i = 0; i < LEVEL_PRESET_COUNT; i++) {
+                    if (i > 0) ImGui::SameLine();
+                    if (ImGui::Button(LEVEL_PRESETS[i].name)) applyPreset(LEVEL_PRESETS[i]);
+                }
             }
+            ImGui::Separator();
+
+            // Base mesh selector
+            if (ImGui::CollapsingHeader("Base Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
+                int prev = selectedMesh;
+                ImGui::Combo("Mesh", &selectedMesh, meshNames, meshCount);
+                bool prevTri = triangulateMesh;
+                ImGui::Checkbox("Triangulate", &triangulateMesh);
+                if (selectedMesh != prev || triangulateMesh != prevTri)
+                    pendingMeshLoad = meshPaths[selectedMesh];
+                const char* baseMeshModes[] = { "Off", "Wireframe", "Solid", "Both", "Mask", "Skin" };
+                int modeCount = 4;
+                if (maskTextureLoaded) modeCount = 5;
+                if (skinTextureLoaded) modeCount = 6;
+                ImGui::Combo("Display", &baseMeshMode, baseMeshModes, modeCount);
+            }
+            ImGui::Separator();
+
+            resurfacingPanel.render(*this);
+            animationPanel.render(*this);
+            advancedPanel.render(*this);
+
+            ImGui::EndTabItem();
         }
-        if (benchmarkMeshLoaded) {
-            ImGui::Checkbox("Render Benchmark", &renderBenchmarkMesh);
-            ImGui::Text("Triangles: %u", benchmarkTriCount);
-            ImGui::Text("Faces (HE): %u  Vertices: %u", benchmarkNbFaces, benchmarkNbVertices);
+
+        // -------------------- Benchmark Tab --------------------
+        if (ImGui::BeginTabItem("Benchmark")) {
+            if (uiMode != 1) {
+                // Entering benchmark mode — disable resurfacing
+                renderResurfacing = false;
+                renderPebbles = false;
+                uiMode = 1;
+            }
+
+            // Base mesh selector (simplified)
+            if (ImGui::CollapsingHeader("Base Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
+                int prev = selectedMesh;
+                ImGui::Combo("Mesh##bench", &selectedMesh, meshNames, meshCount);
+                bool prevTri = triangulateMesh;
+                ImGui::Checkbox("Triangulate##bench", &triangulateMesh);
+                if (selectedMesh != prev || triangulateMesh != prevTri)
+                    pendingMeshLoad = meshPaths[selectedMesh];
+            }
+            ImGui::Separator();
+
+            // Benchmark mesh
+            if (ImGui::CollapsingHeader("Benchmark Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
+                static char benchPath[256];
+                if (benchPath[0] == '\0') {
+                    strncpy(benchPath, benchmarkMeshPath.c_str(), sizeof(benchPath) - 1);
+                }
+                ImGui::InputText("OBJ Path", benchPath, sizeof(benchPath));
+                if (ImGui::Button("Load Benchmark")) {
+                    benchmarkMeshPath = benchPath;
+                    pendingBenchmarkLoad = benchmarkMeshPath;
+                }
+                if (benchmarkMeshLoaded) {
+                    ImGui::SameLine();
+                    if (ImGui::Button("Unload")) {
+                        pendingBenchmarkLoad = "__unload__";
+                    }
+                }
+                if (benchmarkMeshLoaded) {
+                    ImGui::Checkbox("Render Benchmark", &renderBenchmarkMesh);
+                }
+            }
+            ImGui::Separator();
+
+            // VSync
+            {
+                bool prevVsync = vsync;
+                ImGui::Checkbox("VSync", &vsync);
+                if (vsync != prevVsync) pendingSwapChainRecreation = true;
+            }
+            ImGui::Separator();
+
+            // Statistics comparison
+            if (ImGui::CollapsingHeader("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::Text("Base Mesh:");
+                ImGui::Indent();
+                ImGui::Text("Faces:     %u", heNbFaces);
+                ImGui::Text("Vertices:  %u", heNbVertices);
+                ImGui::Text("Triangles: %u", baseMeshTriCount);
+                ImGui::Unindent();
+
+                if (benchmarkMeshLoaded) {
+                    ImGui::Separator();
+                    ImGui::Text("Benchmark Mesh:");
+                    ImGui::Indent();
+                    ImGui::Text("Faces:     %u", benchmarkNbFaces);
+                    ImGui::Text("Vertices:  %u", benchmarkNbVertices);
+                    ImGui::Text("Triangles: %u", benchmarkTriCount);
+                    ImGui::Unindent();
+                }
+            }
+
+            ImGui::EndTabItem();
         }
+
+        // -------------------- Player Tab --------------------
+        if (ImGui::BeginTabItem("Player")) {
+            if (uiMode != 2) {
+                // Entering player mode — enable third person
+                if (!thirdPersonMode) {
+                    thirdPersonMode = true;
+                    activeCamera = static_cast<CameraBase*>(&orbitCamera);
+                }
+                uiMode = 2;
+            }
+
+            playerPanel.render(*this);
+            ImGui::Separator();
+
+            animationPanel.render(*this);
+
+            ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
     }
     ImGui::Separator();
 
-    playerPanel.render(*this);
-    ImGui::Separator();
-
-    resurfacingPanel.render(*this);
-    animationPanel.render(*this);
+    // ===================== Shared Controls =====================
 
     // Lighting controls
     if (ImGui::CollapsingHeader("Lighting")) {
@@ -211,8 +472,6 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     if (ImGui::CollapsingHeader("Camera")) {
         activeCamera->renderImGuiControls();
     }
-
-    advancedPanel.render(*this);
 
     ImGui::Separator();
     if (ImGui::Button("Exit")) {

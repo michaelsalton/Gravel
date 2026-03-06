@@ -187,6 +187,7 @@ public:
     float animationTime = 0.0f;
     float animationSpeed = 1.0f;
     float lastDeltaTime = 0.0f;
+    int uiMode = 0;  // 0=Resurfacing, 1=Benchmark, 2=Player
     bool vsync = false;
     bool pendingSwapChainRecreation = false;
     std::string pendingMeshLoad;  // deferred mesh load (set by ImGui, processed between frames)
@@ -550,6 +551,7 @@ private:
 
     const std::vector<const char*> deviceExtensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-        VK_EXT_MESH_SHADER_EXTENSION_NAME
+        VK_EXT_MESH_SHADER_EXTENSION_NAME,
+        VK_EXT_MEMORY_BUDGET_EXTENSION_NAME
     };
 };
