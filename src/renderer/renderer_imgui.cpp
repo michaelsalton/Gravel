@@ -125,14 +125,25 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     ImGui::Text("FPS: %.1f (%.3f ms)", displayFps, displayMs);
     ImGui::Text("Avg: %.1f  Min: %.1f  Max: %.1f", displayAvg, allTimeMin == 1e9f ? 0.0f : allTimeMin, allTimeMax);
 
-    // Frame time graph
-    static float fpsHistory[120] = {};
-    static int fpsOffset = 0;
-    fpsHistory[fpsOffset] = 1000.0f / ImGui::GetIO().Framerate;
-    fpsOffset = (fpsOffset + 1) % 120;
+    // Frame time graph (one point every ~50ms, smoothed)
+    static float graphHistory[120] = {};
+    static int graphOffset = 0;
+    static float graphAccum = 0.0f;
+    static int graphSamples = 0;
+    static float graphTimer = 0.0f;
+    graphAccum += 1000.0f / ImGui::GetIO().Framerate;
+    graphSamples++;
+    graphTimer += ImGui::GetIO().DeltaTime;
+    if (graphTimer >= 0.05f) {
+        graphHistory[graphOffset] = graphAccum / graphSamples;
+        graphOffset = (graphOffset + 1) % 120;
+        graphAccum = 0.0f;
+        graphSamples = 0;
+        graphTimer = 0.0f;
+    }
     float maxMs = 0.0f;
-    for (int i = 0; i < 120; i++) maxMs = std::max(maxMs, fpsHistory[i]);
-    ImGui::PlotLines("##frametime", fpsHistory, 120, fpsOffset,
+    for (int i = 0; i < 120; i++) maxMs = std::max(maxMs, graphHistory[i]);
+    ImGui::PlotLines("##frametime", graphHistory, 120, graphOffset,
                      nullptr, 0.0f, maxMs * 1.2f, ImVec2(0, 40));
 
     ImGui::Separator();
@@ -319,7 +330,6 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
             resurfacingPanel.render(*this);
             animationPanel.render(*this);
-            advancedPanel.render(*this);
 
             ImGui::EndTabItem();
         }
@@ -332,17 +342,6 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                 renderPebbles = false;
                 uiMode = 1;
             }
-
-            // Base mesh selector (simplified)
-            if (ImGui::CollapsingHeader("Base Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
-                int prev = selectedMesh;
-                ImGui::Combo("Mesh##bench", &selectedMesh, meshNames, meshCount);
-                bool prevTri = triangulateMesh;
-                ImGui::Checkbox("Triangulate##bench", &triangulateMesh);
-                if (selectedMesh != prev || triangulateMesh != prevTri)
-                    pendingMeshLoad = meshPaths[selectedMesh];
-            }
-            ImGui::Separator();
 
             // Benchmark mesh
             if (ImGui::CollapsingHeader("Benchmark Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -419,9 +418,18 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
         ImGui::EndTabBar();
     }
-    ImGui::Separator();
 
-    // ===================== Shared Controls =====================
+    ImGui::Separator();
+    if (ImGui::Button("Exit")) {
+        glfwSetWindowShouldClose(window.getHandle(), GLFW_TRUE);
+    }
+
+    ImGui::End();
+
+    // ===================== Settings Panel =====================
+    ImGui::Begin("Settings");
+
+    advancedPanel.render(*this);
 
     // Lighting controls
     if (ImGui::CollapsingHeader("Lighting")) {
@@ -471,11 +479,6 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     // Camera controls
     if (ImGui::CollapsingHeader("Camera")) {
         activeCamera->renderImGuiControls();
-    }
-
-    ImGui::Separator();
-    if (ImGui::Button("Exit")) {
-        glfwSetWindowShouldClose(window.getHandle(), GLFW_TRUE);
     }
 
     ImGui::End();
