@@ -3,7 +3,7 @@
 #include "imgui.h"
 
 void AdvancedPanel::render(Renderer& r) {
-    if (ImGui::CollapsingHeader("Advanced")) {
+    if (ImGui::CollapsingHeader("Advanced", ImGuiTreeNodeFlags_DefaultOpen)) {
         // Display
         bool prevVsync = r.vsync;
         ImGui::Checkbox("VSync", &r.vsync);

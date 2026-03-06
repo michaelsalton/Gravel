@@ -247,8 +247,8 @@ void ResurfacingPanel::render(Renderer& r) {
     }
 
     if (r.heMeshUploaded && (r.renderResurfacing || r.renderPebbles) &&
-        ImGui::CollapsingHeader("Export")) {
-        static char exportPath[256] = "export.obj";
+        ImGui::CollapsingHeader("Export", ImGuiTreeNodeFlags_DefaultOpen)) {
+        static char exportPath[256] = "exports/export.obj";
         ImGui::InputText("File Path", exportPath, sizeof(exportPath));
 
         // Estimated size
@@ -276,7 +276,7 @@ void ResurfacingPanel::render(Renderer& r) {
         }
     }
 
-    if (r.thirdPersonMode && ImGui::CollapsingHeader("Pathway")) {
+    if (r.thirdPersonMode && ImGui::CollapsingHeader("Pathway", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Checkbox("Enable Ground Pebbles", &r.renderPathway);
         ImGui::SameLine();
         ImGui::Checkbox("Show Grid", &r.showGroundMesh);

@@ -12,12 +12,7 @@ Window::Window(int width, int height, const std::string& title)
     // No OpenGL context — we're using Vulkan
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-    const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-    this->width = mode->width;
-    this->height = mode->height;
-
-    window = glfwCreateWindow(this->width, this->height, title.c_str(), monitor, nullptr);
+    window = glfwCreateWindow(this->width, this->height, title.c_str(), nullptr, nullptr);
     if (!window) {
         glfwTerminate();
         throw std::runtime_error("Failed to create GLFW window");
@@ -67,5 +62,26 @@ void Window::scrollCallback(GLFWwindow* window, double xoffset, double yoffset) 
     (void)xoffset;
     auto* app = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
     app->keyboardMouse.onScroll(yoffset);
+}
+
+void Window::toggleFullscreen() {
+    if (fullscreen) {
+        // Return to windowed mode
+        glfwSetWindowMonitor(window, nullptr,
+                             windowedX, windowedY,
+                             windowedWidth, windowedHeight, 0);
+        fullscreen = false;
+    } else {
+        // Save windowed position and size
+        glfwGetWindowPos(window, &windowedX, &windowedY);
+        glfwGetWindowSize(window, &windowedWidth, &windowedHeight);
+
+        // Switch to fullscreen on primary monitor
+        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+        glfwSetWindowMonitor(window, monitor, 0, 0,
+                             mode->width, mode->height, mode->refreshRate);
+        fullscreen = true;
+    }
 }
 

@@ -25,6 +25,9 @@ public:
     bool wasResized() const { return framebufferResized; }
     void resetResizedFlag() { framebufferResized = false; }
 
+    void toggleFullscreen();
+    bool isFullscreen() const { return fullscreen; }
+
     // Input devices — call poll() once per frame before reading
     Gamepad gamepad;
     KeyboardMouse keyboardMouse;
@@ -40,4 +43,7 @@ private:
     int height;
     std::string title;
     bool framebufferResized = false;
+    bool fullscreen = false;
+    int windowedX = 100, windowedY = 100;
+    int windowedWidth = 1920, windowedHeight = 1080;
 };

@@ -401,22 +401,19 @@ void Renderer::cleanupSecondaryMesh() {
 }
 
 void Renderer::cleanupBenchmarkMesh() {
-    for (auto& buf : benchmarkHeVec4Buffers) buf.destroy();
-    for (auto& buf : benchmarkHeVec2Buffers) buf.destroy();
-    for (auto& buf : benchmarkHeIntBuffers) buf.destroy();
-    for (auto& buf : benchmarkHeFloatBuffers) buf.destroy();
-    benchmarkHeVec4Buffers.clear();
-    benchmarkHeVec2Buffers.clear();
-    benchmarkHeIntBuffers.clear();
-    benchmarkHeFloatBuffers.clear();
-    if (benchmarkMeshInfoBuffer != VK_NULL_HANDLE) {
-        vkDestroyBuffer(device, benchmarkMeshInfoBuffer, nullptr);
-        vkFreeMemory(device, benchmarkMeshInfoMemory, nullptr);
-        benchmarkMeshInfoBuffer = VK_NULL_HANDLE;
-        benchmarkMeshInfoMemory = VK_NULL_HANDLE;
+    if (benchmarkVertexBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, benchmarkVertexBuffer, nullptr);
+        vkFreeMemory(device, benchmarkVertexMemory, nullptr);
+        benchmarkVertexBuffer = VK_NULL_HANDLE;
+        benchmarkVertexMemory = VK_NULL_HANDLE;
     }
-    benchmarkHeDescriptorSet = VK_NULL_HANDLE;
-    benchmarkPerObjectDescriptorSet = VK_NULL_HANDLE;
+    if (benchmarkIndexBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, benchmarkIndexBuffer, nullptr);
+        vkFreeMemory(device, benchmarkIndexMemory, nullptr);
+        benchmarkIndexBuffer = VK_NULL_HANDLE;
+        benchmarkIndexMemory = VK_NULL_HANDLE;
+    }
+    benchmarkIndexCount = 0;
     benchmarkNbFaces = 0;
     benchmarkNbVertices = 0;
     benchmarkTriCount = 0;
@@ -431,58 +428,97 @@ void Renderer::loadBenchmarkMesh(const std::string& path) {
 
     NGonMesh ngon = ObjLoader::load(path);
     ObjLoader::triangulate(ngon);
+
     benchmarkTriCount = ngon.nbFaces;
+    benchmarkNbFaces = ngon.nbFaces;
+    benchmarkNbVertices = ngon.nbVertices;
 
-    HalfEdgeMesh mesh = HalfEdgeBuilder::build(ngon);
-    computeFace2Coloring(mesh);
+    // Build interleaved vertex buffer: (pos vec3, normal vec3, uv vec2) per unique vertex combo
+    // and an index buffer for triangles
+    struct BenchmarkVertex {
+        float px, py, pz;
+        float nx, ny, nz;
+        float u, v;
+    };
 
-    benchmarkNbFaces = mesh.nbFaces;
-    benchmarkNbVertices = mesh.nbVertices;
+    // Flatten: each face is a triangle with 3 vertices
+    // Use direct vertex expansion (no dedup) for simplicity and speed
+    uint32_t totalVerts = ngon.nbFaces * 3;
+    std::vector<BenchmarkVertex> vertices(totalVerts);
+    std::vector<uint32_t> indices(totalVerts);
 
-    uploadHEBuffers(mesh, benchmarkHeVec4Buffers, benchmarkHeVec2Buffers,
-                    benchmarkHeIntBuffers, benchmarkHeFloatBuffers,
-                    benchmarkMeshInfoBuffer, benchmarkMeshInfoMemory);
+    for (uint32_t f = 0; f < ngon.nbFaces; f++) {
+        const auto& face = ngon.faces[f];
+        glm::vec3 faceNormal = glm::vec3(face.normal);
 
-    // Allocate HE descriptor set
-    VkDescriptorSetAllocateInfo heAllocInfo{};
-    heAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    heAllocInfo.descriptorPool = descriptorPool;
-    heAllocInfo.descriptorSetCount = 1;
-    heAllocInfo.pSetLayouts = &halfEdgeSetLayout;
-    if (vkAllocateDescriptorSets(device, &heAllocInfo, &benchmarkHeDescriptorSet) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to allocate benchmark HE descriptor set!");
+        for (int v = 0; v < 3; v++) {
+            uint32_t idx = f * 3 + v;
+            uint32_t vi = face.vertexIndices[v];
+            const auto& pos = ngon.positions[vi];
+
+            glm::vec3 norm = faceNormal;
+            if (!face.normalIndices.empty() && face.normalIndices[v] < ngon.normals.size()) {
+                norm = ngon.normals[face.normalIndices[v]];
+            }
+
+            glm::vec2 uv(0.0f);
+            if (!face.texCoordIndices.empty() && face.texCoordIndices[v] < ngon.texCoords.size()) {
+                uv = ngon.texCoords[face.texCoordIndices[v]];
+            }
+
+            vertices[idx] = { pos.x, pos.y, pos.z, norm.x, norm.y, norm.z, uv.x, uv.y };
+            indices[idx] = idx;
+        }
     }
-    writeHEDescriptorSet(benchmarkHeDescriptorSet, benchmarkHeVec4Buffers,
-                         benchmarkHeVec2Buffers, benchmarkHeIntBuffers, benchmarkHeFloatBuffers);
 
-    // Allocate per-object descriptor set
-    VkDescriptorSetAllocateInfo objAllocInfo{};
-    objAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    objAllocInfo.descriptorPool = descriptorPool;
-    objAllocInfo.descriptorSetCount = 1;
-    objAllocInfo.pSetLayouts = &perObjectSetLayout;
-    if (vkAllocateDescriptorSets(device, &objAllocInfo, &benchmarkPerObjectDescriptorSet) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to allocate benchmark per-object descriptor set!");
-    }
+    benchmarkIndexCount = static_cast<uint32_t>(indices.size());
 
-    // Write binding 0: shared ResurfacingUBO
-    VkDescriptorBufferInfo uboInfo{};
-    uboInfo.buffer = resurfacingUBOBuffer;
-    uboInfo.offset = 0;
-    uboInfo.range = sizeof(ResurfacingUBO);
+    // Helper to create a GPU buffer with data
+    auto createBuffer = [&](VkBufferUsageFlags usage, const void* data, size_t size,
+                            VkBuffer& buffer, VkDeviceMemory& memory) {
+        VkBufferCreateInfo bufInfo{};
+        bufInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufInfo.size = size;
+        bufInfo.usage = usage;
+        bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    VkWriteDescriptorSet w{};
-    w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    w.dstSet = benchmarkPerObjectDescriptorSet;
-    w.dstBinding = 0;
-    w.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    w.descriptorCount = 1;
-    w.pBufferInfo = &uboInfo;
-    vkUpdateDescriptorSets(device, 1, &w, 0, nullptr);
+        if (vkCreateBuffer(device, &bufInfo, nullptr, &buffer) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create benchmark buffer!");
+
+        VkMemoryRequirements memReqs;
+        vkGetBufferMemoryRequirements(device, buffer, &memReqs);
+
+        VkMemoryAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = memReqs.size;
+        allocInfo.memoryTypeIndex = findMemoryType(memReqs.memoryTypeBits,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+        if (vkAllocateMemory(device, &allocInfo, nullptr, &memory) != VK_SUCCESS)
+            throw std::runtime_error("Failed to allocate benchmark buffer memory!");
+
+        vkBindBufferMemory(device, buffer, memory, 0);
+
+        void* mapped;
+        vkMapMemory(device, memory, 0, size, 0, &mapped);
+        memcpy(mapped, data, size);
+        vkUnmapMemory(device, memory);
+    };
+
+    size_t vbSize = vertices.size() * sizeof(BenchmarkVertex);
+    size_t ibSize = indices.size() * sizeof(uint32_t);
+
+    createBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, vertices.data(), vbSize,
+                 benchmarkVertexBuffer, benchmarkVertexMemory);
+    createBuffer(VK_BUFFER_USAGE_INDEX_BUFFER_BIT, indices.data(), ibSize,
+                 benchmarkIndexBuffer, benchmarkIndexMemory);
 
     benchmarkMeshLoaded = true;
-    std::cout << "Benchmark mesh loaded: " << benchmarkNbFaces << " faces, "
-              << benchmarkTriCount << " triangles" << std::endl;
+    float vramMB = static_cast<float>(vbSize + ibSize) / (1024.0f * 1024.0f);
+    std::cout << "Benchmark mesh loaded: " << benchmarkNbFaces << " triangles, "
+              << benchmarkNbVertices << " unique vertices, "
+              << totalVerts << " expanded vertices ("
+              << vramMB << " MB VRAM)" << std::endl;
 }
 
 void Renderer::loadSecondaryMesh(const std::string& path) {

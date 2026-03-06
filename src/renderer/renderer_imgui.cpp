@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
 
 void Renderer::initImGui() {
     // Create dedicated descriptor pool for ImGui
@@ -345,66 +346,59 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
             // Benchmark mesh
             if (ImGui::CollapsingHeader("Benchmark Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
-                static char benchPath[256];
-                if (benchPath[0] == '\0') {
-                    strncpy(benchPath, benchmarkMeshPath.c_str(), sizeof(benchPath) - 1);
-                }
-                ImGui::InputText("OBJ Path", benchPath, sizeof(benchPath));
-                if (ImGui::Button("Load Benchmark")) {
-                    benchmarkMeshPath = benchPath;
-                    pendingBenchmarkLoad = benchmarkMeshPath;
-                }
-                if (benchmarkMeshLoaded) {
-                    ImGui::SameLine();
-                    if (ImGui::Button("Unload")) {
-                        pendingBenchmarkLoad = "__unload__";
+                // Exported meshes dropdown
+                static std::vector<std::string> exportNames;
+                static std::vector<std::string> exportPaths;
+                static int selectedExport = -1;
+                static float lastScanTime = -10.0f;
+
+                float now = static_cast<float>(ImGui::GetTime());
+                if (now - lastScanTime > 2.0f) {
+                    lastScanTime = now;
+                    exportNames.clear();
+                    exportPaths.clear();
+                    if (std::filesystem::is_directory("exports")) {
+                        for (const auto& entry : std::filesystem::directory_iterator("exports")) {
+                            if (entry.is_regular_file() && entry.path().extension() == ".obj") {
+                                exportNames.push_back(entry.path().filename().string());
+                                exportPaths.push_back(entry.path().string());
+                            }
+                        }
                     }
                 }
+
+                const char* preview = (selectedExport >= 0 && selectedExport < (int)exportNames.size())
+                    ? exportNames[selectedExport].c_str() : "Select exported mesh...";
+                if (ImGui::BeginCombo("Exports", preview)) {
+                    for (int i = 0; i < (int)exportNames.size(); i++) {
+                        bool isSelected = (selectedExport == i);
+                        if (ImGui::Selectable(exportNames[i].c_str(), isSelected)) {
+                            selectedExport = i;
+                            benchmarkMeshPath = exportPaths[i];
+                            pendingBenchmarkLoad = benchmarkMeshPath;
+                        }
+                        if (isSelected) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+
                 if (benchmarkMeshLoaded) {
+                    if (ImGui::Button("Unload")) {
+                        pendingBenchmarkLoad = "__unload__";
+                        selectedExport = -1;
+                    }
                     ImGui::Checkbox("Render Benchmark", &renderBenchmarkMesh);
                 }
             }
-            ImGui::Separator();
-
-            // VSync
-            {
-                bool prevVsync = vsync;
-                ImGui::Checkbox("VSync", &vsync);
-                if (vsync != prevVsync) pendingSwapChainRecreation = true;
-            }
-            ImGui::Separator();
-
-            // Statistics comparison
-            if (ImGui::CollapsingHeader("Statistics", ImGuiTreeNodeFlags_DefaultOpen)) {
-                ImGui::Text("Base Mesh:");
-                ImGui::Indent();
-                ImGui::Text("Faces:     %u", heNbFaces);
-                ImGui::Text("Vertices:  %u", heNbVertices);
-                ImGui::Text("Triangles: %u", baseMeshTriCount);
-                ImGui::Unindent();
-
-                if (benchmarkMeshLoaded) {
-                    ImGui::Separator();
-                    ImGui::Text("Benchmark Mesh:");
-                    ImGui::Indent();
-                    ImGui::Text("Faces:     %u", benchmarkNbFaces);
-                    ImGui::Text("Vertices:  %u", benchmarkNbVertices);
-                    ImGui::Text("Triangles: %u", benchmarkTriCount);
-                    ImGui::Unindent();
-                }
-            }
-
             ImGui::EndTabItem();
         }
 
         // -------------------- Player Tab --------------------
         if (ImGui::BeginTabItem("Player")) {
             if (uiMode != 2) {
-                // Entering player mode — enable third person
-                if (!thirdPersonMode) {
-                    thirdPersonMode = true;
-                    activeCamera = static_cast<CameraBase*>(&orbitCamera);
-                }
+                // Entering player mode — load Chainmail Man preset + ground pebbles
+                applyPreset(LEVEL_PRESETS[1]);
+                renderPathway = true;
                 uiMode = 2;
             }
 
@@ -420,6 +414,22 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     }
 
     ImGui::Separator();
+    if (ImGui::Button("Clear Scene")) {
+        renderResurfacing = false;
+        renderPebbles = false;
+        renderBenchmarkMesh = false;
+        renderPathway = false;
+        showControlCage = false;
+        showGroundMesh = false;
+        baseMeshMode = 0;
+        animationPlaying = false;
+        thirdPersonMode = false;
+        activeCamera = static_cast<CameraBase*>(&freeFlyCamera);
+        if (benchmarkMeshLoaded) {
+            pendingBenchmarkLoad = "__unload__";
+        }
+    }
+    ImGui::SameLine();
     if (ImGui::Button("Exit")) {
         glfwSetWindowShouldClose(window.getHandle(), GLFW_TRUE);
     }
@@ -432,7 +442,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     advancedPanel.render(*this);
 
     // Lighting controls
-    if (ImGui::CollapsingHeader("Lighting")) {
+    if (ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::DragFloat3("Light Position", &lightPosition.x, 0.1f, -20.0f, 20.0f);
         ImGui::ColorEdit3("Ambient Color", &ambientColor.x);
         ImGui::SliderFloat("Ambient Intensity", &ambientIntensity, 0.0f, 1.0f);
@@ -442,7 +452,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     }
 
     // Debug visualization
-    if (ImGui::CollapsingHeader("Debug Visualization")) {
+    if (ImGui::CollapsingHeader("Debug Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
         const char* debugModes[] = {
             "Shading (Blinn-Phong)",
             "Normals (RGB)",
@@ -477,11 +487,27 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     }
 
     // Camera controls
-    if (ImGui::CollapsingHeader("Camera")) {
+    if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
         activeCamera->renderImGuiControls();
     }
 
     ImGui::End();
+
+    // Loading overlay
+    if (loadingActive) {
+        ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+        ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f, displaySize.y * 0.5f),
+                                ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(350, 0));
+        ImGui::Begin("##Loading", nullptr,
+                     ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                     ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+                     ImGuiWindowFlags_AlwaysAutoResize);
+        ImGui::Text("%s", loadingMessage.c_str());
+        float progress = static_cast<float>(fmod(ImGui::GetTime() * 0.5, 1.0));
+        ImGui::ProgressBar(progress, ImVec2(-1, 0), "");
+        ImGui::End();
+    }
 
     ImGui::Render();
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);

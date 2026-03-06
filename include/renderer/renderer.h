@@ -134,6 +134,12 @@ struct PushConstants {
     float chainmailTiltAngle;
 };
 
+struct BenchmarkPushConstants {
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 projection;
+};
+
 class Renderer {
 public:
     Renderer(Window& window);
@@ -192,6 +198,10 @@ public:
     bool pendingSwapChainRecreation = false;
     std::string pendingMeshLoad;  // deferred mesh load (set by ImGui, processed between frames)
     const LevelPreset* pendingPreset = nullptr;  // post-load state to apply after mesh load
+
+    // Loading overlay
+    bool loadingActive = false;
+    std::string loadingMessage;
 
     // Pebble config
     bool renderPebbles = false;
@@ -301,6 +311,7 @@ private:
     void createDescriptorPool();
     void createDescriptorSets();
     void createGraphicsPipeline();
+    void createBenchmarkPipeline();
     void loadMeshShaderFunctions();
     void cleanupSwapChain();
     void createSamplers();
@@ -508,15 +519,14 @@ private:
     bool groundMeshActive = false;
     PebbleUBO groundPebbleUBO;
 
-    // Benchmark mesh (static OBJ for performance comparison)
-    std::vector<StorageBuffer> benchmarkHeVec4Buffers;
-    std::vector<StorageBuffer> benchmarkHeVec2Buffers;
-    std::vector<StorageBuffer> benchmarkHeIntBuffers;
-    std::vector<StorageBuffer> benchmarkHeFloatBuffers;
-    VkBuffer benchmarkMeshInfoBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory benchmarkMeshInfoMemory = VK_NULL_HANDLE;
-    VkDescriptorSet benchmarkHeDescriptorSet = VK_NULL_HANDLE;
-    VkDescriptorSet benchmarkPerObjectDescriptorSet = VK_NULL_HANDLE;
+    // Benchmark mesh (traditional vertex pipeline for performance comparison)
+    VkPipeline benchmarkPipeline = VK_NULL_HANDLE;
+    VkPipelineLayout benchmarkPipelineLayout = VK_NULL_HANDLE;
+    VkBuffer benchmarkVertexBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory benchmarkVertexMemory = VK_NULL_HANDLE;
+    VkBuffer benchmarkIndexBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory benchmarkIndexMemory = VK_NULL_HANDLE;
+    uint32_t benchmarkIndexCount = 0;
 
     // Secondary mesh (base dragon rendered under coat)
     std::vector<StorageBuffer> secondaryHeVec4Buffers;

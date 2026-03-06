@@ -3,7 +3,7 @@
 #include "imgui.h"
 
 void PlayerPanel::render(Renderer& r) {
-    if (ImGui::CollapsingHeader("Player")) {
+    if (ImGui::CollapsingHeader("Player", ImGuiTreeNodeFlags_DefaultOpen)) {
         bool prevMode = r.thirdPersonMode;
         ImGui::Checkbox("Third Person Mode", &r.thirdPersonMode);
         if (r.thirdPersonMode != prevMode) {

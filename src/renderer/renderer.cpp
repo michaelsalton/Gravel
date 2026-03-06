@@ -5,6 +5,7 @@
 #include "core/window.h"
 #include <stdexcept>
 #include <iostream>
+#include <filesystem>
 #include <array>
 #include <cstring>
 #include <cmath>
@@ -30,6 +31,7 @@ Renderer::Renderer(Window& window) : window(window) {
     createDescriptorPool();
     createDescriptorSets();
     createGraphicsPipeline();
+    createBenchmarkPipeline();
     createSamplers();
     generateGroundPlane(groundPlaneCellSize);
     initImGui();
@@ -40,6 +42,10 @@ Renderer::~Renderer() {
     cleanupExportPipelines();
     cleanupBenchmarkMesh();
     cleanupGroundMesh();
+    if (benchmarkPipeline != VK_NULL_HANDLE)
+        vkDestroyPipeline(device, benchmarkPipeline, nullptr);
+    if (benchmarkPipelineLayout != VK_NULL_HANDLE)
+        vkDestroyPipelineLayout(device, benchmarkPipelineLayout, nullptr);
     vkDestroyPipeline(device, pebbleCagePipeline, nullptr);
     vkDestroyPipeline(device, pebblePipeline, nullptr);
     vkDestroyPipeline(device, baseMeshSolidPipeline, nullptr);
@@ -125,6 +131,23 @@ Renderer::~Renderer() {
 }
 
 void Renderer::beginFrame() {
+    // Check if any heavy operation is pending — show loading overlay first
+    bool hasPendingWork = !pendingMeshLoad.empty() ||
+                          (!pendingBenchmarkLoad.empty() && pendingBenchmarkLoad != "__unload__") ||
+                          pendingExport;
+
+    if (hasPendingWork && !loadingActive) {
+        // First frame: activate loading overlay, defer actual work to next frame
+        loadingActive = true;
+        if (!pendingMeshLoad.empty())
+            loadingMessage = "Loading mesh...";
+        else if (!pendingBenchmarkLoad.empty())
+            loadingMessage = "Loading benchmark mesh...";
+        else if (pendingExport)
+            loadingMessage = "Exporting mesh...";
+        return; // Render one frame showing the loading bar, then process next frame
+    }
+
     // Process deferred mesh load between frames (before recording command buffers)
     // to avoid updating descriptor sets while a command buffer is being recorded
     if (pendingGroundRegenerate) {
@@ -163,12 +186,23 @@ void Renderer::beginFrame() {
     if (pendingExport) {
         pendingExport = false;
         try {
+            // Ensure parent directory exists
+            {
+                auto pos = exportFilePath.find_last_of("/\\");
+                if (pos != std::string::npos) {
+                    std::filesystem::create_directories(exportFilePath.substr(0, pos));
+                }
+            }
             exportProceduralMesh(exportFilePath, exportMode);
             lastExportStatus = "Exported: " + exportFilePath;
         } catch (const std::exception& e) {
             lastExportStatus = std::string("Export failed: ") + e.what();
         }
     }
+
+    // Clear loading state after work is done
+    loadingActive = false;
+    loadingMessage.clear();
 
     vkWaitForFences(device, 1, &inFlightFences[currentFrame],
                     VK_TRUE, UINT64_MAX);
@@ -510,28 +544,28 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
             drawBaseMesh(baseMeshPipeline);
     }
 
-    // Benchmark mesh (static OBJ solid rendering)
+    // Benchmark mesh (traditional vertex pipeline)
     if (renderBenchmarkMesh && benchmarkMeshLoaded) {
-        PushConstants benchPush = pushConstants;
+        float aspect = static_cast<float>(swapChainExtent.width) /
+                       static_cast<float>(swapChainExtent.height);
+        BenchmarkPushConstants benchPush{};
         benchPush.model = glm::mat4(1.0f);
-        benchPush.nbFaces = benchmarkNbFaces;
-        benchPush.nbVertices = benchmarkNbVertices;
+        benchPush.view = activeCamera->getViewMatrix();
+        benchPush.projection = activeCamera->getProjectionMatrix(aspect);
 
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, baseMeshSolidPipeline);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, benchmarkPipeline);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                 pipelineLayout, 0, 1,
+                                 benchmarkPipelineLayout, 0, 1,
                                  &sceneDescriptorSets[currentFrame], 0, nullptr);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                 pipelineLayout, 1, 1,
-                                 &benchmarkHeDescriptorSet, 0, nullptr);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                 pipelineLayout, 2, 1,
-                                 &benchmarkPerObjectDescriptorSet, 0, nullptr);
-        vkCmdPushConstants(cmd, pipelineLayout,
-                            VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
-                            VK_SHADER_STAGE_FRAGMENT_BIT,
-                            0, sizeof(PushConstants), &benchPush);
-        pfnCmdDrawMeshTasksEXT(cmd, benchmarkNbFaces, 1, 1);
+        vkCmdPushConstants(cmd, benchmarkPipelineLayout,
+                            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                            0, sizeof(BenchmarkPushConstants), &benchPush);
+
+        VkBuffer vertexBuffers[] = { benchmarkVertexBuffer };
+        VkDeviceSize offsets[] = { 0 };
+        vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
+        vkCmdBindIndexBuffer(cmd, benchmarkIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(cmd, benchmarkIndexCount, 1, 0, 0, 0);
     }
 
     // Draw ImGui on top
