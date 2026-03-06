@@ -86,3 +86,6 @@ vcpkg_installed/
 conan/
 
 .claude/
+
+# Exported meshes (large OBJ files)
+exports/

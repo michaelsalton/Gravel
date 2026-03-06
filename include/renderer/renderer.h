@@ -222,7 +222,7 @@ public:
     uint32_t benchmarkNbFaces = 0;
     uint32_t benchmarkNbVertices = 0;
     uint32_t benchmarkTriCount = 0;
-    std::string benchmarkMeshPath = "export_2.obj";
+    std::string benchmarkMeshPath = "exports/export_2.obj";
     std::string pendingBenchmarkLoad;
 
     // Cameras
