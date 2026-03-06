@@ -89,7 +89,7 @@ int main() {
     }
 
     try {
-        Window window(1280, 720, "Gravel - Mesh Shader Resurfacing");
+        Window window(1920, 1080, "Gravel - Mesh Shader Resurfacing");
         Renderer renderer(window);
 
         renderer.uploadHalfEdgeMesh(heMeshForGPU);

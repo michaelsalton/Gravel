@@ -155,6 +155,7 @@ public:
     void uploadHalfEdgeMesh(const HalfEdgeMesh& mesh);
 
     bool isFrameStarted() const { return frameStarted; }
+    Window& getWindow() { return window; }
 
     void loadMesh(const std::string& path);
     void processInput(Window& window, float deltaTime);

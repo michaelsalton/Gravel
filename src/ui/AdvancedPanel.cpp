@@ -1,5 +1,6 @@
 #include "ui/AdvancedPanel.h"
 #include "renderer/renderer.h"
+#include "core/window.h"
 #include "imgui.h"
 
 void AdvancedPanel::render(Renderer& r) {
@@ -9,6 +10,9 @@ void AdvancedPanel::render(Renderer& r) {
         ImGui::Checkbox("VSync", &r.vsync);
         if (r.vsync != prevVsync) {
             r.pendingSwapChainRecreation = true;
+        }
+        if (ImGui::Button(r.getWindow().isFullscreen() ? "Windowed" : "Fullscreen")) {
+            r.getWindow().toggleFullscreen();
         }
 
         ImGui::Separator();
