@@ -12,7 +12,12 @@ Window::Window(int width, int height, const std::string& title)
     // No OpenGL context — we're using Vulkan
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-    window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
+    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+    const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+    this->width = mode->width;
+    this->height = mode->height;
+
+    window = glfwCreateWindow(this->width, this->height, title.c_str(), monitor, nullptr);
     if (!window) {
         glfwTerminate();
         throw std::runtime_error("Failed to create GLFW window");

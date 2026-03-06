@@ -214,6 +214,11 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
     advancedPanel.render(*this);
 
+    ImGui::Separator();
+    if (ImGui::Button("Exit")) {
+        glfwSetWindowShouldClose(window.getHandle(), GLFW_TRUE);
+    }
+
     ImGui::End();
 
     ImGui::Render();
