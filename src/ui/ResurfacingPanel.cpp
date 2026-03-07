@@ -276,7 +276,13 @@ void ResurfacingPanel::render(Renderer& r) {
         }
     }
 
-    if (r.thirdPersonMode && ImGui::CollapsingHeader("Pathway", ImGuiTreeNodeFlags_DefaultOpen)) {
+    if (r.thirdPersonMode) {
+        renderPathway(r);
+    }
+}
+
+void ResurfacingPanel::renderPathway(Renderer& r) {
+    if (ImGui::CollapsingHeader("Pathway", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Checkbox("Enable Ground Pebbles", &r.renderPathway);
         ImGui::SameLine();
         ImGui::Checkbox("Show Grid", &r.showGroundMesh);
@@ -289,6 +295,84 @@ void ResurfacingPanel::render(Renderer& r) {
                 ImGui::Unindent();
             }
             ImGui::SliderFloat("Pebble Scale", &r.groundPebbleScale, 0.01f, 1.0f);
+
+            ImGui::Separator();
+
+            // Pebble resurfacing settings
+            auto& ubo = r.groundPebbleUBO;
+
+            int subdiv = static_cast<int>(ubo.subdivisionLevel);
+            if (ImGui::SliderInt("Subdivision##gnd", &subdiv, 0, 8)) {
+                ubo.subdivisionLevel = static_cast<uint32_t>(subdiv);
+                ubo.subdivOffset = std::min(ubo.subdivOffset, ubo.subdivisionLevel);
+            }
+            int subdivOff = static_cast<int>(ubo.subdivOffset);
+            if (ImGui::SliderInt("Subdiv Offset##gnd", &subdivOff, 0,
+                             std::min(static_cast<int>(ubo.subdivisionLevel), 3))) {
+                ubo.subdivOffset = static_cast<uint32_t>(subdivOff);
+            }
+
+            ImGui::SliderFloat("Extrusion##gnd", &ubo.extrusionAmount, 0.0f, 1.0f, "%.3f");
+            ImGui::SliderFloat("Variation##gnd", &ubo.extrusionVariation, 0.0f, 1.0f, "%.3f");
+            ImGui::SliderFloat("Roundness##gnd", &ubo.roundness, 0.0f, 2.0f, "%.2f");
+
+            bool doNoise = ubo.doNoise != 0;
+            ImGui::Checkbox("Noise##gnd", &doNoise);
+            ubo.doNoise = doNoise ? 1 : 0;
+            if (doNoise) {
+                ImGui::SliderFloat("Amplitude##gnd", &ubo.noiseAmplitude, 0.0f, 1.0f,
+                                   "%.3f", ImGuiSliderFlags_Logarithmic);
+                ImGui::SliderFloat("Frequency##gnd", &ubo.noiseFrequency, 0.0f, 10.0f, "%.1f");
+                ImGui::SliderFloat("Normal Offset##gnd", &ubo.normalOffset, 0.0f, 1.0f, "%.2f");
+            }
+
+            bool useCulling = ubo.useCulling != 0;
+            ImGui::Checkbox("Culling##gnd", &useCulling);
+            ubo.useCulling = useCulling ? 1 : 0;
+            if (useCulling) {
+                ImGui::SameLine();
+                ImGui::SliderFloat("Threshold##gndPebble", &ubo.cullingThreshold, 0.0f, 1.0f, "%.2f");
+            }
+
+            bool useLod = ubo.useLod != 0;
+            ImGui::Checkbox("LOD##gnd", &useLod);
+            ubo.useLod = useLod ? 1 : 0;
+            if (useLod) {
+                ImGui::SameLine();
+                ImGui::SliderFloat("Factor##gndLod", &ubo.lodFactor, 0.0f, 10.0f, "%.2f");
+                bool allowLow = ubo.allowLowLod != 0;
+                ImGui::Checkbox("Allow Low LOD##gnd", &allowLow);
+                ubo.allowLowLod = allowLow ? 1 : 0;
+            }
+
+            if (ImGui::Button("Smooth##gnd")) {
+                ubo.subdivisionLevel = 3;
+                ubo.extrusionAmount = 0.15f;
+                ubo.extrusionVariation = 0.3f;
+                ubo.roundness = 2.0f;
+                ubo.doNoise = 0;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Rocky##gnd")) {
+                ubo.subdivisionLevel = 4;
+                ubo.extrusionAmount = 0.2f;
+                ubo.extrusionVariation = 0.5f;
+                ubo.roundness = 1.0f;
+                ubo.doNoise = 1;
+                ubo.noiseAmplitude = 0.08f;
+                ubo.noiseFrequency = 5.0f;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cobble##gnd")) {
+                ubo.subdivisionLevel = 2;
+                ubo.extrusionAmount = 0.1f;
+                ubo.extrusionVariation = 0.2f;
+                ubo.roundness = 2.0f;
+                ubo.doNoise = 1;
+                ubo.noiseAmplitude = 0.05f;
+                ubo.noiseFrequency = 8.0f;
+            }
+
             ImGui::Separator();
             ImGui::Text("Ground mesh");
             ImGui::Text("Mesh Type:");

@@ -226,6 +226,7 @@ public:
     float     groundPlaneCellSize    = 0.2f;
     int       groundMeshType         = 0;   // 0=quads, 1=pentagons
     bool      pendingGroundRegenerate = false;
+    PebbleUBO groundPebbleUBO;
 
     // Export state
     bool pendingExport = false;
@@ -523,7 +524,6 @@ private:
     void* groundPebbleUBOMapped = nullptr;
     uint32_t groundNbFaces = 0;
     bool groundMeshActive = false;
-    PebbleUBO groundPebbleUBO;
 
     // Benchmark mesh (traditional vertex pipeline for performance comparison)
     VkPipeline benchmarkPipeline = VK_NULL_HANDLE;

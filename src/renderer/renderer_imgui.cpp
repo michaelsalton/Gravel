@@ -406,6 +406,9 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             ImGui::Separator();
 
             animationPanel.render(*this);
+            ImGui::Separator();
+
+            resurfacingPanel.renderPathway(*this);
 
             ImGui::EndTabItem();
         }

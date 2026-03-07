@@ -437,8 +437,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
 
     // Ground pathway pebbles
     if (renderPathway && groundMeshActive) {
-        // Copy pebble appearance settings, then override pathway fields
-        groundPebbleUBO = pebbleUBO;
+        // Update per-frame and pathway-specific fields (pebble appearance is controlled independently via UI)
         groundPebbleUBO.usePathway       = fogOfWar ? 1u : 0u;
         groundPebbleUBO.playerWorldPos   = player.position;
         groundPebbleUBO.pad1             = 0.0f;
@@ -447,10 +446,14 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         groundPebbleUBO.pathwayRadius    = pathwayRadius;
         groundPebbleUBO.pathwayBackScale = pathwayBackScale;
         groundPebbleUBO.pathwayFalloff   = pathwayFalloff;
-        groundPebbleUBO.extrusionAmount  *= groundPebbleScale;
+        groundPebbleUBO.time             = pebbleUBO.time;
         groundPebbleUBO.doSkinning       = 0;
         groundPebbleUBO.hasAOTexture     = 0;
-        memcpy(groundPebbleUBOMapped, &groundPebbleUBO, sizeof(PebbleUBO));
+
+        // Apply ground pebble scale to a copy for upload
+        PebbleUBO groundUpload = groundPebbleUBO;
+        groundUpload.extrusionAmount *= groundPebbleScale;
+        memcpy(groundPebbleUBOMapped, &groundUpload, sizeof(PebbleUBO));
 
         // Ground plane is stationary — model matrix stays at world origin
         PushConstants groundPush = pushConstants;
