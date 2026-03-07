@@ -131,78 +131,96 @@ Renderer::~Renderer() {
 }
 
 void Renderer::beginFrame() {
-    // Check if any heavy operation is pending — show loading overlay first
+    // Check if any heavy operation is pending — show loading overlay first frame,
+    // then do the actual work on the next frame
     bool hasPendingWork = !pendingMeshLoad.empty() ||
                           (!pendingBenchmarkLoad.empty() && pendingBenchmarkLoad != "__unload__") ||
                           pendingExport;
 
     if (hasPendingWork && !loadingActive) {
-        // First frame: activate loading overlay, defer actual work to next frame
+        // First frame: just set loading flag, let this frame render the overlay
         loadingActive = true;
+        loadingFrameCount = 0;
         if (!pendingMeshLoad.empty())
             loadingMessage = "Loading mesh...";
         else if (!pendingBenchmarkLoad.empty())
             loadingMessage = "Loading benchmark mesh...";
         else if (pendingExport)
             loadingMessage = "Exporting mesh...";
-        return; // Render one frame showing the loading bar, then process next frame
-    }
-
-    // Process deferred mesh load between frames (before recording command buffers)
-    // to avoid updating descriptor sets while a command buffer is being recorded
-    if (pendingGroundRegenerate) {
-        pendingGroundRegenerate = false;
-        vkDeviceWaitIdle(device);
-        generateGroundPlane(groundPlaneCellSize);
-    }
-
-    if (!pendingMeshLoad.empty()) {
-        std::string path = std::move(pendingMeshLoad);
-        pendingMeshLoad.clear();
-        loadMesh(path);
-
-        // Re-apply preset state that loadMesh() resets (cleanupMeshSkeleton clears these)
-        if (pendingPreset) {
-            doSkinning = pendingPreset->doSkinning;
-            animationPlaying = pendingPreset->animationPlaying;
-            animationSpeed = pendingPreset->animationSpeed;
-            baseMeshMode = pendingPreset->baseMeshMode;
-            pendingPreset = nullptr;
-        }
-    }
-
-    if (!pendingBenchmarkLoad.empty()) {
-        std::string path = std::move(pendingBenchmarkLoad);
-        pendingBenchmarkLoad.clear();
-        if (path == "__unload__") {
+        loadingStartTime = static_cast<float>(glfwGetTime());
+        // Don't process the work yet — fall through to render a frame with the overlay
+    } else if (loadingActive && loadingFrameCount < 2) {
+        // Wait for overlay to be visible on screen (need 2 frames: render + present)
+        loadingFrameCount++;
+        // Fall through to render another frame with the overlay
+    } else if (loadingActive) {
+        // Overlay has been shown for 2 frames, now do the actual work
+        if (pendingGroundRegenerate) {
+            pendingGroundRegenerate = false;
             vkDeviceWaitIdle(device);
-            cleanupBenchmarkMesh();
-            renderBenchmarkMesh = false;
-        } else {
-            loadBenchmarkMesh(path);
+            generateGroundPlane(groundPlaneCellSize);
         }
-    }
 
-    if (pendingExport) {
-        pendingExport = false;
-        try {
-            // Ensure parent directory exists
-            {
+        if (!pendingMeshLoad.empty()) {
+            std::string path = std::move(pendingMeshLoad);
+            pendingMeshLoad.clear();
+            loadMesh(path);
+
+            if (pendingPreset) {
+                doSkinning = pendingPreset->doSkinning;
+                animationPlaying = pendingPreset->animationPlaying;
+                animationSpeed = pendingPreset->animationSpeed;
+                baseMeshMode = pendingPreset->baseMeshMode;
+                pendingPreset = nullptr;
+            }
+        }
+
+        if (!pendingBenchmarkLoad.empty()) {
+            std::string path = std::move(pendingBenchmarkLoad);
+            pendingBenchmarkLoad.clear();
+            if (path == "__unload__") {
+                vkDeviceWaitIdle(device);
+                cleanupBenchmarkMesh();
+                renderBenchmarkMesh = false;
+            } else {
+                loadBenchmarkMesh(path);
+            }
+        }
+
+        if (pendingExport) {
+            pendingExport = false;
+            try {
                 auto pos = exportFilePath.find_last_of("/\\");
                 if (pos != std::string::npos) {
                     std::filesystem::create_directories(exportFilePath.substr(0, pos));
                 }
+                exportProceduralMesh(exportFilePath, exportMode);
+                lastExportStatus = "Exported: " + exportFilePath;
+            } catch (const std::exception& e) {
+                lastExportStatus = std::string("Export failed: ") + e.what();
             }
-            exportProceduralMesh(exportFilePath, exportMode);
-            lastExportStatus = "Exported: " + exportFilePath;
-        } catch (const std::exception& e) {
-            lastExportStatus = std::string("Export failed: ") + e.what();
+        }
+
+        loadingDuration = static_cast<float>(glfwGetTime()) - loadingStartTime;
+        loadingActive = false;
+        loadingDone = true;
+        loadingDoneTime = static_cast<float>(glfwGetTime());
+    } else {
+        // No loading — process lightweight deferred ops
+        if (pendingGroundRegenerate) {
+            pendingGroundRegenerate = false;
+            vkDeviceWaitIdle(device);
+            generateGroundPlane(groundPlaneCellSize);
+        }
+
+        // Handle quick unload (no loading overlay needed)
+        if (!pendingBenchmarkLoad.empty() && pendingBenchmarkLoad == "__unload__") {
+            pendingBenchmarkLoad.clear();
+            vkDeviceWaitIdle(device);
+            cleanupBenchmarkMesh();
+            renderBenchmarkMesh = false;
         }
     }
-
-    // Clear loading state after work is done
-    loadingActive = false;
-    loadingMessage.clear();
 
     vkWaitForFences(device, 1, &inFlightFences[currentFrame],
                     VK_TRUE, UINT64_MAX);

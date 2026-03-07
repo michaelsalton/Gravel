@@ -202,7 +202,12 @@ public:
 
     // Loading overlay
     bool loadingActive = false;
+    int loadingFrameCount = 0;  // frames rendered with overlay visible
     std::string loadingMessage;
+    float loadingStartTime = 0.0f;
+    float loadingDoneTime = 0.0f;
+    float loadingDuration = 0.0f;
+    bool loadingDone = false;  // show "done" message briefly
 
     // Pebble config
     bool renderPebbles = false;

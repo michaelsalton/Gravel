@@ -493,7 +493,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
     ImGui::End();
 
-    // Loading overlay
+    // Loading overlay (in progress)
     if (loadingActive) {
         ImVec2 displaySize = ImGui::GetIO().DisplaySize;
         ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f, displaySize.y * 0.5f),
@@ -507,6 +507,28 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         float progress = static_cast<float>(fmod(ImGui::GetTime() * 0.5, 1.0));
         ImGui::ProgressBar(progress, ImVec2(-1, 0), "");
         ImGui::End();
+    }
+
+    // Loading done notification (shows for 2 seconds after load completes)
+    if (loadingDone) {
+        float elapsed = static_cast<float>(ImGui::GetTime()) - loadingDoneTime;
+        if (elapsed < 2.0f) {
+            float alpha = elapsed < 1.5f ? 1.0f : 1.0f - (elapsed - 1.5f) / 0.5f;
+            ImGui::SetNextWindowBgAlpha(alpha * 0.9f);
+            ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+            ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f, displaySize.y * 0.5f),
+                                    ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+            ImGui::SetNextWindowSize(ImVec2(350, 0));
+            ImGui::Begin("##LoadDone", nullptr,
+                         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+                         ImGuiWindowFlags_AlwaysAutoResize);
+            ImGui::ProgressBar(1.0f, ImVec2(-1, 0), "");
+            ImGui::Text("Done (%.2f s)", loadingDuration);
+            ImGui::End();
+        } else {
+            loadingDone = false;
+        }
     }
 
     ImGui::Render();
