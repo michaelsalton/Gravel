@@ -32,22 +32,7 @@ layout(push_constant) uniform PushConstants {
     uint debugMode;
 } push;
 
-void main() {
-    vec3 N = normalize(inNormal);
-
-    // Debug visualizations
-    if (push.debugMode == 1) {
-        // Normals (RGB)
-        outColor = vec4(N * 0.5 + 0.5, 1.0);
-        return;
-    }
-    if (push.debugMode == 2) {
-        // UV Coordinates
-        outColor = vec4(inUV, 0.0, 1.0);
-        return;
-    }
-
-    // Standard Blinn-Phong shading
+vec3 computeShading(vec3 N) {
     vec3 L = normalize(shadingUBO.lightPosition.xyz);
     vec3 V = normalize(viewUBO.cameraPosition.xyz - inWorldPos);
     vec3 H = normalize(L + V);
@@ -59,9 +44,38 @@ void main() {
     vec3 diff = vec3(shadingUBO.diffuse) * NdotL;
     float spec = pow(NdotH, shadingUBO.shininess);
 
-    // Use a neutral color for the benchmark mesh
     vec3 baseColor = vec3(0.7, 0.7, 0.7);
-    vec3 color = baseColor * (ambient + diff) + vec3(shadingUBO.specular) * spec;
+    return baseColor * (ambient + diff) + vec3(shadingUBO.specular) * spec;
+}
 
-    outColor = vec4(color, 1.0);
+void main() {
+    vec3 N = normalize(inNormal);
+
+    // Debug visualizations
+    if (push.debugMode == 1) {
+        outColor = vec4(N * 0.5 + 0.5, 1.0);
+        return;
+    }
+    if (push.debugMode == 2) {
+        outColor = vec4(inUV, 0.0, 1.0);
+        return;
+    }
+    if (push.debugMode == 5) {
+        // Wireframe: use screen-space derivatives of world position
+        vec3 dFdxPos = dFdx(inWorldPos);
+        vec3 dFdyPos = dFdy(inWorldPos);
+        vec3 faceNormal = normalize(cross(dFdxPos, dFdyPos));
+
+        // Compute edge proximity using UV derivatives
+        vec2 grid = abs(fract(inUV - 0.5) - 0.5) / fwidth(inUV);
+        float line = min(grid.x, grid.y);
+        float wire = 1.0 - smoothstep(0.0, 1.5, line);
+
+        vec3 color = computeShading(N);
+        color = mix(color, vec3(1.0), wire * 0.7);
+        outColor = vec4(color, 1.0);
+        return;
+    }
+
+    outColor = vec4(computeShading(N), 1.0);
 }

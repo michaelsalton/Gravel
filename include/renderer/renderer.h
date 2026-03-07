@@ -300,7 +300,12 @@ public:
     // Swap chain extent (needed by stats panel)
     VkExtent2D swapChainExtent;
 
+    // GPU-queried triangle count (updated each frame from pipeline statistics)
+    uint64_t gpuRenderedTriangles = 0;
+
 private:
+    VkQueryPool statsQueryPool = VK_NULL_HANDLE;
+    static const uint32_t STATS_QUERY_COUNT = 2;  // one per frame-in-flight
     void recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex);
     void createInstance();
     void setupDebugMessenger();

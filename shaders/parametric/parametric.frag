@@ -159,6 +159,32 @@ void main() {
             break;
         }
 
+        case 5: {
+            // Wireframe overlay: use UV grid lines scaled by resolution
+            vec2 gridUV = uv * vec2(push.resolutionM, push.resolutionN);
+            vec2 grid = abs(fract(gridUV - 0.5) - 0.5) / fwidth(gridUV);
+            float line = min(grid.x, grid.y);
+            float wire = 1.0 - smoothstep(0.0, 1.5, line);
+
+            // Base shading
+            color = blinnPhong(worldPos, normal,
+                               shadingUBO.lightPosition.xyz,
+                               viewUBO.cameraPosition.xyz,
+                               shadingUBO.ambient,
+                               shadingUBO.diffuse,
+                               shadingUBO.specular,
+                               shadingUBO.shininess);
+            // Also draw element boundaries
+            vec2 elemEdge = abs(fract(uv - 0.5) - 0.5) / fwidth(uv);
+            float elemLine = min(elemEdge.x, elemEdge.y);
+            float elemWire = 1.0 - smoothstep(0.0, 1.5, elemLine);
+
+            // White wireframe for subdivisions, yellow for element boundaries
+            color = mix(color, vec3(1.0), wire * 0.7);
+            color = mix(color, vec3(1.0, 0.9, 0.2), elemWire * 0.9);
+            break;
+        }
+
         default: {
             color = blinnPhong(worldPos, normal,
                                shadingUBO.lightPosition.xyz,

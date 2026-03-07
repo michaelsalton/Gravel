@@ -119,6 +119,30 @@ void main() {
             break;
         }
 
+        case 5: {
+            // Wireframe overlay using local UV grid
+            uint N = pebbleUbo.subdivisionLevel;
+            vec2 gridUV = localUV * float(1u << N);
+            vec2 grid = abs(fract(gridUV - 0.5) - 0.5) / fwidth(gridUV);
+            float line = min(grid.x, grid.y);
+            float wire = 1.0 - smoothstep(0.0, 1.5, line);
+
+            // Base shading
+            color = blinnPhong(worldPos, normal,
+                               shadingUBO.lightPosition.xyz,
+                               viewUBO.cameraPosition.xyz,
+                               shadingUBO.ambient,
+                               shadingUBO.diffuse,
+                               shadingUBO.specular,
+                               shadingUBO.shininess);
+            _seed = faceId;
+            color *= rand(0.5, 1.0);
+
+            // White wireframe overlay
+            color = mix(color, vec3(1.0), wire * 0.7);
+            break;
+        }
+
         default: {
             color = blinnPhong(worldPos, normal,
                                shadingUBO.lightPosition.xyz,

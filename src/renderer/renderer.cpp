@@ -26,6 +26,20 @@ Renderer::Renderer(Window& window) : window(window) {
     createFramebuffers();
     createCommandBuffers();
     createSyncObjects();
+
+    // Pipeline statistics query pool for real-time triangle counting
+    {
+        VkQueryPoolCreateInfo queryPoolInfo{};
+        queryPoolInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        queryPoolInfo.queryType = VK_QUERY_TYPE_PIPELINE_STATISTICS;
+        queryPoolInfo.queryCount = STATS_QUERY_COUNT;
+        queryPoolInfo.pipelineStatistics =
+            VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT;
+        if (vkCreateQueryPool(device, &queryPoolInfo, nullptr, &statsQueryPool) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create statistics query pool!");
+        }
+    }
+
     createDescriptorSetLayouts();
     createPipelineLayout();
     createUniformBuffers();
@@ -40,6 +54,8 @@ Renderer::Renderer(Window& window) : window(window) {
 
 Renderer::~Renderer() {
     cleanupImGui();
+    if (statsQueryPool != VK_NULL_HANDLE)
+        vkDestroyQueryPool(device, statsQueryPool, nullptr);
     cleanupExportPipelines();
     cleanupBenchmarkMesh();
     cleanupGroundMesh();
@@ -226,6 +242,18 @@ void Renderer::beginFrame() {
     vkWaitForFences(device, 1, &inFlightFences[currentFrame],
                     VK_TRUE, UINT64_MAX);
 
+    // Read back pipeline statistics from the previous frame on this slot
+    {
+        uint64_t stats = 0;
+        VkResult qr = vkGetQueryPoolResults(
+            device, statsQueryPool, currentFrame, 1,
+            sizeof(uint64_t), &stats, sizeof(uint64_t),
+            VK_QUERY_RESULT_64_BIT);
+        if (qr == VK_SUCCESS) {
+            gpuRenderedTriangles = stats;
+        }
+    }
+
     VkResult result = vkAcquireNextImageKHR(
         device, swapChain, UINT64_MAX,
         imageAvailableSemaphores[currentFrame],
@@ -281,6 +309,11 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     scissor.offset = {0, 0};
     scissor.extent = swapChainExtent;
     vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+    // Begin pipeline statistics query for triangle counting
+    vkCmdResetQueryPool(cmd, statsQueryPool, currentFrame, 1);
+    vkCmdBeginQuery(cmd, statsQueryPool, currentFrame,
+                    VK_QUERY_CONTROL_PRECISE_BIT);
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
@@ -590,6 +623,9 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         vkCmdBindIndexBuffer(cmd, benchmarkIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
         vkCmdDrawIndexed(cmd, benchmarkIndexCount, 1, 0, 0, 0);
     }
+
+    // End pipeline statistics query before UI
+    vkCmdEndQuery(cmd, statsQueryPool, currentFrame);
 
     // Draw ImGui on top
     renderImGui(cmd);

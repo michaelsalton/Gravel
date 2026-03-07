@@ -245,20 +245,17 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         }
 
         uint32_t culledElements = totalElements - visibleElements;
-        uint32_t trisPerElement = resolutionM * resolutionN * 2;
-        uint32_t proceduralTris = visibleElements * trisPerElement;
 
         ImGui::Text("Elements:  %u / %u visible", visibleElements, totalElements);
         if (totalElements > 0) {
             float pct = 100.0f * culledElements / totalElements;
             ImGui::Text("Culled:    %u (%.1f%%)", culledElements, pct);
         }
-        ImGui::Text("Triangles: %u  (%u/elem)", proceduralTris, trisPerElement);
+        if (!enableLod) {
+            uint32_t trisPerElement = resolutionM * resolutionN * 2;
+            ImGui::Text("Triangles: %u  (%u/elem)", visibleElements * trisPerElement, trisPerElement);
+        }
         ImGui::Unindent();
-
-        ImGui::Separator();
-        uint32_t totalTris = baseMeshTriCount + proceduralTris;
-        ImGui::Text("Total Triangles: %u", totalTris);
     }
 
     if (benchmarkMeshLoaded) {
@@ -272,6 +269,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     }
 
     ImGui::Separator();
+    ImGui::Text("Rendered Triangles: %llu", static_cast<unsigned long long>(gpuRenderedTriangles));
     ImGui::Text("Resolution: %ux%u", swapChainExtent.width, swapChainExtent.height);
 
     ImGui::End();
@@ -461,10 +459,11 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             "Normals (RGB)",
             "UV Coordinates",
             "Task ID",
-            "Element Type (Face/Vertex)"
+            "Element Type (Face/Vertex)",
+            "Wireframe"
         };
         int mode = static_cast<int>(debugMode);
-        if (ImGui::Combo("Debug Mode", &mode, debugModes, 5)) {
+        if (ImGui::Combo("Debug Mode", &mode, debugModes, 6)) {
             debugMode = static_cast<uint32_t>(mode);
         }
 
@@ -483,6 +482,9 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                     break;
                 case 4:
                     ImGui::TextDisabled("Red = Vertex, Blue = Face");
+                    break;
+                case 5:
+                    ImGui::TextDisabled("Triangle edges overlay on shading");
                     break;
             }
             ImGui::Unindent();
