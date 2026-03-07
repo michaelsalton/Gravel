@@ -138,6 +138,8 @@ struct BenchmarkPushConstants {
     glm::mat4 model;
     glm::mat4 view;
     glm::mat4 projection;
+    uint32_t debugMode;
+    float pad[3];
 };
 
 class Renderer {
@@ -198,6 +200,7 @@ public:
     bool vsync = false;
     bool pendingSwapChainRecreation = false;
     std::string pendingMeshLoad;  // deferred mesh load (set by ImGui, processed between frames)
+    std::string loadedMeshPath;   // path of the currently loaded mesh (for export)
     const LevelPreset* pendingPreset = nullptr;  // post-load state to apply after mesh load
 
     // Loading overlay
@@ -533,6 +536,7 @@ private:
     VkBuffer benchmarkIndexBuffer = VK_NULL_HANDLE;
     VkDeviceMemory benchmarkIndexMemory = VK_NULL_HANDLE;
     uint32_t benchmarkIndexCount = 0;
+    size_t benchmarkVramBytes = 0;
 
     // Secondary mesh (base dragon rendered under coat)
     std::vector<StorageBuffer> secondaryHeVec4Buffers;

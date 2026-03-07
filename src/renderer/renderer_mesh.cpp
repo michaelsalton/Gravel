@@ -341,6 +341,16 @@ size_t Renderer::calculateVRAM() const {
         total += secondaryJointIndicesBuffer.getSize();
         total += secondaryJointWeightsBuffer.getSize();
     }
+    // Benchmark mesh (traditional vertex pipeline)
+    total += benchmarkVramBytes;
+    // Ground plane mesh
+    if (groundMeshActive) {
+        for (const auto& buf : groundHeVec4Buffers) total += buf.getSize();
+        for (const auto& buf : groundHeVec2Buffers) total += buf.getSize();
+        for (const auto& buf : groundHeIntBuffers) total += buf.getSize();
+        for (const auto& buf : groundHeFloatBuffers) total += buf.getSize();
+        total += sizeof(MeshInfoUBO);
+    }
     return total;
 }
 
@@ -414,6 +424,7 @@ void Renderer::cleanupBenchmarkMesh() {
         benchmarkIndexMemory = VK_NULL_HANDLE;
     }
     benchmarkIndexCount = 0;
+    benchmarkVramBytes = 0;
     benchmarkNbFaces = 0;
     benchmarkNbVertices = 0;
     benchmarkTriCount = 0;
@@ -514,7 +525,8 @@ void Renderer::loadBenchmarkMesh(const std::string& path) {
                  benchmarkIndexBuffer, benchmarkIndexMemory);
 
     benchmarkMeshLoaded = true;
-    float vramMB = static_cast<float>(vbSize + ibSize) / (1024.0f * 1024.0f);
+    benchmarkVramBytes = vbSize + ibSize;
+    float vramMB = static_cast<float>(benchmarkVramBytes) / (1024.0f * 1024.0f);
     std::cout << "Benchmark mesh loaded: " << benchmarkNbFaces << " triangles, "
               << benchmarkNbVertices << " unique vertices, "
               << totalVerts << " expanded vertices ("
@@ -1054,6 +1066,7 @@ void Renderer::loadMesh(const std::string& path) {
     cleanupMeshTextures();
     cleanupMeshSkeleton();
 
+    loadedMeshPath = path;
     NGonMesh ngon = ObjLoader::load(path);
     if (triangulateMesh) {
         ObjLoader::triangulate(ngon);

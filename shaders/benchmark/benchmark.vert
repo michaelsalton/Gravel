@@ -12,6 +12,7 @@ layout(push_constant) uniform PushConstants {
     mat4 model;
     mat4 view;
     mat4 projection;
+    uint debugMode;
 } push;
 
 void main() {

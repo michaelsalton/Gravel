@@ -1,6 +1,7 @@
 #include "renderer/renderer.h"
 #include "renderer/MeshExport.h"
 #include "loaders/ObjWriter.h"
+#include "loaders/ObjLoader.h"
 #include "loaders/GltfLoader.h"
 #include "core/window.h"
 #include <stdexcept>
@@ -573,6 +574,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         benchPush.model = glm::mat4(1.0f);
         benchPush.view = activeCamera->getViewMatrix();
         benchPush.projection = activeCamera->getProjectionMatrix(aspect);
+        benchPush.debugMode = debugMode;
 
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, benchmarkPipeline);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -874,7 +876,14 @@ void Renderer::exportProceduralMesh(const std::string& filepath, int mode) {
     vkUnmapMemory(device, exportBufs.uvs.getMemory());
     vkUnmapMemory(device, exportBufs.indices.getMemory());
 
-    // --- 6. Cleanup ---
+    // --- 6. Append base mesh if visible ---
+    if (baseMeshMode > 0 && !loadedMeshPath.empty()) {
+        NGonMesh baseMesh = ObjLoader::load(loadedMeshPath);
+        // OBJ indices are 1-based; offset by the procedural vertex count
+        ObjWriter::appendMesh(filepath, baseMesh, totalVerts + 1);
+    }
+
+    // --- 7. Cleanup ---
     vkDestroyDescriptorPool(device, exportPool, nullptr);
     exportBufs.destroy();
 

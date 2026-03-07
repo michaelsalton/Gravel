@@ -25,8 +25,29 @@ layout(set = 0, binding = 0) uniform ViewUBOBlock {
     float farPlane;
 } viewUBO;
 
+layout(push_constant) uniform PushConstants {
+    mat4 model;
+    mat4 view;
+    mat4 projection;
+    uint debugMode;
+} push;
+
 void main() {
     vec3 N = normalize(inNormal);
+
+    // Debug visualizations
+    if (push.debugMode == 1) {
+        // Normals (RGB)
+        outColor = vec4(N * 0.5 + 0.5, 1.0);
+        return;
+    }
+    if (push.debugMode == 2) {
+        // UV Coordinates
+        outColor = vec4(inUV, 0.0, 1.0);
+        return;
+    }
+
+    // Standard Blinn-Phong shading
     vec3 L = normalize(shadingUBO.lightPosition.xyz);
     vec3 V = normalize(viewUBO.cameraPosition.xyz - inWorldPos);
     vec3 H = normalize(L + V);
