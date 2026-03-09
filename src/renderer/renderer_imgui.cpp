@@ -277,23 +277,8 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     // ===================== Gravel Controls Panel =====================
     ImGui::Begin("Gravel Controls");
 
-    // Mesh name/path tables (shared across tabs)
-    const char* meshNames[] = { "Cube", "Plane (3x3)", "Plane (5x5)", "Plane (Pentagon)", "Sphere", "Sphere HD", "Icosphere", "Dragon 8K", "Dragon Coat", "Boy", "Man", "Man 2" };
-    const char* meshPaths[] = {
-        ASSETS_DIR "shapes/cube.obj",
-        ASSETS_DIR "shapes/plane.obj",
-        ASSETS_DIR "shapes/plane5x5.obj",
-        ASSETS_DIR "shapes/plane_pentagon.obj",
-        ASSETS_DIR "shapes/sphere.obj",
-        ASSETS_DIR "shapes/sphere_hd.obj",
-        ASSETS_DIR "shapes/icosphere.obj",
-        ASSETS_DIR "dragon/dragon_8k.obj",
-        ASSETS_DIR "dragon/dragon_coat.obj",
-        ASSETS_DIR "low-poly/boy.obj",
-        ASSETS_DIR "man/man.obj",
-        ASSETS_DIR "man2/man2.obj"
-    };
-    constexpr int meshCount = 12;
+    // Dynamic mesh list from assets directory
+    int meshCount = static_cast<int>(assetMeshNames.size());
 
     // ===================== Tab Bar =====================
     if (ImGui::BeginTabBar("ModeTabs")) {
@@ -314,11 +299,21 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             // Base mesh selector
             if (ImGui::CollapsingHeader("Base Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
                 int prev = selectedMesh;
-                ImGui::Combo("Mesh", &selectedMesh, meshNames, meshCount);
+                const char* meshPreview = (selectedMesh >= 0 && selectedMesh < meshCount)
+                    ? assetMeshNames[selectedMesh].c_str() : "No meshes found";
+                if (ImGui::BeginCombo("Mesh", meshPreview)) {
+                    for (int i = 0; i < meshCount; i++) {
+                        bool isSelected = (selectedMesh == i);
+                        if (ImGui::Selectable(assetMeshNames[i].c_str(), isSelected))
+                            selectedMesh = i;
+                        if (isSelected) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
                 bool prevTri = triangulateMesh;
                 ImGui::Checkbox("Triangulate", &triangulateMesh);
                 if (selectedMesh != prev || triangulateMesh != prevTri)
-                    pendingMeshLoad = meshPaths[selectedMesh];
+                    pendingMeshLoad = assetMeshPaths[selectedMesh];
                 const char* baseMeshModes[] = { "Off", "Wireframe", "Solid", "Both", "Mask", "Skin" };
                 int modeCount = 4;
                 if (maskTextureLoaded) modeCount = 5;
@@ -564,9 +559,15 @@ void Renderer::applyPresetChainMail() {
 }
 
 void Renderer::applyPreset(const LevelPreset& preset) {
-    // Mesh
-    selectedMesh = preset.selectedMesh;
+    // Mesh — find index by path match
     pendingMeshLoad = preset.meshPath;
+    selectedMesh = preset.selectedMesh; // fallback
+    for (int i = 0; i < static_cast<int>(assetMeshPaths.size()); i++) {
+        if (assetMeshPaths[i] == preset.meshPath) {
+            selectedMesh = i;
+            break;
+        }
+    }
     triangulateMesh = preset.triangulateMesh;
     baseMeshMode = preset.baseMeshMode;
 

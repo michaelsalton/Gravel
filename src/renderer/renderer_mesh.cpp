@@ -11,6 +11,44 @@
 #include <cmath>
 #include <stdexcept>
 #include <filesystem>
+#include <algorithm>
+
+#ifndef ASSETS_DIR
+#define ASSETS_DIR ""
+#endif
+
+void Renderer::scanAssetMeshes() {
+    assetMeshNames.clear();
+    assetMeshPaths.clear();
+
+    std::string assetsDir = ASSETS_DIR;
+    if (assetsDir.empty() || !std::filesystem::is_directory(assetsDir)) return;
+
+    // Recursively find all .obj files
+    std::vector<std::pair<std::string, std::string>> entries; // (name, path)
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(assetsDir)) {
+        if (!entry.is_regular_file()) continue;
+        if (entry.path().extension() != ".obj") continue;
+
+        std::string fullPath = entry.path().string();
+
+        // Build display name from relative path: "subfolder/stem"
+        auto relPath = std::filesystem::relative(entry.path(), assetsDir);
+        std::string name = relPath.parent_path().string();
+        if (!name.empty()) name += "/";
+        name += entry.path().stem().string();
+
+        entries.push_back({name, fullPath});
+    }
+
+    // Sort alphabetically by name
+    std::sort(entries.begin(), entries.end());
+
+    for (auto& [name, path] : entries) {
+        assetMeshNames.push_back(std::move(name));
+        assetMeshPaths.push_back(std::move(path));
+    }
+}
 
 void Renderer::uploadHEBuffers(const HalfEdgeMesh& mesh,
                                 std::vector<StorageBuffer>& vec4Bufs,

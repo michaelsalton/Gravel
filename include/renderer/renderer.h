@@ -168,6 +168,9 @@ public:
     // ---- UI-facing state (driven by ImGui panels) ----
 
     int              selectedMesh   = 0;
+    std::vector<std::string> assetMeshNames;
+    std::vector<std::string> assetMeshPaths;
+    void scanAssetMeshes();
 
     // Resurfacing config
     bool renderResurfacing = true;

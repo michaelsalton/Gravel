@@ -49,6 +49,7 @@ Renderer::Renderer(Window& window) : window(window) {
     createBenchmarkPipeline();
     createSamplers();
     generateGroundPlane(groundPlaneCellSize);
+    scanAssetMeshes();
     initImGui();
 }
 
@@ -294,6 +295,10 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
 
+    // Reset and begin pipeline statistics query (must be outside render pass)
+    vkCmdResetQueryPool(cmd, statsQueryPool, currentFrame, 1);
+    vkCmdBeginQuery(cmd, statsQueryPool, currentFrame, 0);
+
     vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     VkViewport viewport{};
@@ -309,11 +314,6 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     scissor.offset = {0, 0};
     scissor.extent = swapChainExtent;
     vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-    // Begin pipeline statistics query for triangle counting
-    vkCmdResetQueryPool(cmd, statsQueryPool, currentFrame, 1);
-    vkCmdBeginQuery(cmd, statsQueryPool, currentFrame,
-                    VK_QUERY_CONTROL_PRECISE_BIT);
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
@@ -624,13 +624,13 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         vkCmdDrawIndexed(cmd, benchmarkIndexCount, 1, 0, 0, 0);
     }
 
-    // End pipeline statistics query before UI
-    vkCmdEndQuery(cmd, statsQueryPool, currentFrame);
-
     // Draw ImGui on top
     renderImGui(cmd);
 
     vkCmdEndRenderPass(cmd);
+
+    // End pipeline statistics query (outside render pass)
+    vkCmdEndQuery(cmd, statsQueryPool, currentFrame);
 
     if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
         throw std::runtime_error("Failed to record command buffer!");

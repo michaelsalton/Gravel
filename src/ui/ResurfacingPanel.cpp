@@ -5,10 +5,6 @@
 #include <algorithm>
 #include <cmath>
 
-#ifndef ASSETS_DIR
-#define ASSETS_DIR ""
-#endif
-
 void ResurfacingPanel::render(Renderer& r) {
     if (ImGui::CollapsingHeader("Resurfacing", ImGuiTreeNodeFlags_DefaultOpen)) {
 
@@ -96,26 +92,14 @@ void ResurfacingPanel::render(Renderer& r) {
 
             // Chainmail mode
             {
-                const char* meshPaths[] = {
-                    ASSETS_DIR "shapes/cube.obj",
-                    ASSETS_DIR "shapes/plane.obj",
-                    ASSETS_DIR "shapes/plane5x5.obj",
-                    ASSETS_DIR "shapes/plane_pentagon.obj",
-                    ASSETS_DIR "shapes/sphere.obj",
-                    ASSETS_DIR "shapes/sphere_hd.obj",
-                    ASSETS_DIR "shapes/icosphere.obj",
-                    ASSETS_DIR "dragon/dragon_8k.obj",
-                    ASSETS_DIR "dragon/dragon_coat.obj",
-                    ASSETS_DIR "low-poly/boy.obj",
-                    ASSETS_DIR "man/man.obj"
-                };
                 bool prev = r.chainmailMode;
                 ImGui::Checkbox("Chainmail Mode", &r.chainmailMode);
                 if (r.chainmailMode && !prev) {
                     r.applyPresetChainMail();
-                    if (r.triangulateMesh) {
+                    if (r.triangulateMesh && r.selectedMesh >= 0 &&
+                        r.selectedMesh < static_cast<int>(r.assetMeshPaths.size())) {
                         r.triangulateMesh = false;
-                        r.pendingMeshLoad = meshPaths[r.selectedMesh];
+                        r.pendingMeshLoad = r.assetMeshPaths[r.selectedMesh];
                     }
                 }
             }
