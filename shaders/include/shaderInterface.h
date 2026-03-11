@@ -30,6 +30,7 @@
 
 #define BINDING_VIEW_UBO 0
 #define BINDING_SHADING_UBO 1
+#define BINDING_VISIBLE_INDICES 2  // CPU pre-cull index list (task shader only)
 
 // ============================================================================
 // Descriptor Bindings - Set 1 (HESet - Half-Edge Data)
@@ -95,6 +96,11 @@ struct ResurfacingUBO {
 // ============================================================================
 
 #ifndef __cplusplus
+
+// Visible element index list (Set 0, binding 2) — written by CPU pre-cull each frame
+layout(set = SET_SCENE, binding = BINDING_VISIBLE_INDICES) readonly buffer VisibleIndicesBuffer {
+    uint visibleIndices[];
+};
 
 // Vec4 buffers (binding 0, array size 5)
 // [0] vertexPositions, [1] vertexColors, [2] vertexNormals,

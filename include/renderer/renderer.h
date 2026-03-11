@@ -304,12 +304,27 @@ public:
     // Swap chain extent (needed by stats panel)
     VkExtent2D swapChainExtent;
 
-    // GPU-queried triangle count (updated each frame from pipeline statistics)
-    uint64_t gpuRenderedTriangles = 0;
+    // GPU-queried stats (updated each frame from pipeline statistics)
+    uint64_t gpuRenderedTriangles      = 0;
+    uint64_t gpuTaskShaderInvocations  = 0;
+    uint64_t gpuMeshShaderInvocations  = 0;
+
+    // CPU pre-cull cache — built each frame before dispatch, read by ImGui stats
+    std::vector<uint32_t> cachedVisibleIndices;
+    uint32_t cachedTotalElements   = 0;
+    uint32_t cachedEstMeshShaders  = 0;  // CPU-estimated mesh shader workgroups (LOD off only)
+    uint32_t frameDrawCalls        = 0;  // draw/dispatch calls this frame
+    float    cpuCullTimeMs         = 0.0f;
 
 private:
     VkQueryPool statsQueryPool = VK_NULL_HANDLE;
     static const uint32_t STATS_QUERY_COUNT = 2;  // one per frame-in-flight
+    static constexpr uint32_t VISIBLE_INDICES_MAX = 65536;  // max pre-cull elements
+
+    // Visible indices SSBO (per frame, host-visible, written by CPU pre-cull)
+    std::vector<VkBuffer> visibleIndicesBuffers;
+    std::vector<VkDeviceMemory> visibleIndicesMemory;
+    std::vector<void*> visibleIndicesMapped;
     void recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex);
     void createInstance();
     void setupDebugMessenger();

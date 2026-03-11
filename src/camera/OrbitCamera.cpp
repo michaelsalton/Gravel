@@ -58,4 +58,6 @@ void OrbitCamera::renderImGuiControls() {
     ImGui::SliderFloat("Distance", &distance, 1.5f, 20.0f, "%.1f");
     ImGui::DragFloat("Orbit Yaw",   &yaw,   0.5f, -180.0f, 180.0f, "%.1f deg");
     ImGui::DragFloat("Orbit Pitch", &pitch, 0.5f,  -80.0f,  80.0f, "%.1f deg");
+    if (ImGui::Button("Reset Transform"))
+        reset();
 }

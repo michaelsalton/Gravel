@@ -10,6 +10,7 @@
 #include <array>
 #include <cstring>
 #include <cmath>
+#include <chrono>
 
 Renderer::Renderer(Window& window) : window(window) {
     createInstance();
@@ -34,7 +35,9 @@ Renderer::Renderer(Window& window) : window(window) {
         queryPoolInfo.queryType = VK_QUERY_TYPE_PIPELINE_STATISTICS;
         queryPoolInfo.queryCount = STATS_QUERY_COUNT;
         queryPoolInfo.pipelineStatistics =
-            VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT;
+            VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT |
+            VK_QUERY_PIPELINE_STATISTIC_TASK_SHADER_INVOCATIONS_BIT_EXT |
+            VK_QUERY_PIPELINE_STATISTIC_MESH_SHADER_INVOCATIONS_BIT_EXT;
         if (vkCreateQueryPool(device, &queryPoolInfo, nullptr, &statsQueryPool) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create statistics query pool!");
         }
@@ -86,6 +89,8 @@ Renderer::~Renderer() {
         vkFreeMemory(device, viewUBOMemory[i], nullptr);
         vkDestroyBuffer(device, shadingUBOBuffers[i], nullptr);
         vkFreeMemory(device, shadingUBOMemory[i], nullptr);
+        vkDestroyBuffer(device, visibleIndicesBuffers[i], nullptr);
+        vkFreeMemory(device, visibleIndicesMemory[i], nullptr);
     }
 
     if (resurfacingUBOBuffer != VK_NULL_HANDLE) {
@@ -244,14 +249,17 @@ void Renderer::beginFrame() {
                     VK_TRUE, UINT64_MAX);
 
     // Read back pipeline statistics from the previous frame on this slot
+    // Order: clipping primitives, task shader invocations, mesh shader invocations
     {
-        uint64_t stats = 0;
+        uint64_t stats[3] = {};
         VkResult qr = vkGetQueryPoolResults(
             device, statsQueryPool, currentFrame, 1,
-            sizeof(uint64_t), &stats, sizeof(uint64_t),
+            sizeof(stats), stats, sizeof(stats),
             VK_QUERY_RESULT_64_BIT);
         if (qr == VK_SUCCESS) {
-            gpuRenderedTriangles = stats;
+            gpuRenderedTriangles     = stats[0];
+            gpuTaskShaderInvocations = stats[1];
+            gpuMeshShaderInvocations = stats[2];
         }
     }
 
@@ -274,6 +282,8 @@ void Renderer::beginFrame() {
 }
 
 void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
+    frameDrawCalls = 0;
+
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
@@ -420,10 +430,113 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                         VK_SHADER_STAGE_FRAGMENT_BIT,
                         0, sizeof(PushConstants), &pushConstants);
     if (renderResurfacing && !renderPebbles) {
-        uint32_t totalTasks = heMeshUploaded
-            ? (heNbFaces + heNbVertices)
-            : 1;
-        pfnCmdDrawMeshTasksEXT(cmd, totalTasks, 1, 1);
+        if (heMeshUploaded) {
+            // CPU pre-cull: build compact visible element index list
+            cachedVisibleIndices.clear();
+            cachedTotalElements = 0;
+
+            bool doMaskCull = useMaskTexture && maskTextureLoaded && !cpuMaskPixels.empty();
+            bool doCulling   = enableFrustumCulling || enableBackfaceCulling;
+
+            glm::mat4 mvp;
+            if (doCulling) {
+                float aspect = static_cast<float>(swapChainExtent.width) /
+                               static_cast<float>(swapChainExtent.height);
+                glm::mat4 model = thirdPersonMode ? player.getModelMatrix() : glm::mat4(1.0f);
+                mvp = activeCamera->getProjectionMatrix(aspect) *
+                      activeCamera->getViewMatrix() * model;
+            }
+
+            auto isMasked = [&](glm::vec2 uv) -> bool {
+                if (!doMaskCull) return false;
+                uint32_t x = static_cast<uint32_t>(uv.x * cpuMaskWidth)  % cpuMaskWidth;
+                uint32_t y = static_cast<uint32_t>(uv.y * cpuMaskHeight) % cpuMaskHeight;
+                return cpuMaskPixels[y * cpuMaskWidth + x] < 128;
+            };
+
+            auto isVisible = [&](glm::vec3 pos, glm::vec3 normal, float area) -> bool {
+                if (!doCulling) return true;
+                float radius = std::sqrt(area) * userScaling * 2.0f;
+                if (enableFrustumCulling) {
+                    glm::vec4 clip = mvp * glm::vec4(pos, 1.0f);
+                    if (clip.w <= 0.0f) return false;
+                    float cr = radius / clip.w * 2.0f * 1.1f;
+                    glm::vec3 ndc = glm::vec3(clip) / clip.w;
+                    if (ndc.x + cr < -1.0f || ndc.x - cr > 1.0f) return false;
+                    if (ndc.y + cr < -1.0f || ndc.y - cr > 1.0f) return false;
+                    if (ndc.z + cr <  0.0f || ndc.z - cr > 1.0f) return false;
+                }
+                if (enableBackfaceCulling) {
+                    glm::vec3 viewDir = glm::normalize(activeCamera->getPosition() - pos);
+                    if (glm::dot(viewDir, normal) <= cullingThreshold) return false;
+                }
+                return true;
+            };
+
+            uint32_t totalElements = heNbFaces + heNbVertices;
+            cachedVisibleIndices.reserve(std::min(totalElements, VISIBLE_INDICES_MAX));
+
+            auto cullStart = std::chrono::high_resolution_clock::now();
+
+            for (uint32_t i = 0; i < heNbFaces; i++) {
+                if (isMasked(cpuFaceUVs[i])) continue;
+                cachedTotalElements++;
+                if (isVisible(cpuFaceCenters[i], cpuFaceNormals[i], cpuFaceAreas[i]))
+                    if (cachedVisibleIndices.size() < VISIBLE_INDICES_MAX)
+                        cachedVisibleIndices.push_back(i);
+            }
+            for (uint32_t i = 0; i < heNbVertices; i++) {
+                if (isMasked(cpuVertexUVs[i])) continue;
+                cachedTotalElements++;
+                if (isVisible(cpuVertexPositions[i], cpuVertexNormals[i], cpuVertexFaceAreas[i]))
+                    if (cachedVisibleIndices.size() < VISIBLE_INDICES_MAX)
+                        cachedVisibleIndices.push_back(heNbFaces + i);
+            }
+
+            cpuCullTimeMs = std::chrono::duration<float, std::milli>(
+                std::chrono::high_resolution_clock::now() - cullStart).count();
+
+            // Upload visible indices to GPU buffer and dispatch
+            uint32_t visibleCount = static_cast<uint32_t>(cachedVisibleIndices.size());
+
+            // Compute CPU-estimated mesh shader workgroup count (LOD off, tile grid per element)
+            if (!enableLod && visibleCount > 0) {
+                uint32_t M = resolutionM, N = resolutionN;
+                uint32_t dU = M, dV = N;
+                if ((dU + 1) * (dV + 1) > 256) {
+                    uint32_t maxD = static_cast<uint32_t>(std::sqrt(256.0f)) - 1;
+                    dU = std::min(dU, maxD);
+                    dV = std::min(dV, maxD);
+                }
+                if (dU * dV * 2 > 256) {
+                    uint32_t maxD = static_cast<uint32_t>(std::sqrt(256.0f / 2.0f));
+                    dU = std::min(dU, maxD);
+                    dV = std::min(dV, maxD);
+                }
+                dU = std::max(dU, 2u);
+                dV = std::max(dV, 2u);
+                uint32_t tilesU = (M + dU - 1) / dU;
+                uint32_t tilesV = (N + dV - 1) / dV;
+                cachedEstMeshShaders = visibleCount * tilesU * tilesV;
+            } else {
+                cachedEstMeshShaders = 0;
+            }
+
+            if (visibleCount > 0) {
+                memcpy(visibleIndicesMapped[currentFrame],
+                       cachedVisibleIndices.data(),
+                       visibleCount * sizeof(uint32_t));
+                pfnCmdDrawMeshTasksEXT(cmd, visibleCount, 1, 1);
+                frameDrawCalls++;
+            }
+        } else {
+            cachedVisibleIndices.clear();
+            cachedTotalElements = 0;
+            cachedEstMeshShaders = 0;
+            cpuCullTimeMs = 0.0f;
+            pfnCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
+            frameDrawCalls++;
+        }
     }
 
     // Pebble pipeline draw path
@@ -448,6 +561,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                             VK_SHADER_STAGE_FRAGMENT_BIT,
                             0, sizeof(PushConstants), &pushConstants);
         pfnCmdDrawMeshTasksEXT(cmd, heNbFaces, 1, 1);
+        frameDrawCalls++;
     }
 
     // Pebble control cage overlay
@@ -467,6 +581,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                             VK_SHADER_STAGE_FRAGMENT_BIT,
                             0, sizeof(PushConstants), &pushConstants);
         pfnCmdDrawMeshTasksEXT(cmd, heNbFaces, 1, 1);
+        frameDrawCalls++;
     }
 
     // Ground pathway pebbles
@@ -511,6 +626,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                             VK_SHADER_STAGE_FRAGMENT_BIT,
                             0, sizeof(PushConstants), &groundPush);
         pfnCmdDrawMeshTasksEXT(cmd, groundNbFaces, 1, 1);
+        frameDrawCalls++;
     }
 
     // Ground plane wireframe overlay
@@ -535,6 +651,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                             VK_SHADER_STAGE_FRAGMENT_BIT,
                             0, sizeof(PushConstants), &gp);
         pfnCmdDrawMeshTasksEXT(cmd, groundNbFaces, 1, 1);
+        frameDrawCalls++;
     }
 
     // Dual-mesh: render secondary mesh as solid base under coat
@@ -559,6 +676,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                             VK_SHADER_STAGE_FRAGMENT_BIT,
                             0, sizeof(PushConstants), &basePush);
         pfnCmdDrawMeshTasksEXT(cmd, secondaryHeNbFaces, 1, 1);
+        frameDrawCalls++;
     }
 
     // Base mesh overlay (0=off, 1=wireframe, 2=solid, 3=both)
@@ -582,6 +700,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                                 VK_SHADER_STAGE_FRAGMENT_BIT,
                                 0, sizeof(PushConstants), &pushConstants);
             pfnCmdDrawMeshTasksEXT(cmd, heNbFaces, 1, 1);
+            frameDrawCalls++;
         };
 
         if (baseMeshMode == 5) {
@@ -622,15 +741,16 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
         vkCmdBindIndexBuffer(cmd, benchmarkIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
         vkCmdDrawIndexed(cmd, benchmarkIndexCount, 1, 0, 0, 0);
+        frameDrawCalls++;
     }
+
+    // End pipeline statistics query before ImGui (exclude UI triangles)
+    vkCmdEndQuery(cmd, statsQueryPool, currentFrame);
 
     // Draw ImGui on top
     renderImGui(cmd);
 
     vkCmdEndRenderPass(cmd);
-
-    // End pipeline statistics query (outside render pass)
-    vkCmdEndQuery(cmd, statsQueryPool, currentFrame);
 
     if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
         throw std::runtime_error("Failed to record command buffer!");

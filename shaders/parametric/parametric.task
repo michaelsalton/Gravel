@@ -119,7 +119,8 @@ uint getElementTypeFromTexture(vec2 uv) {
 // ============================================================================
 
 void main() {
-    uint globalId = gl_WorkGroupID.x;
+    // Remap through the CPU pre-cull visible index list (dispatch count = visible elements only)
+    uint globalId = visibleIndices[gl_WorkGroupID.x];
 
     bool isVertex = (globalId >= push.nbFaces);
 

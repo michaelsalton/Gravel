@@ -180,80 +180,45 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     ImGui::Separator();
 
     // Mesh stats
+    uint32_t sceneTriangles = 0;
+    uint32_t sceneRendered  = 0;
+
     ImGui::Text("Base Mesh:");
     ImGui::Indent();
-    ImGui::Text("Faces:     %u", heNbFaces);
-    ImGui::Text("Vertices:  %u", heNbVertices);
-    ImGui::Text("Triangles: %u", baseMeshTriCount);
+    ImGui::Text("Faces:              %u", heNbFaces);
+    ImGui::Text("Vertices:           %u", heNbVertices);
+    ImGui::Text("Triangles:          %u", baseMeshTriCount);
+    ImGui::Text("Rendered Triangles: %u", baseMeshMode > 0 ? baseMeshTriCount : 0u);
     ImGui::Unindent();
 
-    // Procedural stats (when resurfacing is active)
+    if (baseMeshMode > 0 && heMeshUploaded) {
+        sceneTriangles += baseMeshTriCount;
+        sceneRendered  += baseMeshTriCount;
+    }
+
+    // Procedural stats (when resurfacing is active) — uses CPU pre-cull cache from recordCommandBuffer
     if (renderResurfacing && heMeshUploaded) {
         ImGui::Separator();
         ImGui::Text("Procedural:");
         ImGui::Indent();
 
-        bool doMaskCull = useMaskTexture && maskTextureLoaded && !cpuMaskPixels.empty();
-        bool doCulling = enableFrustumCulling || enableBackfaceCulling;
+        uint32_t visibleElements = static_cast<uint32_t>(cachedVisibleIndices.size());
+        uint32_t totalElements   = cachedTotalElements;
+        uint32_t culledElements  = totalElements - visibleElements;
 
-        auto isMasked = [&](glm::vec2 uv) -> bool {
-            if (!doMaskCull) return false;
-            uint32_t x = static_cast<uint32_t>(uv.x * cpuMaskWidth) % cpuMaskWidth;
-            uint32_t y = static_cast<uint32_t>(uv.y * cpuMaskHeight) % cpuMaskHeight;
-            return cpuMaskPixels[y * cpuMaskWidth + x] < 128;
-        };
-
-        uint32_t totalElements = 0;
-        uint32_t visibleElements = 0;
-
-        glm::mat4 mvp;
-        if (doCulling) {
-            float aspect = static_cast<float>(swapChainExtent.width) /
-                           static_cast<float>(swapChainExtent.height);
-            mvp = activeCamera->getProjectionMatrix(aspect) * activeCamera->getViewMatrix();
-        }
-
-        auto testElement = [&](glm::vec3 pos, glm::vec3 normal, float area) -> bool {
-            float radius = std::sqrt(area) * userScaling * 2.0f;
-            if (enableFrustumCulling) {
-                glm::vec4 clip = mvp * glm::vec4(pos, 1.0f);
-                if (clip.w <= 0.0f) return false;
-                float cr = radius / clip.w * 2.0f * 1.1f;
-                glm::vec3 ndc = glm::vec3(clip) / clip.w;
-                if (ndc.x + cr < -1.0f || ndc.x - cr > 1.0f) return false;
-                if (ndc.y + cr < -1.0f || ndc.y - cr > 1.0f) return false;
-                if (ndc.z + cr <  0.0f || ndc.z - cr > 1.0f) return false;
-            }
-            if (enableBackfaceCulling) {
-                glm::vec3 viewDir = glm::normalize(activeCamera->getPosition() - pos);
-                if (glm::dot(viewDir, normal) <= cullingThreshold) return false;
-            }
-            return true;
-        };
-
-        for (uint32_t i = 0; i < heNbFaces; i++) {
-            if (isMasked(cpuFaceUVs[i])) continue;
-            totalElements++;
-            if (!doCulling || testElement(cpuFaceCenters[i], cpuFaceNormals[i], cpuFaceAreas[i]))
-                visibleElements++;
-        }
-        for (uint32_t i = 0; i < heNbVertices; i++) {
-            if (isMasked(cpuVertexUVs[i])) continue;
-            totalElements++;
-            if (!doCulling || testElement(cpuVertexPositions[i], cpuVertexNormals[i], cpuVertexFaceAreas[i]))
-                visibleElements++;
-        }
-
-        uint32_t culledElements = totalElements - visibleElements;
-
-        ImGui::Text("Elements:  %u / %u visible", visibleElements, totalElements);
+        ImGui::Text("Elements:           %u / %u visible", visibleElements, totalElements);
         if (totalElements > 0) {
             float pct = 100.0f * culledElements / totalElements;
-            ImGui::Text("Culled:    %u (%.1f%%)", culledElements, pct);
+            ImGui::Text("Culled:             %u (%.1f%%)", culledElements, pct);
         }
         if (!enableLod) {
             uint32_t trisPerElement = resolutionM * resolutionN * 2;
-            ImGui::Text("Triangles: %u  (%u/elem)", visibleElements * trisPerElement, trisPerElement);
+            uint32_t procTotal    = totalElements   * trisPerElement;
+            uint32_t procRendered = visibleElements * trisPerElement;
+            ImGui::Text("Triangles:          %u  (%u/elem)", procTotal, trisPerElement);
+            ImGui::Text("Rendered Triangles: %u", procRendered);
+            sceneTriangles += procTotal;
+            sceneRendered  += procRendered;
         }
         ImGui::Unindent();
     }
@@ -266,11 +231,33 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::Text("Vertices:  %u", benchmarkNbVertices);
         ImGui::Text("Triangles: %u", benchmarkTriCount);
         ImGui::Unindent();
+        if (renderBenchmarkMesh) {
+            sceneTriangles += benchmarkTriCount;
+            sceneRendered  += benchmarkTriCount;
+        }
     }
 
     ImGui::Separator();
+    ImGui::Text("Scene:");
+    ImGui::Indent();
+    ImGui::Text("Triangles:          %u", sceneTriangles);
     ImGui::Text("Rendered Triangles: %llu", static_cast<unsigned long long>(gpuRenderedTriangles));
+    ImGui::Unindent();
     ImGui::Text("Resolution: %ux%u", swapChainExtent.width, swapChainExtent.height);
+
+    ImGui::Separator();
+    ImGui::Text("Other:");
+    ImGui::Indent();
+    ImGui::Text("Draw Calls:          %u", frameDrawCalls);
+    ImGui::Text("CPU Cull Time:       %.3f ms", cpuCullTimeMs);
+    ImGui::Separator();
+    ImGui::Text("Task Shaders (CPU):  %u", static_cast<uint32_t>(cachedVisibleIndices.size()));
+    if (!enableLod && cachedEstMeshShaders > 0)
+        ImGui::Text("Mesh Shaders (est):  %u", cachedEstMeshShaders);
+    ImGui::Separator();
+    ImGui::Text("Task Shaders (GPU):  %llu", static_cast<unsigned long long>(gpuTaskShaderInvocations));
+    ImGui::Text("Mesh Shaders (GPU):  %llu", static_cast<unsigned long long>(gpuMeshShaderInvocations));
+    ImGui::Unindent();
 
     ImGui::End();
 

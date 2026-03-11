@@ -793,12 +793,30 @@ void Renderer::createDescriptorSetLayouts() {
     shadingBinding.descriptorCount = 1;
     shadingBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    std::array<VkDescriptorSetLayoutBinding, 2> sceneBindings = {
-        viewBinding, shadingBinding
+    VkDescriptorSetLayoutBinding visibleIndicesBinding{};
+    visibleIndicesBinding.binding = 2;
+    visibleIndicesBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    visibleIndicesBinding.descriptorCount = 1;
+    visibleIndicesBinding.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT;
+
+    std::array<VkDescriptorSetLayoutBinding, 3> sceneBindings = {
+        viewBinding, shadingBinding, visibleIndicesBinding
     };
+
+    std::array<VkDescriptorBindingFlags, 3> sceneBindingFlags = {
+        (VkDescriptorBindingFlags)0,
+        (VkDescriptorBindingFlags)0,
+        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+    };
+    VkDescriptorSetLayoutBindingFlagsCreateInfo sceneBindingFlagsInfo{};
+    sceneBindingFlagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+    sceneBindingFlagsInfo.bindingCount = static_cast<uint32_t>(sceneBindingFlags.size());
+    sceneBindingFlagsInfo.pBindingFlags = sceneBindingFlags.data();
 
     VkDescriptorSetLayoutCreateInfo sceneLayoutInfo{};
     sceneLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    sceneLayoutInfo.pNext = &sceneBindingFlagsInfo;
+    sceneLayoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
     sceneLayoutInfo.bindingCount = static_cast<uint32_t>(sceneBindings.size());
     sceneLayoutInfo.pBindings = sceneBindings.data();
 
@@ -1021,6 +1039,20 @@ void Renderer::createUniformBuffers() {
     PebbleUBO pebbleData{};
     memcpy(pebbleUBOMapped, &pebbleData, sizeof(PebbleUBO));
 
+    // Visible indices buffer (per frame, host-visible SSBO for CPU pre-cull)
+    VkDeviceSize visibleIndicesSize = VISIBLE_INDICES_MAX * sizeof(uint32_t);
+    visibleIndicesBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    visibleIndicesMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    visibleIndicesMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        createBuffer(visibleIndicesSize,
+                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     visibleIndicesBuffers[i], visibleIndicesMemory[i]);
+        vkMapMemory(device, visibleIndicesMemory[i], 0, visibleIndicesSize, 0, &visibleIndicesMapped[i]);
+    }
+
     std::cout << "Uniform buffers created and mapped" << std::endl;
 }
 
@@ -1031,9 +1063,9 @@ void Renderer::createDescriptorPool() {
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2 + 4);
 
-    // SSBOs: 17 HE + 3 skeleton + 17 secondary HE + 2 secondary skeleton joints/weights + 1 shared bone matrices + 17 ground HE
+    // SSBOs: 17 HE + 3 skeleton + 17 secondary HE + 2 secondary skeleton joints/weights + 1 shared bone matrices + 17 ground HE + 2 visible indices (one per frame)
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[1].descriptorCount = 17 + 3 + 17 + 3 + 17;
+    poolSizes[1].descriptorCount = 17 + 3 + 17 + 3 + 17 + MAX_FRAMES_IN_FLIGHT;
 
     // Samplers: 2 primary + 2 secondary + 2 ground
     poolSizes[2].type = VK_DESCRIPTOR_TYPE_SAMPLER;
@@ -1084,7 +1116,12 @@ void Renderer::createDescriptorSets() {
         shadingBufferInfo.offset = 0;
         shadingBufferInfo.range = sizeof(GlobalShadingUBO);
 
-        std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+        VkDescriptorBufferInfo visibleIndicesBufferInfo{};
+        visibleIndicesBufferInfo.buffer = visibleIndicesBuffers[i];
+        visibleIndicesBufferInfo.offset = 0;
+        visibleIndicesBufferInfo.range = VISIBLE_INDICES_MAX * sizeof(uint32_t);
+
+        std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
 
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet = sceneDescriptorSets[i];
@@ -1101,6 +1138,14 @@ void Renderer::createDescriptorSets() {
         descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         descriptorWrites[1].descriptorCount = 1;
         descriptorWrites[1].pBufferInfo = &shadingBufferInfo;
+
+        descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[2].dstSet = sceneDescriptorSets[i];
+        descriptorWrites[2].dstBinding = 2;
+        descriptorWrites[2].dstArrayElement = 0;
+        descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptorWrites[2].descriptorCount = 1;
+        descriptorWrites[2].pBufferInfo = &visibleIndicesBufferInfo;
 
         vkUpdateDescriptorSets(device,
             static_cast<uint32_t>(descriptorWrites.size()),

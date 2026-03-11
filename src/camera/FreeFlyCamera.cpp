@@ -95,4 +95,6 @@ void FreeFlyCamera::renderImGuiControls() {
     ImGui::DragFloat3("Position", &position.x, 0.1f);
     ImGui::DragFloat("Yaw",   &yaw,   0.5f, -180.0f, 180.0f, "%.1f deg");
     ImGui::DragFloat("Pitch", &pitch, 0.5f,  -89.0f,  89.0f, "%.1f deg");
+    if (ImGui::Button("Reset Transform"))
+        reset();
 }
