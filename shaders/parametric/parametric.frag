@@ -74,7 +74,7 @@ void main() {
     switch (push.debugMode) {
         case 0: {
             if (push.chainmailMode != 0u) {
-                // Metallic silver chainmail shading
+                // Metallic chainmail shading with depth and variation
                 vec3 N = normalize(normal);
                 vec3 L = normalize(shadingUBO.lightPosition.xyz - worldPos);
                 vec3 V = normalize(viewUBO.cameraPosition.xyz - worldPos);
@@ -85,32 +85,56 @@ void main() {
                 float f0 = shadingUBO.metalF0;
                 vec3 F0 = vec3(f0, f0, f0 * 1.046); // slight cool tint
 
-                // Schlick Fresnel - metals reflect strongly at all angles
+                // Schlick Fresnel
                 float NdotV = max(dot(N, V), 0.0);
                 vec3 fresnel = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
 
-                // Diffuse (metals have very little, controlled by metalDiffuse)
                 float NdotL = max(dot(N, L), 0.0);
-                vec3 diffuse = F0 * shadingUBO.diffuse * NdotL * shadingUBO.metalDiffuse;
+
+                // Wrap lighting for softer diffuse (light wraps around ring edges)
+                float wrapDiffuse = max((NdotL + 0.3) / 1.3, 0.0);
+                vec3 diffuse = F0 * shadingUBO.diffuse * wrapDiffuse * shadingUBO.metalDiffuse;
 
                 // Dual-lobe specular: tight highlight + broad metallic sheen
                 float NdotH = max(dot(N, H), 0.0);
                 float specTight = pow(NdotH, max(shadingUBO.shininess * 4.0, 8.0));
                 float specBroad = pow(NdotH, max(shadingUBO.shininess * 0.5, 2.0));
                 vec3 specular = fresnel * shadingUBO.specular *
-                    (specTight * 0.6 + specBroad * 0.4);
+                    (specTight * 0.7 + specBroad * 0.3);
 
                 // Environment reflection (fake sky/ground based on reflected direction)
-                vec3 skyColor = vec3(0.4, 0.45, 0.55);   // cool sky
-                vec3 groundColor = vec3(0.15, 0.12, 0.1); // warm ground
-                float skyBlend = R.y * 0.5 + 0.5; // 0=ground, 1=sky
+                vec3 skyColor = vec3(0.4, 0.45, 0.55);
+                vec3 groundColor = vec3(0.15, 0.12, 0.1);
+                float skyBlend = R.y * 0.5 + 0.5;
                 vec3 envColor = mix(groundColor, skyColor, skyBlend);
                 vec3 envRefl = fresnel * envColor * shadingUBO.envReflection;
 
                 // Ambient
                 vec3 ambient = F0 * shadingUBO.ambient.rgb * shadingUBO.ambient.a;
 
-                color = ambient + diffuse + specular + envRefl;
+                // --- Crevice AO: darken the inner face of each ring ---
+                // v=0 is outer top of torus, v=0.5 is inner bottom (closest to mesh surface)
+                float v = fract(uv.y);  // torus minor angle [0,1]
+                // Inner face darkening: strongest at v=0.5 (bottom of ring)
+                float innerFace = 1.0 - 0.6 * pow(1.0 - abs(v * 2.0 - 1.0), 2.0);
+
+                // Edge AO: darken near UV boundaries (where rings interlock)
+                float edgeU = min(uv.x, 1.0 - uv.x) * 2.0; // 0 at edges, 1 at center
+                float edgeV = min(v, 1.0 - v) * 2.0;
+                float edgeAO = mix(0.7, 1.0, smoothstep(0.0, 0.15, edgeU));
+                edgeAO *= mix(0.8, 1.0, smoothstep(0.0, 0.1, edgeV));
+
+                // Self-shadow: fragments facing away from light get extra darkening
+                float selfShadow = mix(0.35, 1.0, smoothstep(-0.1, 0.4, NdotL));
+
+                // Per-ring brightness variation using taskId hash
+                float ringHash = fract(float(taskId) * 0.618033988749895 + float(taskId * 7u) * 0.3819);
+                float ringVariation = mix(0.82, 1.0, ringHash);
+
+                // Combine all occlusion/variation
+                float occlusion = innerFace * edgeAO * selfShadow * ringVariation;
+
+                color = (ambient + diffuse + specular + envRefl) * occlusion;
             } else {
                 // Standard Blinn-Phong with per-element color tint
                 color = blinnPhong(worldPos, normal,

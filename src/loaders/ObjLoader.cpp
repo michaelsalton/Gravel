@@ -3,6 +3,7 @@
 #include <sstream>
 #include <iostream>
 #include <stdexcept>
+#include <map>
 
 NGonMesh ObjLoader::load(const std::string& filepath) {
     std::ifstream file(filepath);
@@ -225,4 +226,99 @@ float ObjLoader::computeFaceArea(
     }
 
     return totalArea;
+}
+
+void ObjLoader::subdivide(NGonMesh& mesh, int levels) {
+    for (int lvl = 0; lvl < levels; lvl++) {
+        NGonMesh result;
+        result.positions = mesh.positions;
+        result.normals   = mesh.normals;
+        result.texCoords = mesh.texCoords;
+        result.colors    = mesh.colors;
+
+        // Ensure normals/texCoords/colors arrays match positions size
+        result.normals.resize(result.positions.size(), glm::vec3(0, 1, 0));
+        result.texCoords.resize(result.positions.size(), glm::vec2(0));
+        result.colors.resize(result.positions.size(), glm::vec3(1));
+
+        // Edge midpoint cache: sorted(v0,v1) -> new vertex index
+        std::map<std::pair<uint32_t, uint32_t>, uint32_t> edgeMidpoints;
+
+        auto getEdgeMidpoint = [&](uint32_t a, uint32_t b) -> uint32_t {
+            auto key = (a < b) ? std::make_pair(a, b) : std::make_pair(b, a);
+            auto it = edgeMidpoints.find(key);
+            if (it != edgeMidpoints.end()) return it->second;
+
+            uint32_t idx = static_cast<uint32_t>(result.positions.size());
+            result.positions.push_back((result.positions[a] + result.positions[b]) * 0.5f);
+            result.normals.push_back(glm::normalize(result.normals[a] + result.normals[b]));
+            result.texCoords.push_back((result.texCoords[a] + result.texCoords[b]) * 0.5f);
+            result.colors.push_back((result.colors[a] + result.colors[b]) * 0.5f);
+            edgeMidpoints[key] = idx;
+            return idx;
+        };
+
+        uint32_t offset = 0;
+        for (const auto& face : mesh.faces) {
+            uint32_t n = face.count;
+            const auto& vi = face.vertexIndices;
+
+            // Compute face centroid vertex
+            glm::vec3 centerPos(0), centerNrm(0), centerCol(0);
+            glm::vec2 centerUV(0);
+            for (uint32_t i = 0; i < n; i++) {
+                centerPos += result.positions[vi[i]];
+                centerNrm += result.normals[vi[i]];
+                centerUV  += result.texCoords[vi[i]];
+                centerCol += result.colors[vi[i]];
+            }
+            float inv = 1.0f / static_cast<float>(n);
+            centerPos *= inv;
+            centerNrm = glm::normalize(centerNrm);
+            centerUV  *= inv;
+            centerCol *= inv;
+
+            uint32_t centerIdx = static_cast<uint32_t>(result.positions.size());
+            result.positions.push_back(centerPos);
+            result.normals.push_back(centerNrm);
+            result.texCoords.push_back(centerUV);
+            result.colors.push_back(centerCol);
+
+            // Compute edge midpoints for this face
+            std::vector<uint32_t> edgeMids(n);
+            for (uint32_t i = 0; i < n; i++) {
+                edgeMids[i] = getEdgeMidpoint(vi[i], vi[(i + 1) % n]);
+            }
+
+            // Create n quads: (corner_i, edgeMid_i, center, edgeMid_{i-1})
+            for (uint32_t i = 0; i < n; i++) {
+                uint32_t prevEdge = edgeMids[(i + n - 1) % n];
+                uint32_t corner   = vi[i];
+                uint32_t nextEdge = edgeMids[i];
+
+                NGonFace quad;
+                quad.vertexIndices = { corner, nextEdge, centerIdx, prevEdge };
+                quad.count = 4;
+                quad.offset = offset;
+                quad.normal = glm::vec4(computeFaceNormal(result.positions, quad.vertexIndices), 0.0f);
+                quad.center = glm::vec4(computeFaceCentroid(result.positions, quad.vertexIndices), 1.0f);
+                quad.area   = computeFaceArea(result.positions, quad.vertexIndices);
+
+                for (uint32_t idx : quad.vertexIndices)
+                    result.faceVertexIndices.push_back(idx);
+                offset += 4;
+
+                result.faces.push_back(std::move(quad));
+            }
+        }
+
+        result.nbVertices = static_cast<uint32_t>(result.positions.size());
+        result.nbFaces    = static_cast<uint32_t>(result.faces.size());
+
+        mesh = std::move(result);
+
+        std::cout << "Subdivided (level " << (lvl + 1) << "): "
+                  << mesh.nbFaces << " faces, "
+                  << mesh.nbVertices << " vertices" << std::endl;
+    }
 }

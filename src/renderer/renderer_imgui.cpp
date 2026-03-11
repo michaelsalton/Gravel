@@ -311,8 +311,10 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                     ImGui::EndCombo();
                 }
                 bool prevTri = triangulateMesh;
+                int prevSubdiv = subdivideLevel;
                 ImGui::Checkbox("Triangulate", &triangulateMesh);
-                if (selectedMesh != prev || triangulateMesh != prevTri)
+                ImGui::SliderInt("Subdivide", &subdivideLevel, 0, 3);
+                if (selectedMesh != prev || triangulateMesh != prevTri || subdivideLevel != prevSubdiv)
                     pendingMeshLoad = assetMeshPaths[selectedMesh];
                 const char* baseMeshModes[] = { "Off", "Wireframe", "Solid", "Both", "Mask", "Skin" };
                 int modeCount = 4;

@@ -1109,6 +1109,9 @@ void Renderer::loadMesh(const std::string& path) {
     if (triangulateMesh) {
         ObjLoader::triangulate(ngon);
     }
+    if (subdivideLevel > 0) {
+        ObjLoader::subdivide(ngon, subdivideLevel);
+    }
     HalfEdgeMesh heMesh = HalfEdgeBuilder::build(ngon);
     computeFace2Coloring(heMesh);
     uploadHalfEdgeMesh(heMesh);

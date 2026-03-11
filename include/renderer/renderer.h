@@ -191,6 +191,7 @@ public:
     bool chainmailMode = false;
     float chainmailTiltAngle = 1.0f;    // Lean blend: 0=flat, 1=full chainmail lean
     bool triangulateMesh = false;
+    int subdivideLevel = 0;  // 0=none, 1=4x, 2=16x, 3=64x faces
     bool useElementTypeTexture = false;
     bool useAOTexture = false;
     bool useMaskTexture = false;

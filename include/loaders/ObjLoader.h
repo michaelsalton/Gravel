@@ -33,6 +33,7 @@ class ObjLoader {
 public:
     static NGonMesh load(const std::string& filepath);
     static void triangulate(NGonMesh& mesh);
+    static void subdivide(NGonMesh& mesh, int levels = 1);
 
 private:
     static glm::vec3 computeFaceNormal(
