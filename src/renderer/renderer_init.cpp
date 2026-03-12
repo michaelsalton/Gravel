@@ -283,6 +283,7 @@ void Renderer::createLogicalDevice() {
     meshShaderFeatures.pNext = &descriptorIndexingFeatures;
     meshShaderFeatures.taskShader = VK_TRUE;
     meshShaderFeatures.meshShader = VK_TRUE;
+    meshShaderFeatures.meshShaderQueries = VK_TRUE;
 
     VkPhysicalDeviceFeatures2 deviceFeatures2{};
     deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
