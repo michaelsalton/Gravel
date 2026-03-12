@@ -395,14 +395,19 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
 
     // Update shading UBO with current lighting config
     GlobalShadingUBO shadingData{};
-    shadingData.lightPosition = glm::vec4(lightPosition, 0.0f);
-    shadingData.ambient = glm::vec4(ambientColor, ambientIntensity);
-    shadingData.roughness = roughness;
-    shadingData.metallic = metallic;
-    shadingData.ao = ao;
-    shadingData.dielectricF0 = dielectricF0;
-    shadingData.envReflection = envReflection;
-    shadingData.lightIntensity = lightIntensity;
+    shadingData.lightPosition         = glm::vec4(lightPosition, 0.0f);
+    shadingData.ambient               = glm::vec4(ambientColor, ambientIntensity);
+    shadingData.lightIntensity        = lightIntensity;
+    shadingData.roughness             = roughness;
+    shadingData.metallic              = metallic;
+    shadingData.ao                    = ao;
+    shadingData.dielectricF0          = dielectricF0;
+    shadingData.envReflection         = envReflection;
+    shadingData.baseMeshRoughness     = baseMeshRoughness;
+    shadingData.baseMeshMetallic      = baseMeshMetallic;
+    shadingData.baseMeshAo            = baseMeshAo;
+    shadingData.baseMeshDielectricF0  = baseMeshDielectricF0;
+    shadingData.baseMeshEnvReflection = baseMeshEnvReflection;
     memcpy(shadingUBOMapped[currentFrame], &shadingData, sizeof(GlobalShadingUBO));
 
     // Per-frame animation update
@@ -814,9 +819,11 @@ void Renderer::endFrame() {
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    if (vkQueueSubmit(graphicsQueue, 1, &submitInfo,
-                      inFlightFences[currentFrame]) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to submit draw command buffer!");
+    VkResult submitResult = vkQueueSubmit(graphicsQueue, 1, &submitInfo,
+                                          inFlightFences[currentFrame]);
+    if (submitResult != VK_SUCCESS) {
+        throw std::runtime_error("Failed to submit draw command buffer! VkResult: " +
+                                 std::to_string(static_cast<int>(submitResult)));
     }
 
     VkPresentInfoKHR presentInfo{};

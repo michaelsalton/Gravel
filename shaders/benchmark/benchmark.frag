@@ -16,12 +16,12 @@ layout(location = 0) out vec4 outColor;
 layout(set = 0, binding = 1) uniform ShadingUBOBlock {
     vec4  lightPosition;
     vec4  ambient;
+    float lightIntensity;
     float roughness;
     float metallic;
     float ao;
     float dielectricF0;
     float envReflection;
-    float lightIntensity;
 } shadingUBO;
 
 layout(set = 0, binding = 0) uniform ViewUBOBlock {

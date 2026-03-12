@@ -21,12 +21,17 @@ layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
 layout(set = SET_SCENE, binding = BINDING_SHADING_UBO) uniform ShadingUBOBlock {
     vec4  lightPosition;
     vec4  ambient;
+    float lightIntensity;
+    float _procRoughness;
+    float _procMetallic;
+    float _procAo;
+    float _procDielectricF0;
+    float _procEnvReflection;
     float roughness;
     float metallic;
     float ao;
     float dielectricF0;
     float envReflection;
-    float lightIntensity;
 } shadingUBO;
 
 layout(push_constant) uniform PushConstants {

@@ -58,16 +58,22 @@ struct ResurfacingUBO {
 };
 
 struct GlobalShadingUBO {
-    glm::vec4 lightPosition;   // xyz = position
-    glm::vec4 ambient;         // rgb = color, a = intensity
-    float roughness;           // surface roughness (0=mirror, 1=rough)
-    float metallic;            // metalness (0=dielectric, 1=metal)
-    float ao;                  // global ambient occlusion multiplier
-    float dielectricF0;        // Fresnel F0 for non-metals (typically 0.04)
-    float envReflection;       // environment reflection strength
-    float lightIntensity;      // point light intensity multiplier
-    float padding1;
-    float padding2;
+    glm::vec4 lightPosition;        // xyz = position
+    glm::vec4 ambient;              // rgb = color, a = intensity
+    float lightIntensity;           // point light intensity multiplier (global)
+    // Procedural mesh (parametric / pebble) material
+    float roughness;
+    float metallic;
+    float ao;
+    float dielectricF0;
+    float envReflection;
+    // Base mesh material
+    float baseMeshRoughness;
+    float baseMeshMetallic;
+    float baseMeshAo;
+    float baseMeshDielectricF0;
+    float baseMeshEnvReflection;
+    float padding1;                 // pad to 80 bytes
 };
 
 // Must stay in sync with shaders/shaderInterface.h PebbleUBO
@@ -259,16 +265,23 @@ public:
     PlayerController player;
     bool thirdPersonMode = false;
 
-    // Lighting config
+    // Lighting config (global)
     glm::vec3 lightPosition = glm::vec3(5.0f, 5.0f, 5.0f);
     glm::vec3 ambientColor = glm::vec3(0.2f, 0.2f, 0.25f);
     float ambientIntensity = 1.0f;
+    float lightIntensity = 3.0f;
+    // Procedural mesh material
     float roughness = 0.5f;
     float metallic = 0.0f;
     float ao = 1.0f;
     float dielectricF0 = 0.04f;
     float envReflection = 0.35f;
-    float lightIntensity = 3.0f;
+    // Base mesh material
+    float baseMeshRoughness = 0.8f;
+    float baseMeshMetallic = 0.0f;
+    float baseMeshAo = 1.0f;
+    float baseMeshDielectricF0 = 0.04f;
+    float baseMeshEnvReflection = 0.1f;
 
     // Loaded-state flags (read by UI panels)
     bool aoTextureLoaded = false;

@@ -29,13 +29,13 @@ layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
 
 layout(set = SET_SCENE, binding = BINDING_SHADING_UBO) uniform ShadingUBOBlock {
     vec4  lightPosition;
-    vec4  ambient;       // rgb = color, a = intensity
+    vec4  ambient;
+    float lightIntensity;
     float roughness;
     float metallic;
     float ao;
     float dielectricF0;
     float envReflection;
-    float lightIntensity;
 } shadingUBO;
 
 // Push constants (must match task/mesh layout)
