@@ -35,9 +35,7 @@ Renderer::Renderer(Window& window) : window(window) {
         queryPoolInfo.queryType = VK_QUERY_TYPE_PIPELINE_STATISTICS;
         queryPoolInfo.queryCount = STATS_QUERY_COUNT;
         queryPoolInfo.pipelineStatistics =
-            VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT |
-            VK_QUERY_PIPELINE_STATISTIC_TASK_SHADER_INVOCATIONS_BIT_EXT |
-            VK_QUERY_PIPELINE_STATISTIC_MESH_SHADER_INVOCATIONS_BIT_EXT;
+            VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT;
         if (vkCreateQueryPool(device, &queryPoolInfo, nullptr, &statsQueryPool) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create statistics query pool!");
         }
@@ -63,6 +61,9 @@ Renderer::~Renderer() {
     cleanupExportPipelines();
     cleanupBenchmarkMesh();
     cleanupGroundMesh();
+    cleanupSecondaryMesh();
+    cleanupMeshSkeleton();
+    cleanupMeshTextures();
     if (benchmarkPipeline != VK_NULL_HANDLE)
         vkDestroyPipeline(device, benchmarkPipeline, nullptr);
     if (benchmarkPipelineLayout != VK_NULL_HANDLE)
@@ -248,9 +249,29 @@ void Renderer::beginFrame() {
     vkWaitForFences(device, 1, &inFlightFences[currentFrame],
                     VK_TRUE, UINT64_MAX);
 
+    // Recreate query pool if invoc-stats toggle changed (requires all frames idle)
+    if (showGPUInvocStats != invocStatsActive) {
+        vkDeviceWaitIdle(device);
+        vkDestroyQueryPool(device, statsQueryPool, nullptr);
+        VkQueryPoolCreateInfo qpInfo{};
+        qpInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        qpInfo.queryType = VK_QUERY_TYPE_PIPELINE_STATISTICS;
+        qpInfo.queryCount = STATS_QUERY_COUNT;
+        qpInfo.pipelineStatistics = VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT;
+        if (showGPUInvocStats)
+            qpInfo.pipelineStatistics |=
+                VK_QUERY_PIPELINE_STATISTIC_TASK_SHADER_INVOCATIONS_BIT_EXT |
+                VK_QUERY_PIPELINE_STATISTIC_MESH_SHADER_INVOCATIONS_BIT_EXT;
+        vkCreateQueryPool(device, &qpInfo, nullptr, &statsQueryPool);
+        invocStatsActive = showGPUInvocStats;
+        if (!invocStatsActive) {
+            gpuTaskShaderInvocations = 0;
+            gpuMeshShaderInvocations = 0;
+        }
+    }
+
     // Read back pipeline statistics from the previous frame on this slot
-    // Order: clipping primitives, task shader invocations, mesh shader invocations
-    {
+    if (invocStatsActive) {
         uint64_t stats[3] = {};
         VkResult qr = vkGetQueryPoolResults(
             device, statsQueryPool, currentFrame, 1,
@@ -261,6 +282,14 @@ void Renderer::beginFrame() {
             gpuTaskShaderInvocations = stats[1];
             gpuMeshShaderInvocations = stats[2];
         }
+    } else {
+        uint64_t clipping = 0;
+        VkResult qr = vkGetQueryPoolResults(
+            device, statsQueryPool, currentFrame, 1,
+            sizeof(uint64_t), &clipping, sizeof(uint64_t),
+            VK_QUERY_RESULT_64_BIT);
+        if (qr == VK_SUCCESS)
+            gpuRenderedTriangles = clipping;
     }
 
     VkResult result = vkAcquireNextImageKHR(
@@ -305,11 +334,12 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
 
-    // Reset and begin pipeline statistics query (must be outside render pass)
+    // Reset query pool outside render pass (required), begin inside (begin and end must match scope)
     vkCmdResetQueryPool(cmd, statsQueryPool, currentFrame, 1);
-    vkCmdBeginQuery(cmd, statsQueryPool, currentFrame, 0);
 
     vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    vkCmdBeginQuery(cmd, statsQueryPool, currentFrame, 0);
 
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -744,7 +774,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         frameDrawCalls++;
     }
 
-    // End pipeline statistics query before ImGui (exclude UI triangles)
+    // End pipeline statistics query before ImGui (exclude UI triangles, same subpass as begin)
     vkCmdEndQuery(cmd, statsQueryPool, currentFrame);
 
     // Draw ImGui on top

@@ -255,8 +255,13 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     if (!enableLod && cachedEstMeshShaders > 0)
         ImGui::Text("Mesh Shaders (est):  %u", cachedEstMeshShaders);
     ImGui::Separator();
-    ImGui::Text("Task Shaders (GPU):  %llu", static_cast<unsigned long long>(gpuTaskShaderInvocations));
-    ImGui::Text("Mesh Shaders (GPU):  %llu", static_cast<unsigned long long>(gpuMeshShaderInvocations));
+    ImGui::Checkbox("GPU Invoc Stats##invoc", &showGPUInvocStats);
+    if (showGPUInvocStats) {
+        ImGui::Text("Task Shaders (GPU):  %llu", static_cast<unsigned long long>(gpuTaskShaderInvocations));
+        ImGui::Text("Mesh Shaders (GPU):  %llu", static_cast<unsigned long long>(gpuMeshShaderInvocations));
+    } else {
+        ImGui::TextDisabled("(enable to count GPU invocations)");
+    }
     ImGui::Unindent();
 
     ImGui::End();

@@ -315,9 +315,11 @@ public:
     uint32_t cachedEstMeshShaders  = 0;  // CPU-estimated mesh shader workgroups (LOD off only)
     uint32_t frameDrawCalls        = 0;  // draw/dispatch calls this frame
     float    cpuCullTimeMs         = 0.0f;
+    bool     showGPUInvocStats     = false;  // enables task/mesh invoc query (has GPU perf cost)
 
 private:
-    VkQueryPool statsQueryPool = VK_NULL_HANDLE;
+    VkQueryPool statsQueryPool  = VK_NULL_HANDLE;
+    bool        invocStatsActive = false;  // tracks current pool configuration
     static const uint32_t STATS_QUERY_COUNT = 2;  // one per frame-in-flight
     static constexpr uint32_t VISIBLE_INDICES_MAX = 65536;  // max pre-cull elements
 
