@@ -81,6 +81,26 @@ void parametricCylinder(vec2 uv, out vec3 pos, out vec3 normal, float radius, fl
 }
 
 // ============================================================================
+// Parametric Hemisphere
+// ============================================================================
+
+void parametricHemisphere(vec2 uv, out vec3 pos, out vec3 normal, float radius) {
+    float theta = uv.x * 2.0 * PI;   // Azimuthal [0, 2pi]
+    float phi   = uv.y * 0.5 * PI;   // Polar [0, pi/2] — top half only
+
+    float sinPhi = sin(phi);
+    float cosPhi = cos(phi);
+    float sinTheta = sin(theta);
+    float cosTheta = cos(theta);
+
+    pos.x = radius * sinPhi * cosTheta;
+    pos.y = radius * sinPhi * sinTheta;
+    pos.z = radius * cosPhi;
+
+    normal = normalize(pos);
+}
+
+// ============================================================================
 // Dispatch Function
 // ============================================================================
 
@@ -91,6 +111,7 @@ void evaluateParametricSurface(vec2 uv, out vec3 pos, out vec3 normal, uint elem
         case 1:  parametricSphere(uv, pos, normal, sphereRadius); break;
         case 2:  parametricCone(uv, pos, normal, 0.5, 1.0); break;
         case 3:  parametricCylinder(uv, pos, normal, 0.5, 1.0); break;
+        case 4:  parametricHemisphere(uv, pos, normal, sphereRadius); break;
         default: parametricSphere(uv, pos, normal, sphereRadius); break;
     }
 }

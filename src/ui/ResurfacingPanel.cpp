@@ -24,9 +24,9 @@ void ResurfacingPanel::render(Renderer& r) {
         if (r.renderResurfacing && !r.renderPebbles) {
             ImGui::Separator();
 
-            const char* surfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder"};
+            const char* surfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder", "Hemisphere"};
             int currentType = static_cast<int>(r.elementType);
-            if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 4)) {
+            if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 5)) {
                 r.elementType = static_cast<uint32_t>(currentType);
             }
 
