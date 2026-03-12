@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 
 void ResurfacingPanel::render(Renderer& r) {
     if (ImGui::CollapsingHeader("Resurfacing", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -33,8 +34,15 @@ void ResurfacingPanel::render(Renderer& r) {
                 ImGui::Checkbox("Use Element Type Map", &r.useElementTypeTexture);
             if (r.aoTextureLoaded)
                 ImGui::Checkbox("Use AO Texture", &r.useAOTexture);
-            if (r.maskTextureLoaded)
+            if (r.maskTextureLoaded) {
                 ImGui::Checkbox("Use Mask Texture", &r.useMaskTexture);
+                if (!r.loadedMeshPath.empty()) {
+                    auto dir = std::filesystem::path(r.loadedMeshPath).parent_path();
+                    ImGui::TextDisabled("  %s/mask.png  (%ux%u)",
+                        dir.filename().string().c_str(),
+                        r.cpuMaskWidth, r.cpuMaskHeight);
+                }
+            }
 
             ImGui::SliderFloat("Global Scale", &r.userScaling, 0.01f, 3.0f);
 
@@ -129,8 +137,15 @@ void ResurfacingPanel::render(Renderer& r) {
 
             if (r.aoTextureLoaded)
                 ImGui::Checkbox("Use AO Texture", &r.useAOTexture);
-            if (r.maskTextureLoaded)
+            if (r.maskTextureLoaded) {
                 ImGui::Checkbox("Use Mask Texture", &r.useMaskTexture);
+                if (!r.loadedMeshPath.empty()) {
+                    auto dir = std::filesystem::path(r.loadedMeshPath).parent_path();
+                    ImGui::TextDisabled("  %s/mask.png  (%ux%u)",
+                        dir.filename().string().c_str(),
+                        r.cpuMaskWidth, r.cpuMaskHeight);
+                }
+            }
 
             // Subdivision
             int subdiv = static_cast<int>(ubo.subdivisionLevel);

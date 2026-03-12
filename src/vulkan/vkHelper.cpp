@@ -28,6 +28,7 @@ StorageBuffer& StorageBuffer::operator=(StorageBuffer&& other) noexcept {
 
 void StorageBuffer::create(VkDevice device, VkPhysicalDevice physicalDevice,
                            size_t size, const void* data) {
+    destroy();  // free any previously held resources before reallocating
     this->device = device;
     this->bufferSize = size;
 

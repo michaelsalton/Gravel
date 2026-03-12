@@ -249,9 +249,11 @@ void Renderer::beginFrame() {
     vkWaitForFences(device, 1, &inFlightFences[currentFrame],
                     VK_TRUE, UINT64_MAX);
 
-    // Recreate query pool if invoc-stats toggle changed (requires all frames idle)
+    // Recreate query pool if invoc-stats toggle changed
+    // Wait for all in-flight fences (not vkDeviceWaitIdle — avoids disturbing semaphore state)
     if (showGPUInvocStats != invocStatsActive) {
-        vkDeviceWaitIdle(device);
+        vkWaitForFences(device, static_cast<uint32_t>(inFlightFences.size()),
+                        inFlightFences.data(), VK_TRUE, UINT64_MAX);
         vkDestroyQueryPool(device, statsQueryPool, nullptr);
         VkQueryPoolCreateInfo qpInfo{};
         qpInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
@@ -263,6 +265,8 @@ void Renderer::beginFrame() {
                 VK_QUERY_PIPELINE_STATISTIC_TASK_SHADER_INVOCATIONS_BIT_EXT |
                 VK_QUERY_PIPELINE_STATISTIC_MESH_SHADER_INVOCATIONS_BIT_EXT;
         vkCreateQueryPool(device, &qpInfo, nullptr, &statsQueryPool);
+        // Host-side reset so the new pool is in a valid state before first use
+        vkResetQueryPool(device, statsQueryPool, 0, STATS_QUERY_COUNT);
         invocStatsActive = showGPUInvocStats;
         if (!invocStatsActive) {
             gpuTaskShaderInvocations = 0;

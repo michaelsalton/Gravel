@@ -88,6 +88,12 @@ void Renderer::uploadHEBuffers(const HalfEdgeMesh& mesh,
     meshInfo.nbHalfEdges = mesh.nbHalfEdges;
     meshInfo.padding = 0;
 
+    if (meshInfoBuf != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, meshInfoBuf, nullptr);
+        vkFreeMemory(device, meshInfoMem, nullptr);
+        meshInfoBuf = VK_NULL_HANDLE;
+        meshInfoMem = VK_NULL_HANDLE;
+    }
     createBuffer(sizeof(MeshInfoUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
                  meshInfoBuf, meshInfoMem);
@@ -1200,6 +1206,16 @@ void Renderer::loadMesh(const std::string& path) {
                     gltfUVs.size() * sizeof(glm::vec2), gltfUVs.data());
                 writeHEDescriptorSet(heDescriptorSet, heVec4Buffers, heVec2Buffers, heIntBuffers, heFloatBuffers);
                 std::cout << "  UV buffer re-uploaded from glTF data" << std::endl;
+
+                // Sync CPU UV arrays to match GPU (glTF UVs) so CPU pre-cull uses the same data
+                for (uint32_t j = 0; j < static_cast<uint32_t>(gltfUVs.size()) && j < static_cast<uint32_t>(cpuVertexUVs.size()); j++)
+                    cpuVertexUVs[j] = gltfUVs[j];
+                for (uint32_t j = 0; j < heNbFaces; j++) {
+                    int edge = heMesh.faceEdges[j];
+                    uint32_t firstVert = static_cast<uint32_t>(heMesh.heVertex[edge]);
+                    if (firstVert < gltfUVs.size())
+                        cpuFaceUVs[j] = gltfUVs[firstVert];
+                }
             }
 
             boneCount = static_cast<uint32_t>(skeleton.bones.size());
