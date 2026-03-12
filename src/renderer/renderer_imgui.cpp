@@ -434,17 +434,22 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     // Lighting controls
     if (ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::DragFloat3("Light Position", &lightPosition.x, 0.1f, -20.0f, 20.0f);
+        ImGui::SliderFloat("Light Intensity", &lightIntensity, 0.0f, 10.0f);
         ImGui::ColorEdit3("Ambient Color", &ambientColor.x);
         ImGui::SliderFloat("Ambient Intensity", &ambientIntensity, 0.0f, 1.0f);
-        ImGui::SliderFloat("Diffuse", &diffuseIntensity, 0.0f, 1.0f);
-        ImGui::SliderFloat("Specular", &specularIntensity, 0.0f, 1.0f);
-        ImGui::SliderFloat("Shininess", &shininess, 1.0f, 128.0f);
+        ImGui::Separator();
+        ImGui::Text("PBR Material");
+        ImGui::SliderFloat("Roughness", &roughness, 0.05f, 1.0f);
+        ImGui::SliderFloat("Metallic", &metallic, 0.0f, 1.0f);
+        ImGui::SliderFloat("AO", &ao, 0.0f, 1.0f);
+        ImGui::SliderFloat("Dielectric F0", &dielectricF0, 0.0f, 0.2f, "%.3f");
+        ImGui::SliderFloat("Env Reflection", &envReflection, 0.0f, 1.0f);
     }
 
     // Debug visualization
     if (ImGui::CollapsingHeader("Debug Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
         const char* debugModes[] = {
-            "Shading (Blinn-Phong)",
+            "Shading (PBR)",
             "Normals (RGB)",
             "UV Coordinates",
             "Task ID",
@@ -539,17 +544,15 @@ void Renderer::applyPresetChainMail() {
     chainmailMode      = true;
     chainmailTiltAngle = 0.08f;
 
-    // Metallic silver lighting
+    // PBR lighting for metallic chainmail
     ambientColor       = glm::vec3(11.0f/255.0f, 11.0f/255.0f, 11.0f/255.0f);
     ambientIntensity   = 0.717f;
-    diffuseIntensity   = 0.666f;
-    specularIntensity  = 1.0f;
-    shininess          = 11.237f;
-
-    // Metallic shader params
-    metalF0            = 0.65f;
+    roughness          = 0.3f;
+    metallic           = 1.0f;
+    ao                 = 1.0f;
+    dielectricF0       = 0.04f;
     envReflection      = 0.35f;
-    metalDiffuse       = 0.3f;
+    lightIntensity     = 3.0f;
 }
 
 void Renderer::applyPreset(const LevelPreset& preset) {
@@ -599,16 +602,14 @@ void Renderer::applyPreset(const LevelPreset& preset) {
     pendingPreset = &preset;
 
     // Lighting
-    lightPosition = preset.lightPosition;
-    ambientColor = preset.ambientColor;
+    lightPosition    = preset.lightPosition;
+    ambientColor     = preset.ambientColor;
     ambientIntensity = preset.ambientIntensity;
-    diffuseIntensity = preset.diffuseIntensity;
-    specularIntensity = preset.specularIntensity;
-    shininess = preset.shininess;
-
-    // Metallic
-    metalF0 = preset.metalF0;
-    envReflection = preset.envReflection;
-    metalDiffuse = preset.metalDiffuse;
+    roughness        = preset.roughness;
+    metallic         = preset.metallic;
+    ao               = preset.ao;
+    dielectricF0     = preset.dielectricF0;
+    envReflection    = preset.envReflection;
+    lightIntensity   = preset.lightIntensity;
 }
 

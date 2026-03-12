@@ -1011,9 +1011,12 @@ void Renderer::createUniformBuffers() {
     GlobalShadingUBO shadingData{};
     shadingData.lightPosition = glm::vec4(lightPosition, 0.0f);
     shadingData.ambient = glm::vec4(ambientColor, ambientIntensity);
-    shadingData.diffuse = diffuseIntensity;
-    shadingData.specular = specularIntensity;
-    shadingData.shininess = shininess;
+    shadingData.roughness = roughness;
+    shadingData.metallic = metallic;
+    shadingData.ao = ao;
+    shadingData.dielectricF0 = dielectricF0;
+    shadingData.envReflection = envReflection;
+    shadingData.lightIntensity = lightIntensity;
 
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         memcpy(viewUBOMapped[i], &viewData, sizeof(ViewUBO));

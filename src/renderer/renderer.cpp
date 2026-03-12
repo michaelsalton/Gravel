@@ -55,6 +55,7 @@ Renderer::Renderer(Window& window) : window(window) {
 }
 
 Renderer::~Renderer() {
+    vkDeviceWaitIdle(device);
     cleanupImGui();
     if (statsQueryPool != VK_NULL_HANDLE)
         vkDestroyQueryPool(device, statsQueryPool, nullptr);
@@ -396,12 +397,12 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     GlobalShadingUBO shadingData{};
     shadingData.lightPosition = glm::vec4(lightPosition, 0.0f);
     shadingData.ambient = glm::vec4(ambientColor, ambientIntensity);
-    shadingData.diffuse = diffuseIntensity;
-    shadingData.specular = specularIntensity;
-    shadingData.shininess = shininess;
-    shadingData.metalF0 = metalF0;
+    shadingData.roughness = roughness;
+    shadingData.metallic = metallic;
+    shadingData.ao = ao;
+    shadingData.dielectricF0 = dielectricF0;
     shadingData.envReflection = envReflection;
-    shadingData.metalDiffuse = metalDiffuse;
+    shadingData.lightIntensity = lightIntensity;
     memcpy(shadingUBOMapped[currentFrame], &shadingData, sizeof(GlobalShadingUBO));
 
     // Per-frame animation update

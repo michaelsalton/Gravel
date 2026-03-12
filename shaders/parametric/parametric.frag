@@ -28,14 +28,14 @@ layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
 } viewUBO;
 
 layout(set = SET_SCENE, binding = BINDING_SHADING_UBO) uniform ShadingUBOBlock {
-    vec4 lightPosition;
-    vec4 ambient;       // rgb = color, a = intensity
-    float diffuse;
-    float specular;
-    float shininess;
-    float metalF0;          // base metallic reflectance (Fresnel F0)
-    float envReflection;    // environment reflection strength
-    float metalDiffuse;     // metallic diffuse weight
+    vec4  lightPosition;
+    vec4  ambient;       // rgb = color, a = intensity
+    float roughness;
+    float metallic;
+    float ao;
+    float dielectricF0;
+    float envReflection;
+    float lightIntensity;
 } shadingUBO;
 
 // Push constants (must match task/mesh layout)
@@ -74,88 +74,69 @@ void main() {
     switch (push.debugMode) {
         case 0: {
             if (push.chainmailMode != 0u) {
-                // Metallic chainmail shading with depth and variation
-                vec3 N = normalize(normal);
-                vec3 L = normalize(shadingUBO.lightPosition.xyz - worldPos);
-                vec3 V = normalize(viewUBO.cameraPosition.xyz - worldPos);
-                vec3 H = normalize(L + V);
-                vec3 R = reflect(-V, N);
+                // Chainmail is always metallic
+                vec3 albedo = vec3(shadingUBO.dielectricF0); // metallic base tint
+                color = cookTorrancePBR(worldPos, normal,
+                                        shadingUBO.lightPosition.xyz,
+                                        viewUBO.cameraPosition.xyz,
+                                        albedo,
+                                        shadingUBO.roughness,
+                                        1.0,  // force metallic = 1.0 for chainmail
+                                        shadingUBO.dielectricF0,
+                                        shadingUBO.ambient,
+                                        shadingUBO.envReflection,
+                                        shadingUBO.lightIntensity);
 
-                // Metallic base reflectance from UBO
-                float f0 = shadingUBO.metalF0;
-                vec3 F0 = vec3(f0, f0, f0 * 1.046); // slight cool tint
-
-                // Schlick Fresnel
-                float NdotV = max(dot(N, V), 0.0);
-                vec3 fresnel = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
-
-                float NdotL = max(dot(N, L), 0.0);
-
-                // Wrap lighting for softer diffuse (light wraps around ring edges)
-                float wrapDiffuse = max((NdotL + 0.3) / 1.3, 0.0);
-                vec3 diffuse = F0 * shadingUBO.diffuse * wrapDiffuse * shadingUBO.metalDiffuse;
-
-                // Dual-lobe specular: tight highlight + broad metallic sheen
-                float NdotH = max(dot(N, H), 0.0);
-                float specTight = pow(NdotH, max(shadingUBO.shininess * 4.0, 8.0));
-                float specBroad = pow(NdotH, max(shadingUBO.shininess * 0.5, 2.0));
-                vec3 specular = fresnel * shadingUBO.specular *
-                    (specTight * 0.7 + specBroad * 0.3);
-
-                // Environment reflection (fake sky/ground based on reflected direction)
-                vec3 skyColor = vec3(0.4, 0.45, 0.55);
-                vec3 groundColor = vec3(0.15, 0.12, 0.1);
-                float skyBlend = R.y * 0.5 + 0.5;
-                vec3 envColor = mix(groundColor, skyColor, skyBlend);
-                vec3 envRefl = fresnel * envColor * shadingUBO.envReflection;
-
-                // Ambient
-                vec3 ambient = F0 * shadingUBO.ambient.rgb * shadingUBO.ambient.a;
-
-                // --- Crevice AO: darken the inner face of each ring ---
+                // --- Chainmail-specific AO modifiers ---
                 // v=0 is outer top of torus, v=0.5 is inner bottom (closest to mesh surface)
-                float v = fract(uv.y);  // torus minor angle [0,1]
+                float v = fract(uv.y);
                 // Inner face darkening: strongest at v=0.5 (bottom of ring)
                 float innerFace = 1.0 - 0.6 * pow(1.0 - abs(v * 2.0 - 1.0), 2.0);
 
                 // Edge AO: darken near UV boundaries (where rings interlock)
-                float edgeU = min(uv.x, 1.0 - uv.x) * 2.0; // 0 at edges, 1 at center
+                float edgeU = min(uv.x, 1.0 - uv.x) * 2.0;
                 float edgeV = min(v, 1.0 - v) * 2.0;
                 float edgeAO = mix(0.7, 1.0, smoothstep(0.0, 0.15, edgeU));
                 edgeAO *= mix(0.8, 1.0, smoothstep(0.0, 0.1, edgeV));
 
                 // Self-shadow: fragments facing away from light get extra darkening
+                vec3 N = normalize(normal);
+                vec3 L = normalize(shadingUBO.lightPosition.xyz - worldPos);
+                float NdotL = max(dot(N, L), 0.0);
                 float selfShadow = mix(0.35, 1.0, smoothstep(-0.1, 0.4, NdotL));
 
                 // Per-ring brightness variation using taskId hash
                 float ringHash = fract(float(taskId) * 0.618033988749895 + float(taskId * 7u) * 0.3819);
                 float ringVariation = mix(0.82, 1.0, ringHash);
 
-                // Combine all occlusion/variation
                 float occlusion = innerFace * edgeAO * selfShadow * ringVariation;
-
-                color = (ambient + diffuse + specular + envRefl) * occlusion;
+                color *= occlusion;
             } else {
-                // Standard Blinn-Phong with per-element color tint
-                color = blinnPhong(worldPos, normal,
-                                   shadingUBO.lightPosition.xyz,
-                                   viewUBO.cameraPosition.xyz,
-                                   shadingUBO.ambient,
-                                   shadingUBO.diffuse,
-                                   shadingUBO.specular,
-                                   shadingUBO.shininess);
-
+                // Standard PBR with per-element color tint
                 vec3 elementColor = getDebugColor(taskId);
-                color = mix(color, color * elementColor, 0.2);
+                vec3 albedo = mix(vec3(0.8), elementColor, 0.2);
+                color = cookTorrancePBR(worldPos, normal,
+                                        shadingUBO.lightPosition.xyz,
+                                        viewUBO.cameraPosition.xyz,
+                                        albedo,
+                                        shadingUBO.roughness,
+                                        shadingUBO.metallic,
+                                        shadingUBO.dielectricF0,
+                                        shadingUBO.ambient,
+                                        shadingUBO.envReflection,
+                                        shadingUBO.lightIntensity);
+                color *= shadingUBO.ao;
             }
 
             // Apply ambient occlusion from texture
             if (resurfacingUBO.hasAOTexture != 0u) {
                 vec2 aoUV = baseUV;
                 aoUV.y = 1.0 - aoUV.y;  // Flip V (OBJ convention)
-                float ao = texture(sampler2D(textures[AO_TEXTURE], samplers[LINEAR_SAMPLER]), aoUV).r;
-                color *= ao;
+                float aoTex = texture(sampler2D(textures[AO_TEXTURE], samplers[LINEAR_SAMPLER]), aoUV).r;
+                color *= aoTex;
             }
+
+            color = toneMapACES(color);
             break;
         }
 
@@ -191,13 +172,17 @@ void main() {
             float wire = 1.0 - smoothstep(0.0, 1.5, line);
 
             // Base shading
-            color = blinnPhong(worldPos, normal,
-                               shadingUBO.lightPosition.xyz,
-                               viewUBO.cameraPosition.xyz,
-                               shadingUBO.ambient,
-                               shadingUBO.diffuse,
-                               shadingUBO.specular,
-                               shadingUBO.shininess);
+            color = cookTorrancePBR(worldPos, normal,
+                                    shadingUBO.lightPosition.xyz,
+                                    viewUBO.cameraPosition.xyz,
+                                    vec3(0.8),
+                                    shadingUBO.roughness,
+                                    shadingUBO.metallic,
+                                    shadingUBO.dielectricF0,
+                                    shadingUBO.ambient,
+                                    shadingUBO.envReflection,
+                                    shadingUBO.lightIntensity);
+
             // Also draw element boundaries
             vec2 elemEdge = abs(fract(uv - 0.5) - 0.5) / fwidth(uv);
             float elemLine = min(elemEdge.x, elemEdge.y);
@@ -206,17 +191,22 @@ void main() {
             // White wireframe for subdivisions, yellow for element boundaries
             color = mix(color, vec3(1.0), wire * 0.7);
             color = mix(color, vec3(1.0, 0.9, 0.2), elemWire * 0.9);
+            color = toneMapACES(color);
             break;
         }
 
         default: {
-            color = blinnPhong(worldPos, normal,
-                               shadingUBO.lightPosition.xyz,
-                               viewUBO.cameraPosition.xyz,
-                               shadingUBO.ambient,
-                               shadingUBO.diffuse,
-                               shadingUBO.specular,
-                               shadingUBO.shininess);
+            color = cookTorrancePBR(worldPos, normal,
+                                    shadingUBO.lightPosition.xyz,
+                                    viewUBO.cameraPosition.xyz,
+                                    vec3(0.8),
+                                    shadingUBO.roughness,
+                                    shadingUBO.metallic,
+                                    shadingUBO.dielectricF0,
+                                    shadingUBO.ambient,
+                                    shadingUBO.envReflection,
+                                    shadingUBO.lightIntensity);
+            color = toneMapACES(color);
             break;
         }
     }

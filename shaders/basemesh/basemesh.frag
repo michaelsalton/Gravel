@@ -8,6 +8,7 @@
 layout(location = 0) in vec3 inNormal;
 layout(location = 1) in vec2 inUV;
 layout(location = 2) perprimitiveEXT in flat uint inFaceId;
+layout(location = 3) in vec3 inWorldPos;
 
 layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
     mat4 view;
@@ -18,14 +19,14 @@ layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
 } viewUBO;
 
 layout(set = SET_SCENE, binding = BINDING_SHADING_UBO) uniform ShadingUBOBlock {
-    vec4 lightPosition;
-    vec4 ambient;
-    float diffuse;
-    float specular;
-    float shininess;
-    float metalF0;
+    vec4  lightPosition;
+    vec4  ambient;
+    float roughness;
+    float metallic;
+    float ao;
+    float dielectricF0;
     float envReflection;
-    float metalDiffuse;
+    float lightIntensity;
 } shadingUBO;
 
 layout(push_constant) uniform PushConstants {
@@ -63,34 +64,34 @@ void main() {
             sampler2D(textures[SKIN_TEXTURE], samplers[LINEAR_SAMPLER]),
             inUV
         ).rgb;
-
-        vec3 worldPos = (push.model * vec4(gl_FragCoord.xyz, 1.0)).xyz;
-        vec3 L = normalize(shadingUBO.lightPosition.xyz);
-        vec3 V = normalize(viewUBO.cameraPosition.xyz - worldPos);
-        vec3 H = normalize(L + V);
-
-        float NdotL = max(dot(N, L), 0.0);
-        float NdotH = max(dot(N, H), 0.0);
-
-        vec3 ambient = shadingUBO.ambient.rgb * shadingUBO.ambient.a;
-        vec3 diffuse = vec3(shadingUBO.diffuse) * NdotL;
-        float spec = pow(NdotH, shadingUBO.shininess);
-        vec3 specular = vec3(shadingUBO.specular) * spec;
-
-        vec3 color = skinColor * (ambient + diffuse) + specular;
+        vec3 color = cookTorrancePBR(inWorldPos, N,
+                                     shadingUBO.lightPosition.xyz,
+                                     viewUBO.cameraPosition.xyz,
+                                     skinColor,
+                                     shadingUBO.roughness,
+                                     shadingUBO.metallic,
+                                     shadingUBO.dielectricF0,
+                                     shadingUBO.ambient,
+                                     shadingUBO.envReflection,
+                                     shadingUBO.lightIntensity);
+        color = toneMapACES(color);
         outColor = vec4(color, 1.0);
         return;
     }
 
     // Use face-ID color with flat shading
     vec3 baseColor = getDebugColor(inFaceId);
-
-    // Simple hemisphere lighting (normal dot light direction)
-    vec3 L = normalize(shadingUBO.lightPosition.xyz);
-    float NdotL = max(dot(N, L), 0.0);
-
-    vec3 ambient = shadingUBO.ambient.rgb * shadingUBO.ambient.a;
-    vec3 color = baseColor * (ambient + vec3(shadingUBO.diffuse) * NdotL);
+    vec3 color = cookTorrancePBR(inWorldPos, N,
+                                 shadingUBO.lightPosition.xyz,
+                                 viewUBO.cameraPosition.xyz,
+                                 baseColor,
+                                 shadingUBO.roughness,
+                                 0.0,  // dielectric for debug overlay
+                                 shadingUBO.dielectricF0,
+                                 shadingUBO.ambient,
+                                 shadingUBO.envReflection,
+                                 shadingUBO.lightIntensity);
+    color = toneMapACES(color);
 
     outColor = vec4(color, 1.0);
 }

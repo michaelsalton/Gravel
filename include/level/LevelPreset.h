@@ -38,14 +38,12 @@ struct LevelPreset {
     glm::vec3 lightPosition;
     glm::vec3 ambientColor;
     float ambientIntensity;
-    float diffuseIntensity;
-    float specularIntensity;
-    float shininess;
-
-    // Metallic
-    float metalF0;
+    float roughness;
+    float metallic;
+    float ao;
+    float dielectricF0;
     float envReflection;
-    float metalDiffuse;
+    float lightIntensity;
 };
 
 extern const LevelPreset LEVEL_PRESETS[];

@@ -24,14 +24,14 @@ layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
 } viewUBO;
 
 layout(set = SET_SCENE, binding = BINDING_SHADING_UBO) uniform ShadingUBOBlock {
-    vec4 lightPosition;
-    vec4 ambient;
-    float diffuse;
-    float specular;
-    float shininess;
-    float metalF0;
+    vec4  lightPosition;
+    vec4  ambient;
+    float roughness;
+    float metallic;
+    float ao;
+    float dielectricF0;
     float envReflection;
-    float metalDiffuse;
+    float lightIntensity;
 } shadingUBO;
 
 layout(push_constant) uniform PushConstants {
@@ -71,26 +71,31 @@ void main() {
 
     switch (pc.debugMode) {
         case 0: {
-            // Blinn-Phong shading
-            color = blinnPhong(worldPos, normal,
-                               shadingUBO.lightPosition.xyz,
-                               viewUBO.cameraPosition.xyz,
-                               shadingUBO.ambient,
-                               shadingUBO.diffuse,
-                               shadingUBO.specular,
-                               shadingUBO.shininess);
-
-            // Per-face random color variation
+            // Per-face random color as albedo (physically correct: vary before shading)
             _seed = faceId;
-            color *= rand(0.5, 1.0);
+            vec3 albedo = vec3(rand(0.5, 1.0));
+
+            color = cookTorrancePBR(worldPos, normal,
+                                    shadingUBO.lightPosition.xyz,
+                                    viewUBO.cameraPosition.xyz,
+                                    albedo,
+                                    shadingUBO.roughness,
+                                    shadingUBO.metallic,
+                                    shadingUBO.dielectricF0,
+                                    shadingUBO.ambient,
+                                    shadingUBO.envReflection,
+                                    shadingUBO.lightIntensity);
+            color *= shadingUBO.ao;
 
             // AO texture
             if (pebbleUbo.hasAOTexture != 0) {
                 vec2 baseUV = getBaseUv(faceId);
                 baseUV.y = 1.0 - baseUV.y;
-                float ao = texture(sampler2D(textures[AO_TEXTURE], samplers[LINEAR_SAMPLER]), baseUV).r;
-                color *= ao;
+                float aoTex = texture(sampler2D(textures[AO_TEXTURE], samplers[LINEAR_SAMPLER]), baseUV).r;
+                color *= aoTex;
             }
+
+            color = toneMapACES(color);
             break;
         }
 
@@ -128,29 +133,37 @@ void main() {
             float wire = 1.0 - smoothstep(0.0, 1.5, line);
 
             // Base shading
-            color = blinnPhong(worldPos, normal,
-                               shadingUBO.lightPosition.xyz,
-                               viewUBO.cameraPosition.xyz,
-                               shadingUBO.ambient,
-                               shadingUBO.diffuse,
-                               shadingUBO.specular,
-                               shadingUBO.shininess);
             _seed = faceId;
-            color *= rand(0.5, 1.0);
+            vec3 albedo = vec3(rand(0.5, 1.0));
+            color = cookTorrancePBR(worldPos, normal,
+                                    shadingUBO.lightPosition.xyz,
+                                    viewUBO.cameraPosition.xyz,
+                                    albedo,
+                                    shadingUBO.roughness,
+                                    shadingUBO.metallic,
+                                    shadingUBO.dielectricF0,
+                                    shadingUBO.ambient,
+                                    shadingUBO.envReflection,
+                                    shadingUBO.lightIntensity);
 
             // White wireframe overlay
             color = mix(color, vec3(1.0), wire * 0.7);
+            color = toneMapACES(color);
             break;
         }
 
         default: {
-            color = blinnPhong(worldPos, normal,
-                               shadingUBO.lightPosition.xyz,
-                               viewUBO.cameraPosition.xyz,
-                               shadingUBO.ambient,
-                               shadingUBO.diffuse,
-                               shadingUBO.specular,
-                               shadingUBO.shininess);
+            color = cookTorrancePBR(worldPos, normal,
+                                    shadingUBO.lightPosition.xyz,
+                                    viewUBO.cameraPosition.xyz,
+                                    vec3(0.8),
+                                    shadingUBO.roughness,
+                                    shadingUBO.metallic,
+                                    shadingUBO.dielectricF0,
+                                    shadingUBO.ambient,
+                                    shadingUBO.envReflection,
+                                    shadingUBO.lightIntensity);
+            color = toneMapACES(color);
             break;
         }
     }

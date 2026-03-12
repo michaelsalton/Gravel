@@ -13,6 +13,7 @@ layout(max_vertices = 8, max_primitives = 6, triangles) out;
 // Per-vertex output: face normal for flat shading
 layout(location = 0) out vec3 outNormal[];
 layout(location = 1) out vec2 outUV[];
+layout(location = 3) out vec3 outWorldPos[];
 
 // Per-primitive output: face ID for debug coloring
 layout(location = 2) perprimitiveEXT out flat uint outFaceId[];
@@ -83,9 +84,11 @@ void main() {
             }
         }
 
+        vec3 worldP = (push.model * vec4(pos, 1.0)).xyz;
         gl_MeshVerticesEXT[i].gl_Position = mvp * vec4(pos, 1.0);
         outNormal[i] = norm;
         outUV[i] = getVertexTexCoord(uint(vertId));
+        outWorldPos[i] = worldP;
     }
 
     // Fan triangulation from vertex 0

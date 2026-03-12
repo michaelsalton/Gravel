@@ -60,12 +60,12 @@ struct ResurfacingUBO {
 struct GlobalShadingUBO {
     glm::vec4 lightPosition;   // xyz = position
     glm::vec4 ambient;         // rgb = color, a = intensity
-    float diffuse;
-    float specular;
-    float shininess;
-    float metalF0;             // base metallic reflectance (Fresnel F0)
+    float roughness;           // surface roughness (0=mirror, 1=rough)
+    float metallic;            // metalness (0=dielectric, 1=metal)
+    float ao;                  // global ambient occlusion multiplier
+    float dielectricF0;        // Fresnel F0 for non-metals (typically 0.04)
     float envReflection;       // environment reflection strength
-    float metalDiffuse;        // metallic diffuse weight
+    float lightIntensity;      // point light intensity multiplier
     float padding1;
     float padding2;
 };
@@ -263,12 +263,12 @@ public:
     glm::vec3 lightPosition = glm::vec3(5.0f, 5.0f, 5.0f);
     glm::vec3 ambientColor = glm::vec3(0.2f, 0.2f, 0.25f);
     float ambientIntensity = 1.0f;
-    float diffuseIntensity = 0.7f;
-    float specularIntensity = 0.5f;
-    float shininess = 32.0f;
-    float metalF0 = 0.65f;
+    float roughness = 0.5f;
+    float metallic = 0.0f;
+    float ao = 1.0f;
+    float dielectricF0 = 0.04f;
     float envReflection = 0.35f;
-    float metalDiffuse = 0.3f;
+    float lightIntensity = 3.0f;
 
     // Loaded-state flags (read by UI panels)
     bool aoTextureLoaded = false;

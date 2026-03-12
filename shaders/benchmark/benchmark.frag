@@ -1,4 +1,11 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
+
+#ifndef PI
+#define PI 3.14159265359
+#endif
+
+#include "shading.glsl"
 
 layout(location = 0) in vec3 inNormal;
 layout(location = 1) in vec3 inWorldPos;
@@ -7,14 +14,14 @@ layout(location = 2) in vec2 inUV;
 layout(location = 0) out vec4 outColor;
 
 layout(set = 0, binding = 1) uniform ShadingUBOBlock {
-    vec4 lightPosition;
-    vec4 ambient;
-    float diffuse;
-    float specular;
-    float shininess;
-    float metalF0;
+    vec4  lightPosition;
+    vec4  ambient;
+    float roughness;
+    float metallic;
+    float ao;
+    float dielectricF0;
     float envReflection;
-    float metalDiffuse;
+    float lightIntensity;
 } shadingUBO;
 
 layout(set = 0, binding = 0) uniform ViewUBOBlock {
@@ -33,19 +40,19 @@ layout(push_constant) uniform PushConstants {
 } push;
 
 vec3 computeShading(vec3 N) {
-    vec3 L = normalize(shadingUBO.lightPosition.xyz);
-    vec3 V = normalize(viewUBO.cameraPosition.xyz - inWorldPos);
-    vec3 H = normalize(L + V);
-
-    float NdotL = max(dot(N, L), 0.0);
-    float NdotH = max(dot(N, H), 0.0);
-
-    vec3 ambient = shadingUBO.ambient.rgb * shadingUBO.ambient.a;
-    vec3 diff = vec3(shadingUBO.diffuse) * NdotL;
-    float spec = pow(NdotH, shadingUBO.shininess);
-
-    vec3 baseColor = vec3(0.7, 0.7, 0.7);
-    return baseColor * (ambient + diff) + vec3(shadingUBO.specular) * spec;
+    vec3 albedo = vec3(0.7);
+    vec3 color = cookTorrancePBR(inWorldPos, N,
+                                 shadingUBO.lightPosition.xyz,
+                                 viewUBO.cameraPosition.xyz,
+                                 albedo,
+                                 shadingUBO.roughness,
+                                 shadingUBO.metallic,
+                                 shadingUBO.dielectricF0,
+                                 shadingUBO.ambient,
+                                 shadingUBO.envReflection,
+                                 shadingUBO.lightIntensity);
+    color *= shadingUBO.ao;
+    return toneMapACES(color);
 }
 
 void main() {

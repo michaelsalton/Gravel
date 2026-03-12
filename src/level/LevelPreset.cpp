@@ -35,13 +35,12 @@ const LevelPreset LEVEL_PRESETS[] = {
         .lightPosition      = glm::vec3(5.0f, 5.0f, 5.0f),
         .ambientColor       = glm::vec3(0.2f, 0.2f, 0.25f),
         .ambientIntensity   = 1.0f,
-        .diffuseIntensity   = 0.7f,
-        .specularIntensity  = 0.5f,
-        .shininess          = 32.0f,
-
-        .metalF0            = 0.65f,
+        .roughness          = 0.5f,
+        .metallic           = 0.0f,
+        .ao                 = 1.0f,
+        .dielectricF0       = 0.04f,
         .envReflection      = 0.35f,
-        .metalDiffuse       = 0.3f,
+        .lightIntensity     = 3.0f,
     },
     {
         .name               = "Chainmail Man",
@@ -73,13 +72,12 @@ const LevelPreset LEVEL_PRESETS[] = {
         .lightPosition      = glm::vec3(5.0f, 5.0f, 5.0f),
         .ambientColor       = glm::vec3(11.0f/255.0f, 11.0f/255.0f, 11.0f/255.0f),
         .ambientIntensity   = 0.717f,
-        .diffuseIntensity   = 0.666f,
-        .specularIntensity  = 1.0f,
-        .shininess          = 11.237f,
-
-        .metalF0            = 0.65f,
+        .roughness          = 0.3f,
+        .metallic           = 1.0f,
+        .ao                 = 1.0f,
+        .dielectricF0       = 0.04f,
         .envReflection      = 0.35f,
-        .metalDiffuse       = 0.3f,
+        .lightIntensity     = 3.0f,
     },
 };
 

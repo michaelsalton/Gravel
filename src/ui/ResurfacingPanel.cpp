@@ -116,10 +116,6 @@ void ResurfacingPanel::render(Renderer& r) {
                 ImGui::SliderFloat("Lean Amount", &r.chainmailTiltAngle, 0.0f, 1.0f, "%.2f");
                 ImGui::SameLine();
                 ImGui::Text("(0=flat, 1=full)");
-                ImGui::Text("Metallic Shading:");
-                ImGui::SliderFloat("Metal Reflectance", &r.metalF0, 0.0f, 1.0f, "%.2f");
-                ImGui::SliderFloat("Env Reflection", &r.envReflection, 0.0f, 1.0f, "%.2f");
-                ImGui::SliderFloat("Metal Diffuse", &r.metalDiffuse, 0.0f, 1.0f, "%.2f");
                 ImGui::Unindent();
             }
 
