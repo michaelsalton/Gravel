@@ -73,7 +73,11 @@ struct GlobalShadingUBO {
     float baseMeshAo;
     float baseMeshDielectricF0;
     float baseMeshEnvReflection;
-    float padding1;                 // pad to 80 bytes
+    float padding1;                 // pad to align next vec4 at offset 80
+    // Base colors (albedo)
+    glm::vec4 procBaseColor;        // procedural mesh base color (offset 80)
+    glm::vec4 baseMeshBaseColor;    // base mesh base color       (offset 96)
+    // total: 112 bytes
 };
 
 // Must stay in sync with shaders/shaderInterface.h PebbleUBO
@@ -282,6 +286,8 @@ public:
     float baseMeshAo = 1.0f;
     float baseMeshDielectricF0 = 0.04f;
     float baseMeshEnvReflection = 0.1f;
+    glm::vec3 procBaseColor = {0.7f, 0.7f, 0.7f};
+    glm::vec3 baseMeshBaseColor = {0.7f, 0.7f, 0.7f};
 
     // Loaded-state flags (read by UI panels)
     bool aoTextureLoaded = false;

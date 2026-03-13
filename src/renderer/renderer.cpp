@@ -408,6 +408,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     shadingData.baseMeshAo            = baseMeshAo;
     shadingData.baseMeshDielectricF0  = baseMeshDielectricF0;
     shadingData.baseMeshEnvReflection = baseMeshEnvReflection;
+    shadingData.procBaseColor         = glm::vec4(procBaseColor, 1.0f);
+    shadingData.baseMeshBaseColor     = glm::vec4(baseMeshBaseColor, 1.0f);
     memcpy(shadingUBOMapped[currentFrame], &shadingData, sizeof(GlobalShadingUBO));
 
     // Per-frame animation update

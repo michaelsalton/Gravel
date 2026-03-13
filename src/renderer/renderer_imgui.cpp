@@ -439,6 +439,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::SliderFloat("Ambient Intensity", &ambientIntensity, 0.0f, 1.0f);
         ImGui::Separator();
         ImGui::Text("Procedural Mesh Material");
+        ImGui::ColorEdit3("Base Color##proc", &procBaseColor.x);
         ImGui::SliderFloat("Roughness##proc", &roughness, 0.05f, 1.0f);
         ImGui::SliderFloat("Metallic##proc", &metallic, 0.0f, 1.0f);
         ImGui::SliderFloat("AO##proc", &ao, 0.0f, 1.0f);
@@ -446,6 +447,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::SliderFloat("Env Reflection##proc", &envReflection, 0.0f, 1.0f);
         ImGui::Separator();
         ImGui::Text("Base Mesh Material");
+        ImGui::ColorEdit3("Base Color##base", &baseMeshBaseColor.x);
         ImGui::SliderFloat("Roughness##base", &baseMeshRoughness, 0.05f, 1.0f);
         ImGui::SliderFloat("Metallic##base", &baseMeshMetallic, 0.0f, 1.0f);
         ImGui::SliderFloat("AO##base", &baseMeshAo, 0.0f, 1.0f);

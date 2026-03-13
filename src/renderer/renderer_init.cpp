@@ -1022,6 +1022,8 @@ void Renderer::createUniformBuffers() {
     shadingData.baseMeshAo            = baseMeshAo;
     shadingData.baseMeshDielectricF0  = baseMeshDielectricF0;
     shadingData.baseMeshEnvReflection = baseMeshEnvReflection;
+    shadingData.procBaseColor         = glm::vec4(procBaseColor, 1.0f);
+    shadingData.baseMeshBaseColor     = glm::vec4(baseMeshBaseColor, 1.0f);
 
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         memcpy(viewUBOMapped[i], &viewData, sizeof(ViewUBO));

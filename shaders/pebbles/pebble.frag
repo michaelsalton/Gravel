@@ -32,6 +32,13 @@ layout(set = SET_SCENE, binding = BINDING_SHADING_UBO) uniform ShadingUBOBlock {
     float ao;
     float dielectricF0;
     float envReflection;
+    float _baseMeshRoughness;
+    float _baseMeshMetallic;
+    float _baseMeshAo;
+    float _baseMeshDielectricF0;
+    float _baseMeshEnvReflection;
+    float _padding1;
+    vec4  procBaseColor;
 } shadingUBO;
 
 layout(push_constant) uniform PushConstants {
@@ -71,9 +78,7 @@ void main() {
 
     switch (pc.debugMode) {
         case 0: {
-            // Per-face random color as albedo (physically correct: vary before shading)
-            _seed = faceId;
-            vec3 albedo = vec3(rand(0.5, 1.0));
+            vec3 albedo = shadingUBO.procBaseColor.rgb;
 
             color = cookTorrancePBR(worldPos, normal,
                                     shadingUBO.lightPosition.xyz,
@@ -133,12 +138,10 @@ void main() {
             float wire = 1.0 - smoothstep(0.0, 1.5, line);
 
             // Base shading
-            _seed = faceId;
-            vec3 albedo = vec3(rand(0.5, 1.0));
             color = cookTorrancePBR(worldPos, normal,
                                     shadingUBO.lightPosition.xyz,
                                     viewUBO.cameraPosition.xyz,
-                                    albedo,
+                                    shadingUBO.procBaseColor.rgb,
                                     shadingUBO.roughness,
                                     shadingUBO.metallic,
                                     shadingUBO.dielectricF0,
@@ -156,7 +159,7 @@ void main() {
             color = cookTorrancePBR(worldPos, normal,
                                     shadingUBO.lightPosition.xyz,
                                     viewUBO.cameraPosition.xyz,
-                                    vec3(0.8),
+                                    shadingUBO.procBaseColor.rgb,
                                     shadingUBO.roughness,
                                     shadingUBO.metallic,
                                     shadingUBO.dielectricF0,

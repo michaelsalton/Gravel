@@ -32,6 +32,9 @@ layout(set = SET_SCENE, binding = BINDING_SHADING_UBO) uniform ShadingUBOBlock {
     float ao;
     float dielectricF0;
     float envReflection;
+    float _padding1;
+    vec4  _procBaseColor;
+    vec4  baseMeshBaseColor;
 } shadingUBO;
 
 layout(push_constant) uniform PushConstants {
@@ -84,14 +87,14 @@ void main() {
         return;
     }
 
-    // Use face-ID color with flat shading
-    vec3 baseColor = getDebugColor(inFaceId);
+    // Use user-defined base color
+    vec3 baseColor = shadingUBO.baseMeshBaseColor.rgb;
     vec3 color = cookTorrancePBR(inWorldPos, N,
                                  shadingUBO.lightPosition.xyz,
                                  viewUBO.cameraPosition.xyz,
                                  baseColor,
                                  shadingUBO.roughness,
-                                 0.0,  // dielectric for debug overlay
+                                 shadingUBO.metallic,
                                  shadingUBO.dielectricF0,
                                  shadingUBO.ambient,
                                  shadingUBO.envReflection,

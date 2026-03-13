@@ -36,6 +36,13 @@ layout(set = SET_SCENE, binding = BINDING_SHADING_UBO) uniform ShadingUBOBlock {
     float ao;
     float dielectricF0;
     float envReflection;
+    float _baseMeshRoughness;
+    float _baseMeshMetallic;
+    float _baseMeshAo;
+    float _baseMeshDielectricF0;
+    float _baseMeshEnvReflection;
+    float _padding1;
+    vec4  procBaseColor;
 } shadingUBO;
 
 // Push constants (must match task/mesh layout)
@@ -112,9 +119,8 @@ void main() {
                 float occlusion = innerFace * edgeAO * selfShadow * ringVariation;
                 color *= occlusion;
             } else {
-                // Standard PBR with per-element color tint
-                vec3 elementColor = getDebugColor(taskId);
-                vec3 albedo = mix(vec3(0.8), elementColor, 0.2);
+                // Standard PBR with user-defined base color
+                vec3 albedo = shadingUBO.procBaseColor.rgb;
                 color = cookTorrancePBR(worldPos, normal,
                                         shadingUBO.lightPosition.xyz,
                                         viewUBO.cameraPosition.xyz,
@@ -175,7 +181,7 @@ void main() {
             color = cookTorrancePBR(worldPos, normal,
                                     shadingUBO.lightPosition.xyz,
                                     viewUBO.cameraPosition.xyz,
-                                    vec3(0.8),
+                                    shadingUBO.procBaseColor.rgb,
                                     shadingUBO.roughness,
                                     shadingUBO.metallic,
                                     shadingUBO.dielectricF0,
@@ -199,7 +205,7 @@ void main() {
             color = cookTorrancePBR(worldPos, normal,
                                     shadingUBO.lightPosition.xyz,
                                     viewUBO.cameraPosition.xyz,
-                                    vec3(0.8),
+                                    shadingUBO.procBaseColor.rgb,
                                     shadingUBO.roughness,
                                     shadingUBO.metallic,
                                     shadingUBO.dielectricF0,
