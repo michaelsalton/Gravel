@@ -127,15 +127,18 @@ void main() {
     vec3 center = getFaceCenter(groupId);
     vec3 normal = getFaceNormal(groupId);
 
-    // ==================== Skinning ====================
-    mat4 skinMat = mat4(1.0);
-    if (pebbleUbo.doSkinning != 0u) {
-        skinMat = computeFaceSkinMatrix(groupId);
-        center = (skinMat * vec4(center, 1.0)).xyz;
-        normal = normalize((skinMat * vec4(normal, 0.0)).xyz);
+    // ==================== Early Backface Cull (pre-skinning) ====================
+    // Uses un-skinned normal — conservative approximation, avoids skinning cost for
+    // clearly backfacing faces. Skinning rarely flips face orientation significantly.
+    if (pebbleUbo.useCulling != 0) {
+        vec3 viewDir = -normalize(viewUBO.cameraPosition.xyz - center);
+        if (dot(viewDir, normal) >= pebbleUbo.cullingThreshold) {
+            return;
+        }
     }
 
-    // ==================== Mask Texture Culling ====================
+    // ==================== Mask Texture Culling (pre-skinning) ====================
+    // UV coordinates are skinning-independent, so this can also run early.
     if ((pc.enableCulling & 4u) != 0u) {
         uint vertId = uint(getHalfEdgeVertex(uint(getFaceEdge(groupId))));
         vec2 baseUV = getVertexTexCoord(vertId);
@@ -146,6 +149,14 @@ void main() {
         if (maskVal < 0.5) {
             return;
         }
+    }
+
+    // ==================== Skinning ====================
+    mat4 skinMat = mat4(1.0);
+    if (pebbleUbo.doSkinning != 0u) {
+        skinMat = computeFaceSkinMatrix(groupId);
+        center = (skinMat * vec4(center, 1.0)).xyz;
+        normal = normalize((skinMat * vec4(normal, 0.0)).xyz);
     }
 
     // ==================== Pathway Culling ====================
@@ -167,22 +178,13 @@ void main() {
         if (pathwayScale < 0.01) return;
     }
 
-    // ==================== Culling ====================
-    bool doRender = true;
+    // ==================== Frustum Culling (post-skinning) ====================
+    // Uses skinned center so the test is accurate after deformation.
     if (pebbleUbo.useCulling != 0) {
-        vec3 cameraPos = viewUBO.cameraPosition.xyz;
-        vec3 viewDir = -normalize(cameraPos - center);
-
-        // Backface culling
-        doRender = dot(viewDir, normal) < pebbleUbo.cullingThreshold;
-
-        // Frustum culling
         mat4 mvp = viewUBO.projection * viewUBO.view * pc.model;
-        doRender = doRender && isInFrustum(center, pebbleUbo.extrusionAmount, mvp, 0.1);
-    }
-
-    if (!doRender) {
-        return;
+        if (!isInFrustum(center, pebbleUbo.extrusionAmount, mvp, 0.1)) {
+            return;
+        }
     }
 
     // ==================== Patch Count ====================
