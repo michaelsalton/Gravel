@@ -22,19 +22,26 @@ layout(set = SET_SCENE, binding = BINDING_SHADING_UBO) uniform ShadingUBOBlock {
     vec4  lightPosition;
     vec4  ambient;
     float lightIntensity;
-    float _procRoughness;
+    float _procRoughness;       // offset 36
     float _procMetallic;
     float _procAo;
     float _procDielectricF0;
     float _procEnvReflection;
-    float roughness;
+    float _secRoughness;        // offset 56
+    float _secMetallic;
+    float _secAo;
+    float _secDielectricF0;
+    float _secEnvReflection;
+    float _padding1;            // offset 76
+    vec4  _procBaseColor;       // offset 80
+    vec4  _secBaseColor;        // offset 96
+    float roughness;            // offset 112 — base mesh solid overlay material
     float metallic;
     float ao;
     float dielectricF0;
     float envReflection;
-    float _padding1;
-    vec4  _procBaseColor;
-    vec4  baseMeshBaseColor;
+    float _pad2a; float _pad2b; float _pad2c;  // offset 132-140
+    vec4  baseMeshBaseColor;    // offset 144
 } shadingUBO;
 
 layout(push_constant) uniform PushConstants {

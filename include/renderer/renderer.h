@@ -76,17 +76,25 @@ struct GlobalShadingUBO {
     float ao;
     float dielectricF0;
     float envReflection;
-    // Secondary mesh material (dragon body when dual-mesh active)
-    float baseMeshRoughness;        // = secondaryRoughness
-    float baseMeshMetallic;         // = secondaryMetallic
-    float baseMeshAo;               // = secondaryAo
-    float baseMeshDielectricF0;     // = secondaryDielectricF0
-    float baseMeshEnvReflection;    // = secondaryEnvReflection
-    float padding1;                 // pad to align next vec4 at offset 80
-    // Base colors (albedo)
-    glm::vec4 procBaseColor;        // primary (coat) base color  (offset 80)
-    glm::vec4 baseMeshBaseColor;    // secondary (dragon) base color (offset 96)
-    // total: 112 bytes
+    // Secondary mesh material — dragon body resurfacing (offset 56)
+    float baseMeshRoughness;
+    float baseMeshMetallic;
+    float baseMeshAo;
+    float baseMeshDielectricF0;
+    float baseMeshEnvReflection;
+    float padding1;                     // pad to vec4 boundary at offset 80
+    // Base colors (offset 80 / 96)
+    glm::vec4 procBaseColor;            // primary coat base color      (offset 80)
+    glm::vec4 baseMeshBaseColor;        // secondary dragon base color  (offset 96)
+    // Base mesh solid overlay material (offset 112)
+    float baseMeshSolidRoughness;
+    float baseMeshSolidMetallic;
+    float baseMeshSolidAo;
+    float baseMeshSolidDielectricF0;
+    float baseMeshSolidEnvReflection;
+    float _pad2a; float _pad2b; float _pad2c;  // padding to align vec4 at offset 144
+    glm::vec4 baseMeshSolidBaseColor;          // base mesh solid base color (offset 144)
+    // total: 160 bytes
 };
 
 // Must stay in sync with shaders/shaderInterface.h PebbleUBO
@@ -311,7 +319,7 @@ public:
     float ao = 1.0f;
     float dielectricF0 = 0.04f;
     float envReflection = 0.35f;
-    // Base mesh material
+    // Secondary mesh (dragon body) resurfacing material
     float baseMeshRoughness = 0.8f;
     float baseMeshMetallic = 0.0f;
     float baseMeshAo = 1.0f;
@@ -319,6 +327,13 @@ public:
     float baseMeshEnvReflection = 0.1f;
     glm::vec3 procBaseColor = {0.7f, 0.7f, 0.7f};
     glm::vec3 baseMeshBaseColor = {0.7f, 0.7f, 0.7f};
+    // Base mesh solid overlay material
+    float baseMeshSolidRoughness    = 0.8f;
+    float baseMeshSolidMetallic     = 0.0f;
+    float baseMeshSolidAo           = 1.0f;
+    float baseMeshSolidDielectricF0 = 0.04f;
+    float baseMeshSolidEnvReflection = 0.1f;
+    glm::vec3 baseMeshSolidBaseColor = {0.7f, 0.7f, 0.7f};
 
     // Loaded-state flags (read by UI panels)
     bool aoTextureLoaded = false;

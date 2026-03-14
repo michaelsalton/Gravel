@@ -446,13 +446,21 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::SliderFloat("Dielectric F0##proc", &dielectricF0, 0.0f, 0.2f, "%.3f");
         ImGui::SliderFloat("Env Reflection##proc", &envReflection, 0.0f, 1.0f);
         ImGui::Separator();
-        ImGui::Text(dualMeshActive ? "Dragon (Base Mesh) Material" : "Secondary Mesh Material");
+        ImGui::Text(dualMeshActive ? "Dragon (Base Mesh) Resurfacing Material" : "Secondary Mesh Material");
         ImGui::ColorEdit3("Base Color##base", &baseMeshBaseColor.x);
         ImGui::SliderFloat("Roughness##base", &baseMeshRoughness, 0.05f, 1.0f);
         ImGui::SliderFloat("Metallic##base", &baseMeshMetallic, 0.0f, 1.0f);
         ImGui::SliderFloat("AO##base", &baseMeshAo, 0.0f, 1.0f);
         ImGui::SliderFloat("Dielectric F0##base", &baseMeshDielectricF0, 0.0f, 0.2f, "%.3f");
         ImGui::SliderFloat("Env Reflection##base", &baseMeshEnvReflection, 0.0f, 1.0f);
+        ImGui::Separator();
+        ImGui::Text("Base Mesh Overlay Material");
+        ImGui::ColorEdit3("Base Color##solid", &baseMeshSolidBaseColor.x);
+        ImGui::SliderFloat("Roughness##solid", &baseMeshSolidRoughness, 0.05f, 1.0f);
+        ImGui::SliderFloat("Metallic##solid", &baseMeshSolidMetallic, 0.0f, 1.0f);
+        ImGui::SliderFloat("AO##solid", &baseMeshSolidAo, 0.0f, 1.0f);
+        ImGui::SliderFloat("Dielectric F0##solid", &baseMeshSolidDielectricF0, 0.0f, 0.2f, "%.3f");
+        ImGui::SliderFloat("Env Reflection##solid", &baseMeshSolidEnvReflection, 0.0f, 1.0f);
     }
 
     // Debug visualization
