@@ -208,6 +208,7 @@ void Renderer::uploadHalfEdgeMesh(const HalfEdgeMesh& mesh) {
     }
 
     heMeshUploaded = true;
+    visibleCacheDirty = true;
     heNbFaces = mesh.nbFaces;
     heNbVertices = mesh.nbVertices;
     baseMeshTriCount = 0;

@@ -341,12 +341,19 @@ public:
     uint64_t gpuTaskShaderInvocations  = 0;
     uint64_t gpuMeshShaderInvocations  = 0;
 
-    // CPU pre-cull cache — built each frame before dispatch, read by ImGui stats
+    // CPU pre-cull cache — rebuilt only when camera/settings change
     std::vector<uint32_t> cachedVisibleIndices;
     uint32_t cachedTotalElements   = 0;
     uint32_t cachedEstMeshShaders  = 0;  // CPU-estimated mesh shader workgroups (LOD off only)
     uint32_t frameDrawCalls        = 0;  // draw/dispatch calls this frame
     float    cpuCullTimeMs         = 0.0f;
+    bool     visibleCacheDirty     = true;  // force rebuild on next frame
+    glm::mat4 lastCullMVP          = glm::mat4(0.0f);
+    bool      lastEnableFrustumCulling  = false;
+    bool      lastEnableBackfaceCulling = false;
+    float     lastCullingThreshold      = 0.0f;
+    float     lastCullUserScaling       = 1.0f;
+    bool      lastDoMaskCull            = false;
     bool     showGPUInvocStats     = false;  // enables task/mesh invoc query (has GPU perf cost)
 
 private:

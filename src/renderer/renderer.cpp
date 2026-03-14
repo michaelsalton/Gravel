@@ -481,70 +481,85 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                         0, sizeof(PushConstants), &pushConstants);
     if (renderResurfacing && !renderPebbles) {
         if (heMeshUploaded) {
-            // CPU pre-cull: build compact visible element index list
-            cachedVisibleIndices.clear();
-            cachedTotalElements = 0;
-
+            // CPU pre-cull: build compact visible element index list.
+            // Only rebuilt when camera, scale, or culling settings change.
             bool doMaskCull = useMaskTexture && maskTextureLoaded && !cpuMaskPixels.empty();
             bool doCulling   = enableFrustumCulling || enableBackfaceCulling;
 
-            glm::mat4 mvp;
-            if (doCulling) {
-                float aspect = static_cast<float>(swapChainExtent.width) /
-                               static_cast<float>(swapChainExtent.height);
-                glm::mat4 model = thirdPersonMode ? player.getModelMatrix() : glm::mat4(1.0f);
-                mvp = activeCamera->getProjectionMatrix(aspect) *
-                      activeCamera->getViewMatrix() * model;
-            }
+            float aspect = static_cast<float>(swapChainExtent.width) /
+                           static_cast<float>(swapChainExtent.height);
+            glm::mat4 model = thirdPersonMode ? player.getModelMatrix() : glm::mat4(1.0f);
+            glm::mat4 mvp = activeCamera->getProjectionMatrix(aspect) *
+                            activeCamera->getViewMatrix() * model;
 
-            auto isMasked = [&](glm::vec2 uv) -> bool {
-                if (!doMaskCull) return false;
-                uint32_t x = static_cast<uint32_t>(uv.x * cpuMaskWidth)  % cpuMaskWidth;
-                uint32_t y = static_cast<uint32_t>(uv.y * cpuMaskHeight) % cpuMaskHeight;
-                return cpuMaskPixels[y * cpuMaskWidth + x] < 128;
-            };
+            bool settingsChanged = (enableFrustumCulling  != lastEnableFrustumCulling)
+                                || (enableBackfaceCulling != lastEnableBackfaceCulling)
+                                || (cullingThreshold      != lastCullingThreshold)
+                                || (userScaling           != lastCullUserScaling)
+                                || (doMaskCull            != lastDoMaskCull);
+            bool cameraChanged = (mvp != lastCullMVP);
 
-            auto isVisible = [&](glm::vec3 pos, glm::vec3 normal, float area) -> bool {
-                if (!doCulling) return true;
-                float radius = std::sqrt(area) * userScaling * 2.0f;
-                if (enableFrustumCulling) {
-                    glm::vec4 clip = mvp * glm::vec4(pos, 1.0f);
-                    if (clip.w <= 0.0f) return false;
-                    float cr = radius / clip.w * 2.0f * 1.1f;
-                    glm::vec3 ndc = glm::vec3(clip) / clip.w;
-                    if (ndc.x + cr < -1.0f || ndc.x - cr > 1.0f) return false;
-                    if (ndc.y + cr < -1.0f || ndc.y - cr > 1.0f) return false;
-                    if (ndc.z + cr <  0.0f || ndc.z - cr > 1.0f) return false;
+            if (visibleCacheDirty || settingsChanged || (doCulling && cameraChanged)) {
+                cachedVisibleIndices.clear();
+                cachedTotalElements = 0;
+
+                auto isMasked = [&](glm::vec2 uv) -> bool {
+                    if (!doMaskCull) return false;
+                    uint32_t x = static_cast<uint32_t>(uv.x * cpuMaskWidth)  % cpuMaskWidth;
+                    uint32_t y = static_cast<uint32_t>(uv.y * cpuMaskHeight) % cpuMaskHeight;
+                    return cpuMaskPixels[y * cpuMaskWidth + x] < 128;
+                };
+
+                auto isVisible = [&](glm::vec3 pos, glm::vec3 normal, float area) -> bool {
+                    if (!doCulling) return true;
+                    float radius = std::sqrt(area) * userScaling * 2.0f;
+                    if (enableFrustumCulling) {
+                        glm::vec4 clip = mvp * glm::vec4(pos, 1.0f);
+                        if (clip.w <= 0.0f) return false;
+                        float cr = radius / clip.w * 2.0f * 1.1f;
+                        glm::vec3 ndc = glm::vec3(clip) / clip.w;
+                        if (ndc.x + cr < -1.0f || ndc.x - cr > 1.0f) return false;
+                        if (ndc.y + cr < -1.0f || ndc.y - cr > 1.0f) return false;
+                        if (ndc.z + cr <  0.0f || ndc.z - cr > 1.0f) return false;
+                    }
+                    if (enableBackfaceCulling) {
+                        glm::vec3 viewDir = glm::normalize(activeCamera->getPosition() - pos);
+                        if (glm::dot(viewDir, normal) <= cullingThreshold) return false;
+                    }
+                    return true;
+                };
+
+                uint32_t totalElements = heNbFaces + heNbVertices;
+                cachedVisibleIndices.reserve(std::min(totalElements, VISIBLE_INDICES_MAX));
+
+                auto cullStart = std::chrono::high_resolution_clock::now();
+
+                for (uint32_t i = 0; i < heNbFaces; i++) {
+                    if (isMasked(cpuFaceUVs[i])) continue;
+                    cachedTotalElements++;
+                    if (isVisible(cpuFaceCenters[i], cpuFaceNormals[i], cpuFaceAreas[i]))
+                        if (cachedVisibleIndices.size() < VISIBLE_INDICES_MAX)
+                            cachedVisibleIndices.push_back(i);
                 }
-                if (enableBackfaceCulling) {
-                    glm::vec3 viewDir = glm::normalize(activeCamera->getPosition() - pos);
-                    if (glm::dot(viewDir, normal) <= cullingThreshold) return false;
+                for (uint32_t i = 0; i < heNbVertices; i++) {
+                    if (isMasked(cpuVertexUVs[i])) continue;
+                    cachedTotalElements++;
+                    if (isVisible(cpuVertexPositions[i], cpuVertexNormals[i], cpuVertexFaceAreas[i]))
+                        if (cachedVisibleIndices.size() < VISIBLE_INDICES_MAX)
+                            cachedVisibleIndices.push_back(heNbFaces + i);
                 }
-                return true;
-            };
 
-            uint32_t totalElements = heNbFaces + heNbVertices;
-            cachedVisibleIndices.reserve(std::min(totalElements, VISIBLE_INDICES_MAX));
+                cpuCullTimeMs = std::chrono::duration<float, std::milli>(
+                    std::chrono::high_resolution_clock::now() - cullStart).count();
 
-            auto cullStart = std::chrono::high_resolution_clock::now();
-
-            for (uint32_t i = 0; i < heNbFaces; i++) {
-                if (isMasked(cpuFaceUVs[i])) continue;
-                cachedTotalElements++;
-                if (isVisible(cpuFaceCenters[i], cpuFaceNormals[i], cpuFaceAreas[i]))
-                    if (cachedVisibleIndices.size() < VISIBLE_INDICES_MAX)
-                        cachedVisibleIndices.push_back(i);
+                lastCullMVP                 = mvp;
+                lastEnableFrustumCulling    = enableFrustumCulling;
+                lastEnableBackfaceCulling   = enableBackfaceCulling;
+                lastCullingThreshold        = cullingThreshold;
+                lastCullUserScaling         = userScaling;
+                lastDoMaskCull              = doMaskCull;
+                visibleCacheDirty           = false;
             }
-            for (uint32_t i = 0; i < heNbVertices; i++) {
-                if (isMasked(cpuVertexUVs[i])) continue;
-                cachedTotalElements++;
-                if (isVisible(cpuVertexPositions[i], cpuVertexNormals[i], cpuVertexFaceAreas[i]))
-                    if (cachedVisibleIndices.size() < VISIBLE_INDICES_MAX)
-                        cachedVisibleIndices.push_back(heNbFaces + i);
-            }
-
-            cpuCullTimeMs = std::chrono::duration<float, std::milli>(
-                std::chrono::high_resolution_clock::now() - cullStart).count();
 
             // Upload visible indices to GPU buffer and dispatch
             uint32_t visibleCount = static_cast<uint32_t>(cachedVisibleIndices.size());
