@@ -205,6 +205,17 @@ void main() {
         }
     }
 
+    // Per-element random orientation twist for dragon scale
+    if (payload.elementType == 5u && resurfacingUBO.normalPerturbation > 0.0) {
+        float angle = fract(float(globalId) * 0.618033988749895)
+                      * 2.0 * PI * resurfacingUBO.normalPerturbation;
+        float c = cos(angle), s = sin(angle);
+        vec3 n = payload.normal;
+        payload.edgeTangent = payload.edgeTangent * c
+            + cross(n, payload.edgeTangent) * s
+            + n * dot(n, payload.edgeTangent) * (1.0 - c);
+    }
+
     // Mask texture culling (via push constant bit 2)
     bool maskCulled = false;
     if ((push.enableCulling & 4u) != 0u) {

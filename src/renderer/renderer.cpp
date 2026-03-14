@@ -50,6 +50,7 @@ Renderer::Renderer(Window& window) : window(window) {
     createBenchmarkPipeline();
     createSamplers();
     generateGroundPlane(groundPlaneCellSize);
+    loadScaleLut();
     scanAssetMeshes();
     initImGui();
 }
@@ -65,6 +66,7 @@ Renderer::~Renderer() {
     cleanupSecondaryMesh();
     cleanupMeshSkeleton();
     cleanupMeshTextures();
+    cleanupScaleLut();
     if (benchmarkPipeline != VK_NULL_HANDLE)
         vkDestroyPipeline(device, benchmarkPipeline, nullptr);
     if (benchmarkPipelineLayout != VK_NULL_HANDLE)
@@ -443,6 +445,12 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         resurfData.hasElementTypeTexture = (useElementTypeTexture && elementTypeTextureLoaded) ? 1u : 0u;
         resurfData.hasAOTexture          = (useAOTexture && aoTextureLoaded) ? 1u : 0u;
         resurfData.hasMaskTexture        = (useMaskTexture && maskTextureLoaded) ? 1u : 0u;
+        // Dragon scale LUT fields (set by loadScaleLut, normalPerturbation from UI)
+        resurfData.Nx                 = scaleLutNx;
+        resurfData.Ny                 = scaleLutNy;
+        resurfData.normalPerturbation = normalPerturbation;
+        resurfData.minLutExtent       = scaleLutMinExtent;
+        resurfData.maxLutExtent       = scaleLutMaxExtent;
         memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
     }
 

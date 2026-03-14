@@ -2,6 +2,7 @@
 #define PARAMETRIC_SURFACES_GLSL
 
 #include "common.glsl"
+#include "bspline.glsl"
 
 // ============================================================================
 // Parametric Torus
@@ -101,6 +102,52 @@ void parametricHemisphere(vec2 uv, out vec3 pos, out vec3 normal, float radius) 
 }
 
 // ============================================================================
+// Parametric Dragon Scale (B-spline LUT)
+// ============================================================================
+
+void parametricDragonScale(vec2 uv, out vec3 pos, out vec3 normal) {
+    uvec2 gridSize   = uvec2(resurfacingUBO.Nx, resurfacingUBO.Ny);
+    // B-spline degree 3, stride 1: adjacent patches share control points.
+    // For a non-cyclic grid of Nx points there are (Nx - 3) patches.
+    uint numPatchesU = gridSize.x - 3u;
+    uint numPatchesV = gridSize.y - 3u;
+
+    // Map uv into patch index + local parameter
+    float pU = uv.x * float(numPatchesU);
+    float pV = uv.y * float(numPatchesV);
+    uint  pu = min(uint(pU), numPatchesU - 1u);
+    uint  pv = min(uint(pV), numPatchesV - 1u);
+    vec2  localUV = vec2(pU - float(pu), pV - float(pv));
+
+    // Fetch 4x4 control points: stride=1, so patch (pu,pv) starts at LUT index (pu, pv)
+    vec3 P[4][4];
+    for (int j = 0; j < 4; j++)
+        for (int i = 0; i < 4; i++)
+            P[i][j] = getScaleLutPoint(uvec2(pu + uint(i), pv + uint(j)), gridSize);
+
+    pos = evaluateBSplinePatch(localUV, P);
+
+    // Normalise into unit space using precomputed LUT bounding box
+    vec3 extentMin = resurfacingUBO.minLutExtent.xyz;
+    vec3 extentMax = resurfacingUBO.maxLutExtent.xyz;
+    vec3 center    = (extentMin + extentMax) * 0.5;
+    float scale    = max(max(extentMax.x - extentMin.x,
+                             extentMax.y - extentMin.y),
+                             extentMax.z - extentMin.z) * 0.5;
+    pos = (pos - center) / max(scale, 0.0001);
+
+    // The LUT geometry has its flat spread in XZ and curvature height in Y.
+    // offsetVertex() maps local Z → face normal (outward), so remap Y↔Z so
+    // the scale lies flat on the mesh surface with curvature pointing outward.
+    // Shift Z so the scale base (LUT minY) sits at Z=0 (on the mesh surface).
+    float zOffset = (center.y - extentMin.y) / max(scale, 0.0001);
+    pos = vec3(pos.x, pos.z, pos.y + zOffset);
+
+    normal = computeFiniteDifferenceBspline(localUV, P);
+    normal = vec3(normal.x, normal.z, normal.y);
+}
+
+// ============================================================================
 // Dispatch Function
 // ============================================================================
 
@@ -112,6 +159,7 @@ void evaluateParametricSurface(vec2 uv, out vec3 pos, out vec3 normal, uint elem
         case 2:  parametricCone(uv, pos, normal, 0.5, 1.0); break;
         case 3:  parametricCylinder(uv, pos, normal, 0.5, 1.0); break;
         case 4:  parametricHemisphere(uv, pos, normal, sphereRadius); break;
+        case 5:  parametricDragonScale(uv, pos, normal); break;
         default: parametricSphere(uv, pos, normal, sphereRadius); break;
     }
 }

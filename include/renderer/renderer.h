@@ -55,6 +55,15 @@ struct ResurfacingUBO {
     uint32_t hasElementTypeTexture = 0;
     uint32_t hasAOTexture          = 0;
     uint32_t hasMaskTexture        = 0;
+
+    // Dragon scale LUT fields (std140 offsets 64-111)
+    uint32_t  Nx                  = 0;
+    uint32_t  Ny                  = 0;
+    float     normalPerturbation  = 0.2f;
+    float     pad_lut             = 0.0f;
+    glm::vec4 minLutExtent        = glm::vec4(0.0f);
+    glm::vec4 maxLutExtent        = glm::vec4(1.0f);
+    // total: 112 bytes
 };
 
 struct GlobalShadingUBO {
@@ -205,6 +214,10 @@ public:
     bool useElementTypeTexture = false;
     bool useAOTexture = false;
     bool useMaskTexture = false;
+    float    normalPerturbation = 0.2f;    // Dragon scale: per-element random twist [0, 1]
+    bool     scaleLutLoaded    = false;
+    uint32_t scaleLutNx        = 0;
+    uint32_t scaleLutNy        = 0;
     bool doSkinning = false;
     bool animationPlaying = false;
     float animationTime = 0.0f;
@@ -399,6 +412,8 @@ private:
     void cleanupExportPipelines();
     void loadAndUploadTexture(const std::string& path, VulkanTexture& texture,
                                VkFormat format, bool& loadedFlag);
+    void loadScaleLut();
+    void cleanupScaleLut();
     size_t calculateVRAM() const;
 
     void initImGui();
@@ -557,6 +572,11 @@ private:
     StorageBuffer jointIndicesBuffer;
     StorageBuffer jointWeightsBuffer;
     StorageBuffer boneMatricesBuffer;
+
+    // Dragon scale LUT (loaded once at startup)
+    StorageBuffer scaleLutBuffer;
+    glm::vec4     scaleLutMinExtent = glm::vec4(0.0f);
+    glm::vec4     scaleLutMaxExtent = glm::vec4(1.0f);
 
     // Ground plane mesh (pathway pebbles)
     std::vector<StorageBuffer> groundHeVec4Buffers;

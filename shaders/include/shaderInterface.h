@@ -58,6 +58,7 @@ struct MeshInfoUBO {
 #define BINDING_BONE_MATRICES  3
 #define BINDING_SAMPLERS       4
 #define BINDING_TEXTURES       5
+#define BINDING_SCALE_LUT      6
 
 // Texture/sampler array indices
 #define AO_TEXTURE             0
@@ -70,7 +71,7 @@ struct MeshInfoUBO {
 #define TEXTURE_COUNT          4
 
 struct ResurfacingUBO {
-    uint elementType;      // 0=torus, 1=sphere, 2=cone, 3=cylinder
+    uint elementType;      // 0=torus, 1=sphere, 2=cone, 3=cylinder, 4=hemisphere, 5=dragon scale
     float userScaling;     // global scale multiplier
     uint resolutionM;      // U direction resolution
     uint resolutionN;      // V direction resolution
@@ -89,6 +90,15 @@ struct ResurfacingUBO {
     uint hasElementTypeTexture; // 0 = use uniform elementType, 1 = sample texture
     uint hasAOTexture;          // 0 = no AO, 1 = sample AO texture
     uint hasMaskTexture;        // 0 = no mask, 1 = sample mask texture for face culling
+
+    // Dragon scale LUT (std140 offsets 64-111)
+    uint  Nx;                   // LUT grid width  (offset 64)
+    uint  Ny;                   // LUT grid height (offset 68)
+    float normalPerturbation;   // per-element random twist [0, 1] (offset 72)
+    float pad_lut;              // std140 padding (offset 76)
+    vec4  minLutExtent;         // LUT AABB min (offset 80)
+    vec4  maxLutExtent;         // LUT AABB max (offset 96)
+    // total: 112 bytes
 };
 
 // ============================================================================
@@ -265,6 +275,13 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
     uint  hasElementTypeTexture;
     uint  hasAOTexture;
     uint  hasMaskTexture;
+    // Dragon scale LUT fields (offsets 64-111)
+    uint  Nx;
+    uint  Ny;
+    float normalPerturbation;
+    float pad_lut;
+    vec4  minLutExtent;
+    vec4  maxLutExtent;
 } resurfacingUBO;
 
 #endif
@@ -287,6 +304,17 @@ LAYOUT_STD430(SET_PER_OBJECT, BINDING_BONE_MATRICES) readonly buffer BoneMatrice
 
 layout(set = SET_PER_OBJECT, binding = BINDING_SAMPLERS) uniform sampler samplers[SAMPLER_COUNT];
 layout(set = SET_PER_OBJECT, binding = BINDING_TEXTURES) uniform texture2D textures[TEXTURE_COUNT];
+
+// --- Scale LUT SSBO (set 2, binding 6) ---
+// Control cage for dragon scale surface type (elementType == 5).
+// Packed as vec4[Nx * Ny] in V-major order (row v, column u).
+
+layout(set = SET_PER_OBJECT, binding = BINDING_SCALE_LUT, std430)
+    readonly buffer ScaleLutBuffer { vec4 lutVertices[]; };
+
+vec3 getScaleLutPoint(uvec2 idx, uvec2 gridSize) {
+    return lutVertices[idx.y * gridSize.x + idx.x].xyz;
+}
 
 // --- Constants ---
 

@@ -7,11 +7,15 @@
 #include <tiny_gltf.h>
 #include "core/window.h"
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <cstring>
 #include <cmath>
+#include <cfloat>
 #include <stdexcept>
 #include <filesystem>
 #include <algorithm>
+#include <set>
 
 #ifndef ASSETS_DIR
 #define ASSETS_DIR ""
@@ -1084,6 +1088,135 @@ void Renderer::writeSkeletonDescriptors() {
 
     vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
                            writes.data(), 0, nullptr);
+}
+
+void Renderer::loadScaleLut() {
+    std::string path = std::string(ASSETS_DIR) + "parametric_luts/scale_lut.obj";
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        std::cerr << "loadScaleLut: cannot open " << path << std::endl;
+        return;
+    }
+
+    // Parse OBJ: collect positions, UVs, and face vertex pairs (posIdx, uvIdx)
+    std::vector<glm::vec3> positions;
+    std::vector<glm::vec2> uvs;
+    // Use a set to deduplicate (posIdx, uvIdx) pairs from face entries
+    std::vector<std::pair<int,int>> uniquePairs;
+    std::set<std::pair<int,int>> seenPairs;
+
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        std::istringstream ss(line);
+        std::string token;
+        ss >> token;
+
+        if (token == "v") {
+            float x, y, z;
+            ss >> x >> y >> z;
+            positions.push_back({x, y, z});
+        } else if (token == "vt") {
+            float u, v;
+            ss >> u >> v;
+            uvs.push_back({u, v});
+        } else if (token == "f") {
+            // Each token: posIdx/uvIdx or posIdx/uvIdx/normalIdx
+            std::string vert;
+            while (ss >> vert) {
+                // Parse first index (pos), second (uv)
+                int vi = 0, vti = 0;
+                char* ptr = vert.data();
+                vi = std::strtol(ptr, &ptr, 10);
+                if (*ptr == '/') {
+                    ++ptr;
+                    vti = std::strtol(ptr, &ptr, 10);
+                }
+                // OBJ indices are 1-based
+                std::pair<int,int> key = {vi - 1, vti - 1};
+                if (seenPairs.insert(key).second)
+                    uniquePairs.push_back(key);
+            }
+        }
+    }
+    file.close();
+
+    if (uniquePairs.empty() || uvs.empty() || positions.empty()) {
+        std::cerr << "loadScaleLut: empty or malformed LUT file" << std::endl;
+        return;
+    }
+
+    // Sort pairs by UV: primary = V ascending, secondary = U ascending
+    std::sort(uniquePairs.begin(), uniquePairs.end(),
+              [&](const std::pair<int,int>& a, const std::pair<int,int>& b) {
+                  const glm::vec2& uvA = uvs[a.second];
+                  const glm::vec2& uvB = uvs[b.second];
+                  if (std::abs(uvA.y - uvB.y) > 1e-5f) return uvA.y < uvB.y;
+                  return uvA.x < uvB.x;
+              });
+
+    // Compute grid dimensions: Nx = number of unique U values in first row
+    uint32_t Nx = 0;
+    float firstV = uvs[uniquePairs[0].second].y;
+    for (auto& p : uniquePairs) {
+        if (std::abs(uvs[p.second].y - firstV) < 1e-5f) Nx++;
+        else break;
+    }
+    uint32_t Ny = static_cast<uint32_t>(uniquePairs.size()) / Nx;
+
+    // Compute bounding extents
+    glm::vec3 extMin(FLT_MAX), extMax(-FLT_MAX);
+    for (auto& p : uniquePairs) {
+        const glm::vec3& pos = positions[p.first];
+        extMin = glm::min(extMin, pos);
+        extMax = glm::max(extMax, pos);
+    }
+
+    // Pack as vec4[]
+    std::vector<glm::vec4> packed;
+    packed.reserve(uniquePairs.size());
+    for (auto& p : uniquePairs)
+        packed.push_back(glm::vec4(positions[p.first], 0.0f));
+
+    // Upload to GPU (HOST_VISIBLE — buffer is tiny, ~2 KB)
+    cleanupScaleLut();
+    scaleLutBuffer.create(device, physicalDevice,
+                          packed.size() * sizeof(glm::vec4),
+                          packed.data());
+
+    // Store LUT metadata as flat renderer member vars (picked up each frame by UBO upload)
+    scaleLutNx        = Nx;
+    scaleLutNy        = Ny;
+    scaleLutMinExtent = glm::vec4(extMin, 0.0f);
+    scaleLutMaxExtent = glm::vec4(extMax, 0.0f);
+    scaleLutLoaded    = true;
+
+    // Write descriptor (binding 6) for both per-object sets
+    VkDescriptorBufferInfo lutInfo{};
+    lutInfo.buffer = scaleLutBuffer.getBuffer();
+    lutInfo.offset = 0;
+    lutInfo.range  = VK_WHOLE_SIZE;
+
+    VkDescriptorSet dstSets[] = { perObjectDescriptorSet, pebblePerObjectDescriptorSet };
+    for (auto dstSet : dstSets) {
+        VkWriteDescriptorSet write{};
+        write.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet          = dstSet;
+        write.dstBinding      = 6;  // BINDING_SCALE_LUT
+        write.dstArrayElement = 0;
+        write.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        write.descriptorCount = 1;
+        write.pBufferInfo     = &lutInfo;
+        vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
+    }
+
+    std::cout << "Scale LUT loaded: " << Nx << "x" << Ny
+              << " (" << uniquePairs.size() << " control points)" << std::endl;
+}
+
+void Renderer::cleanupScaleLut() {
+    scaleLutBuffer.destroy();
+    scaleLutLoaded = false;
 }
 
 void Renderer::loadAndUploadTexture(const std::string& path, VulkanTexture& texture,

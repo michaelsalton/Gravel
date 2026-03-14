@@ -875,7 +875,7 @@ void Renderer::createDescriptorSetLayouts() {
                                    VK_SHADER_STAGE_MESH_BIT_EXT |
                                    VK_SHADER_STAGE_COMPUTE_BIT;
 
-    std::array<VkDescriptorSetLayoutBinding, 6> objBindings{};
+    std::array<VkDescriptorSetLayoutBinding, 7> objBindings{};
 
     // Binding 0: ResurfacingUBO
     objBindings[0].binding = 0;
@@ -913,14 +913,21 @@ void Renderer::createDescriptorSetLayouts() {
     objBindings[5].descriptorCount = 4;
     objBindings[5].stageFlags = taskMeshFrag;
 
-    // Partial binding: bindings 1-5 may remain unwritten for non-dragon meshes
-    std::array<VkDescriptorBindingFlags, 6> bindingFlags{};
+    // Binding 6: Scale LUT SSBO (dragon scale control cage)
+    objBindings[6].binding = 6;
+    objBindings[6].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    objBindings[6].descriptorCount = 1;
+    objBindings[6].stageFlags = taskMesh;
+
+    // Partial binding: bindings 1-6 may remain unwritten for non-dragon meshes
+    std::array<VkDescriptorBindingFlags, 7> bindingFlags{};
     bindingFlags[0] = 0;  // binding 0 (UBO) always written
     bindingFlags[1] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
     bindingFlags[2] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
     bindingFlags[3] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
     bindingFlags[4] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
     bindingFlags[5] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    bindingFlags[6] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
 
     VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo{};
     bindingFlagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
@@ -939,7 +946,7 @@ void Renderer::createDescriptorSetLayouts() {
         throw std::runtime_error("Failed to create per-object descriptor set layout!");
     }
 
-    std::cout << "Descriptor set layouts created (Scene, HalfEdge, PerObject[6 bindings])" << std::endl;
+    std::cout << "Descriptor set layouts created (Scene, HalfEdge, PerObject[7 bindings])" << std::endl;
 }
 
 void Renderer::createPipelineLayout() {
@@ -1074,9 +1081,9 @@ void Renderer::createDescriptorPool() {
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2 + 4);
 
-    // SSBOs: 17 HE + 3 skeleton + 17 secondary HE + 2 secondary skeleton joints/weights + 1 shared bone matrices + 17 ground HE + 2 visible indices (one per frame)
+    // SSBOs: 17 HE + 3 skeleton + 17 secondary HE + 2 secondary skeleton joints/weights + 1 shared bone matrices + 17 ground HE + 2 visible indices (one per frame) + 1 scale LUT
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[1].descriptorCount = 17 + 3 + 17 + 3 + 17 + MAX_FRAMES_IN_FLIGHT;
+    poolSizes[1].descriptorCount = 17 + 3 + 17 + 3 + 17 + MAX_FRAMES_IN_FLIGHT + 1;
 
     // Samplers: 2 primary + 2 secondary + 2 ground
     poolSizes[2].type = VK_DESCRIPTOR_TYPE_SAMPLER;

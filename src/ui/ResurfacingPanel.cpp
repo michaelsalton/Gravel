@@ -24,9 +24,9 @@ void ResurfacingPanel::render(Renderer& r) {
         if (r.renderResurfacing && !r.renderPebbles) {
             ImGui::Separator();
 
-            const char* surfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder", "Hemisphere"};
+            const char* surfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder", "Hemisphere", "Dragon Scale"};
             int currentType = static_cast<int>(r.elementType);
-            if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 5)) {
+            if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 6)) {
                 r.elementType = static_cast<uint32_t>(currentType);
             }
 
@@ -55,6 +55,13 @@ void ResurfacingPanel::render(Renderer& r) {
             } else if (r.elementType == 1) {
                 ImGui::Text("Sphere Parameters:");
                 ImGui::SliderFloat("Radius", &r.sphereRadius, 0.1f, 2.0f);
+            } else if (r.elementType == 5) {
+                ImGui::Text("Dragon Scale Parameters:");
+                ImGui::SliderFloat("Normal Perturbation", &r.normalPerturbation, 0.0f, 1.0f);
+                if (r.scaleLutLoaded)
+                    ImGui::TextDisabled("  LUT: %ux%u control points", r.scaleLutNx, r.scaleLutNy);
+                else
+                    ImGui::TextColored(ImVec4(1,0.5f,0,1), "  scale_lut.obj not found");
             }
 
             ImGui::Separator();
