@@ -76,16 +76,16 @@ struct GlobalShadingUBO {
     float ao;
     float dielectricF0;
     float envReflection;
-    // Base mesh material
-    float baseMeshRoughness;
-    float baseMeshMetallic;
-    float baseMeshAo;
-    float baseMeshDielectricF0;
-    float baseMeshEnvReflection;
+    // Secondary mesh material (dragon body when dual-mesh active)
+    float baseMeshRoughness;        // = secondaryRoughness
+    float baseMeshMetallic;         // = secondaryMetallic
+    float baseMeshAo;               // = secondaryAo
+    float baseMeshDielectricF0;     // = secondaryDielectricF0
+    float baseMeshEnvReflection;    // = secondaryEnvReflection
     float padding1;                 // pad to align next vec4 at offset 80
     // Base colors (albedo)
-    glm::vec4 procBaseColor;        // procedural mesh base color (offset 80)
-    glm::vec4 baseMeshBaseColor;    // base mesh base color       (offset 96)
+    glm::vec4 procBaseColor;        // primary (coat) base color  (offset 80)
+    glm::vec4 baseMeshBaseColor;    // secondary (dragon) base color (offset 96)
     // total: 112 bytes
 };
 

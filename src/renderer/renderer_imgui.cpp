@@ -446,7 +446,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::SliderFloat("Dielectric F0##proc", &dielectricF0, 0.0f, 0.2f, "%.3f");
         ImGui::SliderFloat("Env Reflection##proc", &envReflection, 0.0f, 1.0f);
         ImGui::Separator();
-        ImGui::Text("Base Mesh Material");
+        ImGui::Text(dualMeshActive ? "Dragon (Base Mesh) Material" : "Secondary Mesh Material");
         ImGui::ColorEdit3("Base Color##base", &baseMeshBaseColor.x);
         ImGui::SliderFloat("Roughness##base", &baseMeshRoughness, 0.05f, 1.0f);
         ImGui::SliderFloat("Metallic##base", &baseMeshMetallic, 0.0f, 1.0f);

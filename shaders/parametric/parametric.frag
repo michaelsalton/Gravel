@@ -36,13 +36,14 @@ layout(set = SET_SCENE, binding = BINDING_SHADING_UBO) uniform ShadingUBOBlock {
     float ao;
     float dielectricF0;
     float envReflection;
-    float _baseMeshRoughness;
-    float _baseMeshMetallic;
-    float _baseMeshAo;
-    float _baseMeshDielectricF0;
-    float _baseMeshEnvReflection;
+    float secondaryRoughness;
+    float secondaryMetallic;
+    float secondaryAo;
+    float secondaryDielectricF0;
+    float secondaryEnvReflection;
     float _padding1;
     vec4  procBaseColor;
+    vec4  secondaryBaseColor;
 } shadingUBO;
 
 // Push constants (must match task/mesh layout)
@@ -78,6 +79,15 @@ void main() {
     uint taskId = pIn.data.x;
     uint isVertex = pIn.data.y;
 
+    // Select PBR material: secondary mesh (useDirectIndex=1) uses the secondary fields
+    bool isSecondary = (push.useDirectIndex != 0u);
+    vec3  matBaseColor  = isSecondary ? shadingUBO.secondaryBaseColor.rgb  : shadingUBO.procBaseColor.rgb;
+    float matRoughness  = isSecondary ? shadingUBO.secondaryRoughness      : shadingUBO.roughness;
+    float matMetallic   = isSecondary ? shadingUBO.secondaryMetallic       : shadingUBO.metallic;
+    float matAo         = isSecondary ? shadingUBO.secondaryAo             : shadingUBO.ao;
+    float matF0         = isSecondary ? shadingUBO.secondaryDielectricF0   : shadingUBO.dielectricF0;
+    float matEnvRefl    = isSecondary ? shadingUBO.secondaryEnvReflection  : shadingUBO.envReflection;
+
     vec3 color;
 
     switch (push.debugMode) {
@@ -86,14 +96,14 @@ void main() {
                 color = cookTorrancePBR(worldPos, normal,
                                         shadingUBO.lightPosition.xyz,
                                         viewUBO.cameraPosition.xyz,
-                                        shadingUBO.procBaseColor.rgb,
-                                        shadingUBO.roughness,
-                                        shadingUBO.metallic,
-                                        shadingUBO.dielectricF0,
+                                        matBaseColor,
+                                        matRoughness,
+                                        matMetallic,
+                                        matF0,
                                         shadingUBO.ambient,
-                                        shadingUBO.envReflection,
+                                        matEnvRefl,
                                         shadingUBO.lightIntensity);
-                color *= shadingUBO.ao;
+                color *= matAo;
 
                 // --- Chainmail-specific AO modifiers ---
                 // v=0 is outer top of torus, v=0.5 is inner bottom (closest to mesh surface)
@@ -120,19 +130,18 @@ void main() {
                 float occlusion = innerFace * edgeAO * selfShadow * ringVariation;
                 color *= occlusion;
             } else {
-                // Standard PBR with user-defined base color
-                vec3 albedo = shadingUBO.procBaseColor.rgb;
+                // Standard PBR with per-mesh material selection
                 color = cookTorrancePBR(worldPos, normal,
                                         shadingUBO.lightPosition.xyz,
                                         viewUBO.cameraPosition.xyz,
-                                        albedo,
-                                        shadingUBO.roughness,
-                                        shadingUBO.metallic,
-                                        shadingUBO.dielectricF0,
+                                        matBaseColor,
+                                        matRoughness,
+                                        matMetallic,
+                                        matF0,
                                         shadingUBO.ambient,
-                                        shadingUBO.envReflection,
+                                        matEnvRefl,
                                         shadingUBO.lightIntensity);
-                color *= shadingUBO.ao;
+                color *= matAo;
             }
 
             // Apply ambient occlusion from texture
@@ -182,12 +191,12 @@ void main() {
             color = cookTorrancePBR(worldPos, normal,
                                     shadingUBO.lightPosition.xyz,
                                     viewUBO.cameraPosition.xyz,
-                                    shadingUBO.procBaseColor.rgb,
-                                    shadingUBO.roughness,
-                                    shadingUBO.metallic,
-                                    shadingUBO.dielectricF0,
+                                    matBaseColor,
+                                    matRoughness,
+                                    matMetallic,
+                                    matF0,
                                     shadingUBO.ambient,
-                                    shadingUBO.envReflection,
+                                    matEnvRefl,
                                     shadingUBO.lightIntensity);
 
             // Also draw element boundaries
@@ -206,12 +215,12 @@ void main() {
             color = cookTorrancePBR(worldPos, normal,
                                     shadingUBO.lightPosition.xyz,
                                     viewUBO.cameraPosition.xyz,
-                                    shadingUBO.procBaseColor.rgb,
-                                    shadingUBO.roughness,
-                                    shadingUBO.metallic,
-                                    shadingUBO.dielectricF0,
+                                    matBaseColor,
+                                    matRoughness,
+                                    matMetallic,
+                                    matF0,
                                     shadingUBO.ambient,
-                                    shadingUBO.envReflection,
+                                    matEnvRefl,
                                     shadingUBO.lightIntensity);
             color = toneMapACES(color);
             break;
