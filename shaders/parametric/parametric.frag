@@ -81,18 +81,17 @@ void main() {
     switch (push.debugMode) {
         case 0: {
             if (push.chainmailMode != 0u) {
-                // Chainmail is always metallic
-                vec3 albedo = vec3(shadingUBO.dielectricF0); // metallic base tint
                 color = cookTorrancePBR(worldPos, normal,
                                         shadingUBO.lightPosition.xyz,
                                         viewUBO.cameraPosition.xyz,
-                                        albedo,
+                                        shadingUBO.procBaseColor.rgb,
                                         shadingUBO.roughness,
-                                        1.0,  // force metallic = 1.0 for chainmail
+                                        shadingUBO.metallic,
                                         shadingUBO.dielectricF0,
                                         shadingUBO.ambient,
                                         shadingUBO.envReflection,
                                         shadingUBO.lightIntensity);
+                color *= shadingUBO.ao;
 
                 // --- Chainmail-specific AO modifiers ---
                 // v=0 is outer top of torus, v=0.5 is inner bottom (closest to mesh surface)
