@@ -1047,6 +1047,16 @@ void Renderer::createUniformBuffers() {
     ResurfacingUBO resurfData{};
     memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
 
+    // Secondary ResurfacingUBO (independent settings for secondary/base mesh)
+    createBuffer(resurfSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                 secondaryResurfacingUBOBuffer, secondaryResurfacingUBOMemory);
+    vkMapMemory(device, secondaryResurfacingUBOMemory, 0, resurfSize, 0, &secondaryResurfacingUBOMapped);
+    {
+        ResurfacingUBO defaultData{};
+        memcpy(secondaryResurfacingUBOMapped, &defaultData, sizeof(ResurfacingUBO));
+    }
+
     // PebbleUBO (per-object, not per-frame)
     VkDeviceSize pebbleSize = sizeof(PebbleUBO);
     createBuffer(pebbleSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -1077,7 +1087,7 @@ void Renderer::createUniformBuffers() {
 void Renderer::createDescriptorPool() {
     std::array<VkDescriptorPoolSize, 4> poolSizes{};
 
-    // UBOs: 2 per scene frame + 1 ResurfacingUBO + 1 PebbleUBO + 1 secondary perObject + 1 groundPebbleUBO
+    // UBOs: 2 per scene frame + 1 ResurfacingUBO + 1 PebbleUBO + 1 secondary ResurfacingUBO + 1 groundPebbleUBO
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2 + 4);
 

@@ -131,6 +131,54 @@ void ResurfacingPanel::render(Renderer& r) {
             ImGui::Text("Elements: %u (%u faces + %u verts)",
                          totalElements, r.heNbFaces, r.heNbVertices);
             ImGui::Text("Total mesh tasks: %u", totalElements * totalTiles);
+
+            // Secondary mesh resurfacing (dragon coat dual-mesh)
+            if (r.dualMeshActive) {
+                ImGui::Separator();
+                if (ImGui::CollapsingHeader("Dragon (Base Mesh)", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    ImGui::PushID("secondary");
+
+                    const char* secSurfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder", "Hemisphere", "Dragon Scale"};
+                    int secType = static_cast<int>(r.secondaryElementType);
+                    if (ImGui::Combo("Surface Type##sec", &secType, secSurfaceTypes, 6))
+                        r.secondaryElementType = static_cast<uint32_t>(secType);
+
+                    ImGui::SliderFloat("Global Scale##sec", &r.secondaryUserScaling, 0.01f, 3.0f);
+
+                    ImGui::Separator();
+
+                    if (r.secondaryElementType == 0) {
+                        ImGui::Text("Torus Parameters:");
+                        ImGui::SliderFloat("Major Radius##sec", &r.secondaryTorusMajorR, 0.3f, 2.0f);
+                        ImGui::SliderFloat("Minor Radius##sec", &r.secondaryTorusMinorR, 0.05f, 1.0f);
+                    } else if (r.secondaryElementType == 1) {
+                        ImGui::Text("Sphere Parameters:");
+                        ImGui::SliderFloat("Radius##sec", &r.secondarySphereRadius, 0.1f, 2.0f);
+                    } else if (r.secondaryElementType == 5) {
+                        ImGui::Text("Dragon Scale Parameters:");
+                        ImGui::SliderFloat("Normal Perturbation##sec", &r.secondaryNormalPerturbation, 0.0f, 1.0f);
+                    }
+
+                    ImGui::Separator();
+
+                    int secResM = static_cast<int>(r.secondaryResolutionM);
+                    int secResN = static_cast<int>(r.secondaryResolutionN);
+                    if (ImGui::SliderInt("Resolution M##sec", &secResM, 2, 64))
+                        r.secondaryResolutionM = static_cast<uint32_t>(secResM);
+                    if (ImGui::SliderInt("Resolution N##sec", &secResN, 2, 64))
+                        r.secondaryResolutionN = static_cast<uint32_t>(secResN);
+
+                    ImGui::Checkbox("LOD##sec", &r.secondaryEnableLod);
+                    if (r.secondaryEnableLod) {
+                        ImGui::SameLine();
+                        ImGui::SliderFloat("Factor##secLod", &r.secondaryLodFactor, 0.1f, 10.0f);
+                    }
+
+                    ImGui::Text("Dragon faces: %u", r.secondaryHeNbFaces);
+
+                    ImGui::PopID();
+                }
+            }
         }
 
         // ==================== Pebble Controls ====================

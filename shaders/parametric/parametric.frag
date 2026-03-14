@@ -64,6 +64,8 @@ layout(push_constant) uniform PushConstants {
     float lodFactor;
     uint chainmailMode;
     float chainmailTiltAngle;
+    uint useDirectIndex;
+    uint _pad;
 } push;
 
 layout(location = 0) out vec4 outColor;

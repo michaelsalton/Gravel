@@ -54,6 +54,8 @@ layout(push_constant) uniform PushConstants {
     float lodFactor;        // LOD quality multiplier (1.0 = balanced)
     uint chainmailMode;         // 0 = off, 1 = chainmail orientation
     float chainmailTiltAngle;   // Tilt angle in radians
+    uint useDirectIndex;        // 1 = globalId = gl_WorkGroupID.x (secondary mesh dispatch)
+    uint _pad;
 } push;
 
 // ============================================================================
@@ -119,8 +121,10 @@ uint getElementTypeFromTexture(vec2 uv) {
 // ============================================================================
 
 void main() {
-    // Remap through the CPU pre-cull visible index list (dispatch count = visible elements only)
-    uint globalId = visibleIndices[gl_WorkGroupID.x];
+    // Secondary mesh dispatches use direct index (no pre-cull list); primary uses visibleIndices.
+    uint globalId = (push.useDirectIndex != 0u)
+        ? gl_WorkGroupID.x
+        : visibleIndices[gl_WorkGroupID.x];
 
     bool isVertex = (globalId >= push.nbFaces);
 

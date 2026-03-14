@@ -63,6 +63,8 @@ layout(push_constant) uniform PushConstants {
     float lodFactor;
     uint chainmailMode;
     float chainmailTiltAngle;
+    uint useDirectIndex;
+    uint _pad;
 } push;
 
 layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {

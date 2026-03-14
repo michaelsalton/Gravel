@@ -102,6 +102,11 @@ Renderer::~Renderer() {
         vkFreeMemory(device, resurfacingUBOMemory, nullptr);
     }
 
+    if (secondaryResurfacingUBOBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, secondaryResurfacingUBOBuffer, nullptr);
+        vkFreeMemory(device, secondaryResurfacingUBOMemory, nullptr);
+    }
+
     if (pebbleUBOBuffer != VK_NULL_HANDLE) {
         vkDestroyBuffer(device, pebbleUBOBuffer, nullptr);
         vkFreeMemory(device, pebbleUBOMemory, nullptr);
@@ -454,6 +459,26 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
     }
 
+    // Update secondary ResurfacingUBO (used when dualMeshActive)
+    if (dualMeshActive) {
+        ResurfacingUBO secData{};
+        secData.elementType      = secondaryElementType;
+        secData.userScaling      = secondaryUserScaling;
+        secData.resolutionM      = secondaryResolutionM;
+        secData.resolutionN      = secondaryResolutionN;
+        secData.torusMajorR      = secondaryTorusMajorR;
+        secData.torusMinorR      = secondaryTorusMinorR;
+        secData.sphereRadius     = secondarySphereRadius;
+        secData.doLod            = secondaryEnableLod ? 1u : 0u;
+        secData.lodFactor        = secondaryLodFactor;
+        secData.Nx               = scaleLutNx;
+        secData.Ny               = scaleLutNy;
+        secData.normalPerturbation = secondaryNormalPerturbation;
+        secData.minLutExtent     = scaleLutMinExtent;
+        secData.maxLutExtent     = scaleLutMaxExtent;
+        memcpy(secondaryResurfacingUBOMapped, &secData, sizeof(ResurfacingUBO));
+    }
+
     PushConstants pushConstants{};
 
     pushConstants.model = thirdPersonMode ? player.getModelMatrix() : glm::mat4(1.0f);
@@ -719,14 +744,27 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         frameDrawCalls++;
     }
 
-    // Dual-mesh: render secondary mesh as solid base under coat
+    // Dual-mesh: render secondary mesh with its own independent resurfacing
     if (renderResurfacing && dualMeshActive && heMeshUploaded) {
-        PushConstants basePush = pushConstants;
-        basePush.model = pushConstants.model;  // inherit player transform
-        basePush.nbFaces = secondaryHeNbFaces;
-        basePush.nbVertices = secondaryHeNbVertices;
+        PushConstants secPush{};
+        secPush.model          = pushConstants.model;   // inherit player transform
+        secPush.nbFaces        = secondaryHeNbFaces;
+        secPush.nbVertices     = 0;                     // face elements only
+        secPush.elementType    = secondaryElementType;
+        secPush.userScaling    = secondaryUserScaling;
+        secPush.torusMajorR    = secondaryTorusMajorR;
+        secPush.torusMinorR    = secondaryTorusMinorR;
+        secPush.sphereRadius   = secondarySphereRadius;
+        secPush.resolutionM    = secondaryResolutionM;
+        secPush.resolutionN    = secondaryResolutionN;
+        secPush.debugMode      = debugMode;
+        secPush.enableCulling  = 0;                     // no culling for secondary
+        secPush.enableLod      = secondaryEnableLod ? 1u : 0u;
+        secPush.lodFactor      = secondaryLodFactor;
+        secPush.chainmailMode  = 0;
+        secPush.useDirectIndex = 1;                     // bypass visibleIndices lookup
 
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, baseMeshSolidPipeline);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                  pipelineLayout, 0, 1,
                                  &sceneDescriptorSets[currentFrame], 0, nullptr);
@@ -739,7 +777,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         vkCmdPushConstants(cmd, pipelineLayout,
                             VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
                             VK_SHADER_STAGE_FRAGMENT_BIT,
-                            0, sizeof(PushConstants), &basePush);
+                            0, sizeof(PushConstants), &secPush);
         pfnCmdDrawMeshTasksEXT(cmd, secondaryHeNbFaces, 1, 1);
         frameDrawCalls++;
     }

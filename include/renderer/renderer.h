@@ -151,6 +151,8 @@ struct PushConstants {
     float lodFactor;
     uint32_t chainmailMode;
     float chainmailTiltAngle;
+    uint32_t useDirectIndex;   // 1 = globalId = gl_WorkGroupID.x (no visibleIndices lookup)
+    uint32_t _pad;
 };
 
 struct BenchmarkPushConstants {
@@ -220,6 +222,22 @@ public:
     uint32_t scaleLutNy        = 0;
     bool doSkinning = false;
     bool animationPlaying = false;
+
+    // Secondary mesh (read-only for UI)
+    bool     dualMeshActive        = false;
+    uint32_t secondaryHeNbFaces    = 0;
+
+    // Secondary mesh resurfacing (active when dualMeshActive = true)
+    uint32_t secondaryElementType  = 1;     // default: sphere
+    float    secondaryUserScaling  = 1.0f;
+    uint32_t secondaryResolutionM  = 8;
+    uint32_t secondaryResolutionN  = 8;
+    float    secondaryTorusMajorR  = 1.0f;
+    float    secondaryTorusMinorR  = 0.3f;
+    float    secondarySphereRadius = 0.5f;
+    float    secondaryNormalPerturbation = 0.2f;
+    bool     secondaryEnableLod    = false;
+    float    secondaryLodFactor    = 1.0f;
     float animationTime = 0.0f;
     float animationSpeed = 1.0f;
     float lastDeltaTime = 0.0f;
@@ -610,6 +628,11 @@ private:
     uint32_t benchmarkIndexCount = 0;
     size_t benchmarkVramBytes = 0;
 
+    // Secondary mesh resurfacing UBO (separate from primary so each can have independent settings)
+    VkBuffer       secondaryResurfacingUBOBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory secondaryResurfacingUBOMemory = VK_NULL_HANDLE;
+    void*          secondaryResurfacingUBOMapped = nullptr;
+
     // Secondary mesh (base dragon rendered under coat)
     std::vector<StorageBuffer> secondaryHeVec4Buffers;
     std::vector<StorageBuffer> secondaryHeVec2Buffers;
@@ -621,9 +644,7 @@ private:
     VkDescriptorSet secondaryPerObjectDescriptorSet = VK_NULL_HANDLE;
     StorageBuffer secondaryJointIndicesBuffer;
     StorageBuffer secondaryJointWeightsBuffer;
-    uint32_t secondaryHeNbFaces = 0;
     uint32_t secondaryHeNbVertices = 0;
-    bool dualMeshActive = false;
 
     // UI panels
     ResurfacingPanel resurfacingPanel;

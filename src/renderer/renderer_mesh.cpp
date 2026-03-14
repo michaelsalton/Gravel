@@ -621,10 +621,10 @@ void Renderer::loadSecondaryMesh(const std::string& path) {
         throw std::runtime_error("Failed to allocate secondary per-object descriptor set!");
     }
 
-    // Write binding 0: shared ResurfacingUBO
+    // Write binding 0: secondary ResurfacingUBO (independent from primary)
     {
         VkDescriptorBufferInfo uboInfo{};
-        uboInfo.buffer = resurfacingUBOBuffer;
+        uboInfo.buffer = secondaryResurfacingUBOBuffer;
         uboInfo.offset = 0;
         uboInfo.range = sizeof(ResurfacingUBO);
 
@@ -635,6 +635,23 @@ void Renderer::loadSecondaryMesh(const std::string& path) {
         w.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         w.descriptorCount = 1;
         w.pBufferInfo = &uboInfo;
+        vkUpdateDescriptorSets(device, 1, &w, 0, nullptr);
+    }
+
+    // Write binding 6: scale LUT (shared with primary — needed if secondary uses dragon scale)
+    if (scaleLutBuffer.getBuffer() != VK_NULL_HANDLE) {
+        VkDescriptorBufferInfo lutInfo{};
+        lutInfo.buffer = scaleLutBuffer.getBuffer();
+        lutInfo.offset = 0;
+        lutInfo.range  = scaleLutBuffer.getSize();
+
+        VkWriteDescriptorSet w{};
+        w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w.dstSet = secondaryPerObjectDescriptorSet;
+        w.dstBinding = 6;
+        w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        w.descriptorCount = 1;
+        w.pBufferInfo = &lutInfo;
         vkUpdateDescriptorSets(device, 1, &w, 0, nullptr);
     }
 
