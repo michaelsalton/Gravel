@@ -224,7 +224,8 @@ public:
     float cullingThreshold = 0.0f;  // Back-face dot product threshold [-1, 1]
     bool enableLod = false;
     float lodFactor = 1.0f;
-    int baseMeshMode = 0;  // 0=off, 1=wireframe, 2=solid, 3=both
+    int baseMeshMode = 0;  // 0=off, 1=wireframe, 2=solid, 3=both  (coat base mesh)
+    int dragonBaseMeshMode = 2;  // 0=off, 1=wireframe, 2=solid, 3=both  (dragon body base mesh)
     bool chainmailMode = false;
     float chainmailTiltAngle = 1.0f;          // Lean blend: 0=flat, 1=full chainmail lean
     float chainmailSurfaceOffset = 0.1f;      // Normal lift to avoid mesh intersection

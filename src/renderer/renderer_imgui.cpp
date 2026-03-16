@@ -188,12 +188,21 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     ImGui::Text("Faces:              %u", heNbFaces);
     ImGui::Text("Vertices:           %u", heNbVertices);
     ImGui::Text("Triangles:          %u", baseMeshTriCount);
-    ImGui::Text("Rendered Triangles: %u", baseMeshMode > 0 ? baseMeshTriCount : 0u);
+    {
+        uint32_t renderedTris = (baseMeshMode > 0 ? baseMeshTriCount : 0u);
+        if (dualMeshActive && dragonBaseMeshMode > 0)
+            renderedTris += secondaryHeNbFaces * 2;  // approximate tri count for dragon body
+        ImGui::Text("Rendered Triangles: %u", renderedTris);
+    }
     ImGui::Unindent();
 
     if (baseMeshMode > 0 && heMeshUploaded) {
         sceneTriangles += baseMeshTriCount;
         sceneRendered  += baseMeshTriCount;
+    }
+    if (dualMeshActive && dragonBaseMeshMode > 0 && heMeshUploaded) {
+        sceneTriangles += secondaryHeNbFaces * 2;
+        sceneRendered  += secondaryHeNbFaces * 2;
     }
 
     // Procedural stats (when resurfacing is active) — uses CPU pre-cull cache from recordCommandBuffer
@@ -312,7 +321,13 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                 int modeCount = 4;
                 if (maskTextureLoaded) modeCount = 5;
                 if (skinTextureLoaded) modeCount = 6;
-                ImGui::Combo("Display", &baseMeshMode, baseMeshModes, modeCount);
+                if (dualMeshActive) {
+                    ImGui::Combo("Coat Display", &baseMeshMode, baseMeshModes, modeCount);
+                    const char* dragonModes[] = { "Off", "Wireframe", "Solid", "Both" };
+                    ImGui::Combo("Dragon Display", &dragonBaseMeshMode, dragonModes, 4);
+                } else {
+                    ImGui::Combo("Display", &baseMeshMode, baseMeshModes, modeCount);
+                }
             }
             ImGui::Separator();
 
@@ -438,7 +453,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::ColorEdit3("Ambient Color", &ambientColor.x);
         ImGui::SliderFloat("Ambient Intensity", &ambientIntensity, 0.0f, 1.0f);
         ImGui::Separator();
-        ImGui::Text("Procedural Mesh Material");
+        ImGui::Text("Coat Procedural Surface");
         ImGui::ColorEdit3("Base Color##proc", &procBaseColor.x);
         ImGui::SliderFloat("Roughness##proc", &roughness, 0.05f, 1.0f);
         ImGui::SliderFloat("Metallic##proc", &metallic, 0.0f, 1.0f);
@@ -447,33 +462,31 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::SliderFloat("Env Reflection##proc", &envReflection, 0.0f, 1.0f);
         if (dualMeshActive) {
             ImGui::Separator();
-            ImGui::Text("Dragon (Base Mesh) Resurfacing Material");
+            ImGui::Text("Dragon Procedural Surface");
             ImGui::ColorEdit3("Base Color##base", &baseMeshBaseColor.x);
             ImGui::SliderFloat("Roughness##base", &baseMeshRoughness, 0.05f, 1.0f);
             ImGui::SliderFloat("Metallic##base", &baseMeshMetallic, 0.0f, 1.0f);
             ImGui::SliderFloat("AO##base", &baseMeshAo, 0.0f, 1.0f);
             ImGui::SliderFloat("Dielectric F0##base", &baseMeshDielectricF0, 0.0f, 0.2f, "%.3f");
             ImGui::SliderFloat("Env Reflection##base", &baseMeshEnvReflection, 0.0f, 1.0f);
-        }
-        if (baseMeshMode > 0) {
             ImGui::Separator();
-            ImGui::Text("Base Mesh Overlay Material");
-            ImGui::ColorEdit3("Base Color##solid", &baseMeshSolidBaseColor.x);
-            ImGui::SliderFloat("Roughness##solid", &baseMeshSolidRoughness, 0.05f, 1.0f);
-            ImGui::SliderFloat("Metallic##solid", &baseMeshSolidMetallic, 0.0f, 1.0f);
-            ImGui::SliderFloat("AO##solid", &baseMeshSolidAo, 0.0f, 1.0f);
-            ImGui::SliderFloat("Dielectric F0##solid", &baseMeshSolidDielectricF0, 0.0f, 0.2f, "%.3f");
-            ImGui::SliderFloat("Env Reflection##solid", &baseMeshSolidEnvReflection, 0.0f, 1.0f);
-        }
-        if (baseMeshMode > 0 && dualMeshActive) {
-            ImGui::Separator();
-            ImGui::Text("Dragon (Base Mesh) Overlay Material");
+            ImGui::Text("Dragon Base Mesh");
             ImGui::ColorEdit3("Base Color##solidSec", &secBaseMeshSolidBaseColor.x);
             ImGui::SliderFloat("Roughness##solidSec", &secBaseMeshSolidRoughness, 0.05f, 1.0f);
             ImGui::SliderFloat("Metallic##solidSec", &secBaseMeshSolidMetallic, 0.0f, 1.0f);
             ImGui::SliderFloat("AO##solidSec", &secBaseMeshSolidAo, 0.0f, 1.0f);
             ImGui::SliderFloat("Dielectric F0##solidSec", &secBaseMeshSolidDielectricF0, 0.0f, 0.2f, "%.3f");
             ImGui::SliderFloat("Env Reflection##solidSec", &secBaseMeshSolidEnvReflection, 0.0f, 1.0f);
+        }
+        if (baseMeshMode > 0) {
+            ImGui::Separator();
+            ImGui::Text("Coat Base Mesh Overlay");
+            ImGui::ColorEdit3("Base Color##solid", &baseMeshSolidBaseColor.x);
+            ImGui::SliderFloat("Roughness##solid", &baseMeshSolidRoughness, 0.05f, 1.0f);
+            ImGui::SliderFloat("Metallic##solid", &baseMeshSolidMetallic, 0.0f, 1.0f);
+            ImGui::SliderFloat("AO##solid", &baseMeshSolidAo, 0.0f, 1.0f);
+            ImGui::SliderFloat("Dielectric F0##solid", &baseMeshSolidDielectricF0, 0.0f, 0.2f, "%.3f");
+            ImGui::SliderFloat("Env Reflection##solid", &baseMeshSolidEnvReflection, 0.0f, 1.0f);
         }
     }
 

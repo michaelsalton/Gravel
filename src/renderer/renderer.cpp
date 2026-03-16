@@ -838,17 +838,46 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         if (baseMeshMode == 1 || baseMeshMode == 3)
             drawBaseMesh(baseMeshPipeline, heDescriptorSet, perObjectDescriptorSet, heNbFaces, 0);
 
-        // Secondary base mesh (dragon body) — only when dual mesh active
-        if (dualMeshActive && secondaryHeNbFaces > 0) {
-            if (baseMeshMode == 2 || baseMeshMode == 3) {
-                drawBaseMesh(baseMeshSolidPipeline, secondaryHeDescriptorSet,
-                             secondaryPerObjectDescriptorSet, secondaryHeNbFaces, 1);
-            }
-            if (baseMeshMode == 1 || baseMeshMode == 3) {
-                drawBaseMesh(baseMeshPipeline, secondaryHeDescriptorSet,
-                             secondaryPerObjectDescriptorSet, secondaryHeNbFaces, 1);
-            }
+    }
+
+    // Dragon body base mesh — controlled by dragonBaseMeshMode (independent of coat baseMeshMode)
+    if (dragonBaseMeshMode > 0 && dualMeshActive && secondaryHeNbFaces > 0 && heMeshUploaded) {
+        // Override nbFaces for the secondary mesh (shader checks push.nbFaces)
+        uint32_t savedNbFaces = pushConstants.nbFaces;
+        pushConstants.nbFaces = secondaryHeNbFaces;
+
+        auto drawDragonBaseMesh = [&](VkPipeline pipeline, VkDescriptorSet heSet,
+                                 VkDescriptorSet objSet, uint32_t nbFaces,
+                                 uint32_t useDirectIdx) {
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                     pipelineLayout, 0, 1,
+                                     &sceneDescriptorSets[currentFrame],
+                                     0, nullptr);
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                     pipelineLayout, 1, 1,
+                                     &heSet, 0, nullptr);
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                     pipelineLayout, 2, 1,
+                                     &objSet, 0, nullptr);
+            pushConstants.useDirectIndex = useDirectIdx;
+            vkCmdPushConstants(cmd, pipelineLayout,
+                                VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
+                                VK_SHADER_STAGE_FRAGMENT_BIT,
+                                0, sizeof(PushConstants), &pushConstants);
+            pfnCmdDrawMeshTasksEXT(cmd, nbFaces, 1, 1);
+            pushConstants.useDirectIndex = 0;
+            frameDrawCalls++;
+        };
+        if (dragonBaseMeshMode == 2 || dragonBaseMeshMode == 3) {
+            drawDragonBaseMesh(baseMeshSolidPipeline, secondaryHeDescriptorSet,
+                         secondaryPerObjectDescriptorSet, secondaryHeNbFaces, 1);
         }
+        if (dragonBaseMeshMode == 1 || dragonBaseMeshMode == 3) {
+            drawDragonBaseMesh(baseMeshPipeline, secondaryHeDescriptorSet,
+                         secondaryPerObjectDescriptorSet, secondaryHeNbFaces, 1);
+        }
+        pushConstants.nbFaces = savedNbFaces;
     }
 
     // Benchmark mesh (traditional vertex pipeline)
