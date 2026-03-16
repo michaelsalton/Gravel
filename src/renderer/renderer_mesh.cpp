@@ -52,6 +52,14 @@ void Renderer::scanAssetMeshes() {
         assetMeshNames.push_back(std::move(name));
         assetMeshPaths.push_back(std::move(path));
     }
+
+    // Default to "shapes/cube" if available
+    for (int i = 0; i < static_cast<int>(assetMeshNames.size()); i++) {
+        if (assetMeshNames[i] == "shapes/cube") {
+            selectedMesh = i;
+            break;
+        }
+    }
 }
 
 void Renderer::uploadHEBuffers(const HalfEdgeMesh& mesh,

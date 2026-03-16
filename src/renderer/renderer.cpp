@@ -52,6 +52,8 @@ Renderer::Renderer(Window& window) : window(window) {
     generateGroundPlane(groundPlaneCellSize);
     loadScaleLut();
     scanAssetMeshes();
+    if (selectedMesh >= 0 && selectedMesh < static_cast<int>(assetMeshPaths.size()))
+        pendingMeshLoad = assetMeshPaths[selectedMesh];
     initImGui();
 }
 

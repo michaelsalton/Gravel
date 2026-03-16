@@ -83,9 +83,14 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     ImGui::NewFrame();
 
     // ===================== Performance Stats Panel =====================
-    ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(300, 0), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Performance", nullptr, ImGuiWindowFlags_NoCollapse);
+    float displayH = static_cast<float>(swapChainExtent.height);
+    float displayW = static_cast<float>(swapChainExtent.width);
+    float panelW = 310.0f;
+    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelW, 0), ImGuiCond_Always);
+    ImGui::Begin("Performance", nullptr,
+                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
+                 ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize);
 
     // FPS (displayed value updates every 0.5s for readability)
     static float displayFps = 0.0f;
@@ -273,29 +278,62 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     }
     ImGui::Unindent();
 
+    float perfH = ImGui::GetWindowSize().y;
     ImGui::End();
 
+    // ===================== Mode Tabs (centered at top) =====================
+    {
+        float tabW = 400.0f;
+        ImGui::SetNextWindowPos(ImVec2((displayW - tabW) * 0.5f, 0), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(tabW, 0), ImGuiCond_Always);
+        ImGui::Begin("##ModeTabs", nullptr,
+                     ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+                     ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar |
+                     ImGuiWindowFlags_AlwaysAutoResize);
+        if (ImGui::BeginTabBar("ModeTabs")) {
+            if (ImGui::BeginTabItem("Resurfacing")) {
+                if (uiMode != 0) uiMode = 0;
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("Benchmark")) {
+                if (uiMode != 1) {
+                    renderResurfacing = false;
+                    renderPebbles = false;
+                    uiMode = 1;
+                }
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("Player")) {
+                if (uiMode != 2) {
+                    applyPreset(LEVEL_PRESETS[1]);
+                    renderPathway = true;
+                    uiMode = 2;
+                }
+                ImGui::EndTabItem();
+            }
+            ImGui::EndTabBar();
+        }
+        if (uiMode == 0) {
+            for (int i = 0; i < LEVEL_PRESET_COUNT; i++) {
+                if (i > 0) ImGui::SameLine();
+                if (ImGui::Button(LEVEL_PRESETS[i].name)) applyPreset(LEVEL_PRESETS[i]);
+            }
+        }
+        ImGui::End();
+    }
+
     // ===================== Gravel Controls Panel =====================
-    ImGui::Begin("Gravel Controls");
+    ImGui::SetNextWindowPos(ImVec2(displayW - panelW, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelW, displayH), ImGuiCond_Always);
+    ImGui::Begin("Gravel Controls", nullptr,
+                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
 
     // Dynamic mesh list from assets directory
     int meshCount = static_cast<int>(assetMeshNames.size());
 
-    // ===================== Tab Bar =====================
-    if (ImGui::BeginTabBar("ModeTabs")) {
-
-        // -------------------- Resurfacing Tab --------------------
-        if (ImGui::BeginTabItem("Resurfacing")) {
-            uiMode = 0;
-
-            // Presets
-            if (ImGui::CollapsingHeader("Presets", ImGuiTreeNodeFlags_DefaultOpen)) {
-                for (int i = 0; i < LEVEL_PRESET_COUNT; i++) {
-                    if (i > 0) ImGui::SameLine();
-                    if (ImGui::Button(LEVEL_PRESETS[i].name)) applyPreset(LEVEL_PRESETS[i]);
-                }
-            }
-            ImGui::Separator();
+    // ===================== Mode Content =====================
+    if (uiMode == 0) {
+        // -------------------- Resurfacing --------------------
 
             // Base mesh selector
             if (ImGui::CollapsingHeader("Base Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -333,89 +371,66 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
             resurfacingPanel.render(*this);
             animationPanel.render(*this);
+    }
 
-            ImGui::EndTabItem();
-        }
+    // -------------------- Benchmark Content --------------------
+    if (uiMode == 1) {
+        if (ImGui::CollapsingHeader("Benchmark Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
+            // Exported meshes dropdown
+            static std::vector<std::string> exportNames;
+            static std::vector<std::string> exportPaths;
+            static int selectedExport = -1;
+            static float lastScanTime = -10.0f;
 
-        // -------------------- Benchmark Tab --------------------
-        if (ImGui::BeginTabItem("Benchmark")) {
-            if (uiMode != 1) {
-                // Entering benchmark mode — disable resurfacing
-                renderResurfacing = false;
-                renderPebbles = false;
-                uiMode = 1;
-            }
-
-            // Benchmark mesh
-            if (ImGui::CollapsingHeader("Benchmark Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
-                // Exported meshes dropdown
-                static std::vector<std::string> exportNames;
-                static std::vector<std::string> exportPaths;
-                static int selectedExport = -1;
-                static float lastScanTime = -10.0f;
-
-                float now = static_cast<float>(ImGui::GetTime());
-                if (now - lastScanTime > 2.0f) {
-                    lastScanTime = now;
-                    exportNames.clear();
-                    exportPaths.clear();
-                    if (std::filesystem::is_directory("exports")) {
-                        for (const auto& entry : std::filesystem::directory_iterator("exports")) {
-                            if (entry.is_regular_file() && entry.path().extension() == ".obj") {
-                                exportNames.push_back(entry.path().filename().string());
-                                exportPaths.push_back(entry.path().string());
-                            }
+            float now = static_cast<float>(ImGui::GetTime());
+            if (now - lastScanTime > 2.0f) {
+                lastScanTime = now;
+                exportNames.clear();
+                exportPaths.clear();
+                if (std::filesystem::is_directory("exports")) {
+                    for (const auto& entry : std::filesystem::directory_iterator("exports")) {
+                        if (entry.is_regular_file() && entry.path().extension() == ".obj") {
+                            exportNames.push_back(entry.path().filename().string());
+                            exportPaths.push_back(entry.path().string());
                         }
                     }
                 }
-
-                const char* preview = (selectedExport >= 0 && selectedExport < (int)exportNames.size())
-                    ? exportNames[selectedExport].c_str() : "Select exported mesh...";
-                if (ImGui::BeginCombo("Exports", preview)) {
-                    for (int i = 0; i < (int)exportNames.size(); i++) {
-                        bool isSelected = (selectedExport == i);
-                        if (ImGui::Selectable(exportNames[i].c_str(), isSelected)) {
-                            selectedExport = i;
-                            benchmarkMeshPath = exportPaths[i];
-                            pendingBenchmarkLoad = benchmarkMeshPath;
-                        }
-                        if (isSelected) ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-
-                if (benchmarkMeshLoaded) {
-                    if (ImGui::Button("Unload")) {
-                        pendingBenchmarkLoad = "__unload__";
-                        selectedExport = -1;
-                    }
-                    ImGui::Checkbox("Render Benchmark", &renderBenchmarkMesh);
-                }
-            }
-            ImGui::EndTabItem();
-        }
-
-        // -------------------- Player Tab --------------------
-        if (ImGui::BeginTabItem("Player")) {
-            if (uiMode != 2) {
-                // Entering player mode — load Chainmail Man preset + ground pebbles
-                applyPreset(LEVEL_PRESETS[1]);
-                renderPathway = true;
-                uiMode = 2;
             }
 
-            playerPanel.render(*this);
-            ImGui::Separator();
+            const char* preview = (selectedExport >= 0 && selectedExport < (int)exportNames.size())
+                ? exportNames[selectedExport].c_str() : "Select exported mesh...";
+            if (ImGui::BeginCombo("Exports", preview)) {
+                for (int i = 0; i < (int)exportNames.size(); i++) {
+                    bool isSelected = (selectedExport == i);
+                    if (ImGui::Selectable(exportNames[i].c_str(), isSelected)) {
+                        selectedExport = i;
+                        benchmarkMeshPath = exportPaths[i];
+                        pendingBenchmarkLoad = benchmarkMeshPath;
+                    }
+                    if (isSelected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
 
-            animationPanel.render(*this);
-            ImGui::Separator();
-
-            resurfacingPanel.renderPathway(*this);
-
-            ImGui::EndTabItem();
+            if (benchmarkMeshLoaded) {
+                if (ImGui::Button("Unload")) {
+                    pendingBenchmarkLoad = "__unload__";
+                    selectedExport = -1;
+                }
+                ImGui::Checkbox("Render Benchmark", &renderBenchmarkMesh);
+            }
         }
+    }
 
-        ImGui::EndTabBar();
+    // -------------------- Player Content --------------------
+    if (uiMode == 2) {
+        playerPanel.render(*this);
+        ImGui::Separator();
+
+        animationPanel.render(*this);
+        ImGui::Separator();
+
+        resurfacingPanel.renderPathway(*this);
     }
 
     ImGui::Separator();
@@ -441,54 +456,64 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
     ImGui::End();
 
-    // ===================== Settings Panel =====================
-    ImGui::Begin("Settings");
+    // ===================== Lighting & Materials Panel (top-left, below Performance) =====================
+    ImGui::SetNextWindowPos(ImVec2(0, perfH), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelW, displayH - perfH), ImGuiCond_Always);
+    ImGui::Begin("Lighting & Materials", nullptr,
+                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+
+    ImGui::DragFloat3("Light Position", &lightPosition.x, 0.1f, -20.0f, 20.0f);
+    ImGui::SliderFloat("Light Intensity", &lightIntensity, 0.0f, 10.0f);
+    ImGui::ColorEdit3("Ambient Color", &ambientColor.x);
+    ImGui::SliderFloat("Ambient Intensity", &ambientIntensity, 0.0f, 1.0f);
+    ImGui::Separator();
+    ImGui::Text("Coat Procedural Surface");
+    ImGui::ColorEdit3("Base Color##proc", &procBaseColor.x);
+    ImGui::SliderFloat("Roughness##proc", &roughness, 0.05f, 1.0f);
+    ImGui::SliderFloat("Metallic##proc", &metallic, 0.0f, 1.0f);
+    ImGui::SliderFloat("AO##proc", &ao, 0.0f, 1.0f);
+    ImGui::SliderFloat("Dielectric F0##proc", &dielectricF0, 0.0f, 0.2f, "%.3f");
+    ImGui::SliderFloat("Env Reflection##proc", &envReflection, 0.0f, 1.0f);
+    if (dualMeshActive) {
+        ImGui::Separator();
+        ImGui::Text("Dragon Procedural Surface");
+        ImGui::ColorEdit3("Base Color##base", &baseMeshBaseColor.x);
+        ImGui::SliderFloat("Roughness##base", &baseMeshRoughness, 0.05f, 1.0f);
+        ImGui::SliderFloat("Metallic##base", &baseMeshMetallic, 0.0f, 1.0f);
+        ImGui::SliderFloat("AO##base", &baseMeshAo, 0.0f, 1.0f);
+        ImGui::SliderFloat("Dielectric F0##base", &baseMeshDielectricF0, 0.0f, 0.2f, "%.3f");
+        ImGui::SliderFloat("Env Reflection##base", &baseMeshEnvReflection, 0.0f, 1.0f);
+        ImGui::Separator();
+        ImGui::Text("Dragon Base Mesh");
+        ImGui::ColorEdit3("Base Color##solidSec", &secBaseMeshSolidBaseColor.x);
+        ImGui::SliderFloat("Roughness##solidSec", &secBaseMeshSolidRoughness, 0.05f, 1.0f);
+        ImGui::SliderFloat("Metallic##solidSec", &secBaseMeshSolidMetallic, 0.0f, 1.0f);
+        ImGui::SliderFloat("AO##solidSec", &secBaseMeshSolidAo, 0.0f, 1.0f);
+        ImGui::SliderFloat("Dielectric F0##solidSec", &secBaseMeshSolidDielectricF0, 0.0f, 0.2f, "%.3f");
+        ImGui::SliderFloat("Env Reflection##solidSec", &secBaseMeshSolidEnvReflection, 0.0f, 1.0f);
+    }
+    if (baseMeshMode > 0) {
+        ImGui::Separator();
+        ImGui::Text("Coat Base Mesh Overlay");
+        ImGui::ColorEdit3("Base Color##solid", &baseMeshSolidBaseColor.x);
+        ImGui::SliderFloat("Roughness##solid", &baseMeshSolidRoughness, 0.05f, 1.0f);
+        ImGui::SliderFloat("Metallic##solid", &baseMeshSolidMetallic, 0.0f, 1.0f);
+        ImGui::SliderFloat("AO##solid", &baseMeshSolidAo, 0.0f, 1.0f);
+        ImGui::SliderFloat("Dielectric F0##solid", &baseMeshSolidDielectricF0, 0.0f, 0.2f, "%.3f");
+        ImGui::SliderFloat("Env Reflection##solid", &baseMeshSolidEnvReflection, 0.0f, 1.0f);
+    }
+
+    ImGui::End();
+
+    // ===================== Settings Panel (bottom-left, below Lighting) =====================
+    // Note: Settings now contains Debug Visualization, Camera, and Advanced panels
+    // It shares the left column with Performance + Lighting via scrolling
+    ImGui::SetNextWindowPos(ImVec2(panelW, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.5f), ImGuiCond_Always);
+    ImGui::Begin("Settings", nullptr,
+                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
 
     advancedPanel.render(*this);
-
-    // Lighting controls
-    if (ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::DragFloat3("Light Position", &lightPosition.x, 0.1f, -20.0f, 20.0f);
-        ImGui::SliderFloat("Light Intensity", &lightIntensity, 0.0f, 10.0f);
-        ImGui::ColorEdit3("Ambient Color", &ambientColor.x);
-        ImGui::SliderFloat("Ambient Intensity", &ambientIntensity, 0.0f, 1.0f);
-        ImGui::Separator();
-        ImGui::Text("Coat Procedural Surface");
-        ImGui::ColorEdit3("Base Color##proc", &procBaseColor.x);
-        ImGui::SliderFloat("Roughness##proc", &roughness, 0.05f, 1.0f);
-        ImGui::SliderFloat("Metallic##proc", &metallic, 0.0f, 1.0f);
-        ImGui::SliderFloat("AO##proc", &ao, 0.0f, 1.0f);
-        ImGui::SliderFloat("Dielectric F0##proc", &dielectricF0, 0.0f, 0.2f, "%.3f");
-        ImGui::SliderFloat("Env Reflection##proc", &envReflection, 0.0f, 1.0f);
-        if (dualMeshActive) {
-            ImGui::Separator();
-            ImGui::Text("Dragon Procedural Surface");
-            ImGui::ColorEdit3("Base Color##base", &baseMeshBaseColor.x);
-            ImGui::SliderFloat("Roughness##base", &baseMeshRoughness, 0.05f, 1.0f);
-            ImGui::SliderFloat("Metallic##base", &baseMeshMetallic, 0.0f, 1.0f);
-            ImGui::SliderFloat("AO##base", &baseMeshAo, 0.0f, 1.0f);
-            ImGui::SliderFloat("Dielectric F0##base", &baseMeshDielectricF0, 0.0f, 0.2f, "%.3f");
-            ImGui::SliderFloat("Env Reflection##base", &baseMeshEnvReflection, 0.0f, 1.0f);
-            ImGui::Separator();
-            ImGui::Text("Dragon Base Mesh");
-            ImGui::ColorEdit3("Base Color##solidSec", &secBaseMeshSolidBaseColor.x);
-            ImGui::SliderFloat("Roughness##solidSec", &secBaseMeshSolidRoughness, 0.05f, 1.0f);
-            ImGui::SliderFloat("Metallic##solidSec", &secBaseMeshSolidMetallic, 0.0f, 1.0f);
-            ImGui::SliderFloat("AO##solidSec", &secBaseMeshSolidAo, 0.0f, 1.0f);
-            ImGui::SliderFloat("Dielectric F0##solidSec", &secBaseMeshSolidDielectricF0, 0.0f, 0.2f, "%.3f");
-            ImGui::SliderFloat("Env Reflection##solidSec", &secBaseMeshSolidEnvReflection, 0.0f, 1.0f);
-        }
-        if (baseMeshMode > 0) {
-            ImGui::Separator();
-            ImGui::Text("Coat Base Mesh Overlay");
-            ImGui::ColorEdit3("Base Color##solid", &baseMeshSolidBaseColor.x);
-            ImGui::SliderFloat("Roughness##solid", &baseMeshSolidRoughness, 0.05f, 1.0f);
-            ImGui::SliderFloat("Metallic##solid", &baseMeshSolidMetallic, 0.0f, 1.0f);
-            ImGui::SliderFloat("AO##solid", &baseMeshSolidAo, 0.0f, 1.0f);
-            ImGui::SliderFloat("Dielectric F0##solid", &baseMeshSolidDielectricF0, 0.0f, 0.2f, "%.3f");
-            ImGui::SliderFloat("Env Reflection##solid", &baseMeshSolidEnvReflection, 0.0f, 1.0f);
-        }
-    }
 
     // Debug visualization
     if (ImGui::CollapsingHeader("Debug Visualization", ImGuiTreeNodeFlags_DefaultOpen)) {
