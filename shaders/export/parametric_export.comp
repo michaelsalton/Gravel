@@ -29,6 +29,7 @@ layout(push_constant) uniform PushConstants {
     float lodFactor;
     uint chainmailMode;
     float chainmailTiltAngle;
+    float chainmailSurfaceOffset;
 } push;
 
 // ============================================================================
@@ -138,6 +139,7 @@ void main() {
                                   position, normal, edgeTangent,
                                   area, push.userScaling,
                                   faceColor, push.chainmailTiltAngle,
+                                  push.chainmailSurfaceOffset,
                                   worldPos, worldNormal);
         } else {
             offsetVertex(localPos, localNormal,

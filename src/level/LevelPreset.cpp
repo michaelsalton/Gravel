@@ -24,6 +24,7 @@ const LevelPreset LEVEL_PRESETS[] = {
 
         .chainmailMode      = false,
         .chainmailTiltAngle = 0.0f,
+        .chainmailSurfaceOffset = 0.0f,
 
         .thirdPersonMode    = false,
         .orbitCameraDistance = 5.0f,
@@ -52,15 +53,16 @@ const LevelPreset LEVEL_PRESETS[] = {
 
         .renderResurfacing  = true,
         .elementType        = 0,        // Torus
-        .torusMajorR        = 0.814f,
-        .torusMinorR        = 0.158f,
+        .torusMajorR        = 0.965f,
+        .torusMinorR        = 0.149f,
         .sphereRadius       = 0.5f,
-        .userScaling        = 0.602f,
-        .resolutionM        = 24,
-        .resolutionN        = 6,
+        .userScaling        = 0.628f,
+        .resolutionM        = 37,
+        .resolutionN        = 37,
 
         .chainmailMode      = true,
-        .chainmailTiltAngle = 0.08f,
+        .chainmailTiltAngle = 0.26f,
+        .chainmailSurfaceOffset = 0.500f,
 
         .thirdPersonMode    = true,
         .orbitCameraDistance = 5.0f,
@@ -71,13 +73,13 @@ const LevelPreset LEVEL_PRESETS[] = {
 
         .lightPosition      = glm::vec3(5.0f, 5.0f, 5.0f),
         .ambientColor       = glm::vec3(11.0f/255.0f, 11.0f/255.0f, 11.0f/255.0f),
-        .ambientIntensity   = 0.717f,
-        .roughness          = 0.3f,
+        .ambientIntensity   = 0.311f,
+        .roughness          = 0.198f,
         .metallic           = 1.0f,
-        .ao                 = 1.0f,
-        .dielectricF0       = 0.04f,
-        .envReflection      = 0.35f,
-        .lightIntensity     = 3.0f,
+        .ao                 = 0.697f,
+        .dielectricF0       = 0.065f,
+        .envReflection      = 0.572f,
+        .lightIntensity     = 10.0f,
     },
 };
 

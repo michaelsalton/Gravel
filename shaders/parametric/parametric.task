@@ -52,10 +52,10 @@ layout(push_constant) uniform PushConstants {
     float cullingThreshold; // Back-face culling dot product threshold
     uint enableLod;         // 0 = fixed resolution, 1 = adaptive LOD
     float lodFactor;        // LOD quality multiplier (1.0 = balanced)
-    uint chainmailMode;         // 0 = off, 1 = chainmail orientation
-    float chainmailTiltAngle;   // Tilt angle in radians
-    uint useDirectIndex;        // 1 = globalId = gl_WorkGroupID.x (secondary mesh dispatch)
-    uint _pad;
+    uint chainmailMode;             // 0 = off, 1 = chainmail orientation
+    float chainmailTiltAngle;       // Tilt angle in radians
+    uint useDirectIndex;            // 1 = globalId = gl_WorkGroupID.x (secondary mesh dispatch)
+    float chainmailSurfaceOffset;   // Normal lift to avoid mesh intersection
 } push;
 
 // ============================================================================

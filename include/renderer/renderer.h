@@ -86,7 +86,7 @@ struct GlobalShadingUBO {
     // Base colors (offset 80 / 96)
     glm::vec4 procBaseColor;            // primary coat base color      (offset 80)
     glm::vec4 baseMeshBaseColor;        // secondary dragon base color  (offset 96)
-    // Base mesh solid overlay material (offset 112)
+    // Base mesh solid overlay material (offset 112) — primary/coat base mesh
     float baseMeshSolidRoughness;
     float baseMeshSolidMetallic;
     float baseMeshSolidAo;
@@ -94,7 +94,15 @@ struct GlobalShadingUBO {
     float baseMeshSolidEnvReflection;
     float _pad2a; float _pad2b; float _pad2c;  // padding to align vec4 at offset 144
     glm::vec4 baseMeshSolidBaseColor;          // base mesh solid base color (offset 144)
-    // total: 160 bytes
+    // Secondary base mesh solid overlay material (offset 160) — dragon body base mesh
+    float secBaseMeshSolidRoughness;
+    float secBaseMeshSolidMetallic;
+    float secBaseMeshSolidAo;
+    float secBaseMeshSolidDielectricF0;
+    float secBaseMeshSolidEnvReflection;
+    float _pad3a; float _pad3b; float _pad3c;  // padding to align vec4 at offset 192
+    glm::vec4 secBaseMeshSolidBaseColor;       // secondary base mesh solid base color (offset 192)
+    // total: 208 bytes
 };
 
 // Must stay in sync with shaders/shaderInterface.h PebbleUBO
@@ -160,7 +168,7 @@ struct PushConstants {
     uint32_t chainmailMode;
     float chainmailTiltAngle;
     uint32_t useDirectIndex;   // 1 = globalId = gl_WorkGroupID.x (no visibleIndices lookup)
-    uint32_t _pad;
+    float chainmailSurfaceOffset;  // Normal-direction lift to prevent mesh intersection
 };
 
 struct BenchmarkPushConstants {
@@ -218,7 +226,8 @@ public:
     float lodFactor = 1.0f;
     int baseMeshMode = 0;  // 0=off, 1=wireframe, 2=solid, 3=both
     bool chainmailMode = false;
-    float chainmailTiltAngle = 1.0f;    // Lean blend: 0=flat, 1=full chainmail lean
+    float chainmailTiltAngle = 1.0f;          // Lean blend: 0=flat, 1=full chainmail lean
+    float chainmailSurfaceOffset = 0.1f;      // Normal lift to avoid mesh intersection
     bool triangulateMesh = false;
     int subdivideLevel = 0;  // 0=none, 1=4x, 2=16x, 3=64x faces
     bool useElementTypeTexture = false;
@@ -334,6 +343,13 @@ public:
     float baseMeshSolidDielectricF0 = 0.04f;
     float baseMeshSolidEnvReflection = 0.1f;
     glm::vec3 baseMeshSolidBaseColor = {0.7f, 0.7f, 0.7f};
+    // Secondary base mesh (dragon body) solid overlay material
+    float secBaseMeshSolidRoughness    = 0.8f;
+    float secBaseMeshSolidMetallic     = 0.0f;
+    float secBaseMeshSolidAo           = 1.0f;
+    float secBaseMeshSolidDielectricF0 = 0.04f;
+    float secBaseMeshSolidEnvReflection = 0.1f;
+    glm::vec3 secBaseMeshSolidBaseColor = {0.7f, 0.7f, 0.7f};
 
     // Loaded-state flags (read by UI panels)
     bool aoTextureLoaded = false;

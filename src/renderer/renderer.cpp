@@ -422,7 +422,13 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     shadingData.baseMeshSolidAo            = baseMeshSolidAo;
     shadingData.baseMeshSolidDielectricF0  = baseMeshSolidDielectricF0;
     shadingData.baseMeshSolidEnvReflection = baseMeshSolidEnvReflection;
-    shadingData.baseMeshSolidBaseColor     = glm::vec4(baseMeshSolidBaseColor, 1.0f);
+    shadingData.baseMeshSolidBaseColor        = glm::vec4(baseMeshSolidBaseColor, 1.0f);
+    shadingData.secBaseMeshSolidRoughness     = secBaseMeshSolidRoughness;
+    shadingData.secBaseMeshSolidMetallic      = secBaseMeshSolidMetallic;
+    shadingData.secBaseMeshSolidAo            = secBaseMeshSolidAo;
+    shadingData.secBaseMeshSolidDielectricF0  = secBaseMeshSolidDielectricF0;
+    shadingData.secBaseMeshSolidEnvReflection = secBaseMeshSolidEnvReflection;
+    shadingData.secBaseMeshSolidBaseColor     = glm::vec4(secBaseMeshSolidBaseColor, 1.0f);
     memcpy(shadingUBOMapped[currentFrame], &shadingData, sizeof(GlobalShadingUBO));
 
     // Per-frame animation update
@@ -482,6 +488,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         secData.normalPerturbation = secondaryNormalPerturbation;
         secData.minLutExtent     = scaleLutMinExtent;
         secData.maxLutExtent     = scaleLutMaxExtent;
+        // Secondary mesh shares skinning state with primary
+        secData.doSkinning       = (skeletonLoaded && doSkinning) ? 1u : 0u;
         memcpy(secondaryResurfacingUBOMapped, &secData, sizeof(ResurfacingUBO));
     }
 
@@ -505,6 +513,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     pushConstants.lodFactor = lodFactor;
     pushConstants.chainmailMode = chainmailMode ? 1u : 0u;
     pushConstants.chainmailTiltAngle = chainmailTiltAngle;
+    pushConstants.chainmailSurfaceOffset = chainmailSurfaceOffset;
 
     vkCmdPushConstants(cmd, pipelineLayout,
                         VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
@@ -790,7 +799,9 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
 
     // Base mesh overlay (0=off, 1=wireframe, 2=solid, 3=both)
     if (baseMeshMode > 0 && heMeshUploaded) {
-        auto drawBaseMesh = [&](VkPipeline pipeline) {
+        auto drawBaseMesh = [&](VkPipeline pipeline, VkDescriptorSet heSet,
+                                 VkDescriptorSet objSet, uint32_t nbFaces,
+                                 uint32_t useDirectIdx) {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                      pipelineLayout, 0, 1,
@@ -798,33 +809,46 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                                      0, nullptr);
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                      pipelineLayout, 1, 1,
-                                     &heDescriptorSet,
-                                     0, nullptr);
+                                     &heSet, 0, nullptr);
             vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                      pipelineLayout, 2, 1,
-                                     &perObjectDescriptorSet,
-                                     0, nullptr);
+                                     &objSet, 0, nullptr);
+            pushConstants.useDirectIndex = useDirectIdx;
             vkCmdPushConstants(cmd, pipelineLayout,
                                 VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
                                 VK_SHADER_STAGE_FRAGMENT_BIT,
                                 0, sizeof(PushConstants), &pushConstants);
-            pfnCmdDrawMeshTasksEXT(cmd, heNbFaces, 1, 1);
+            pfnCmdDrawMeshTasksEXT(cmd, nbFaces, 1, 1);
+            pushConstants.useDirectIndex = 0;
             frameDrawCalls++;
         };
 
+        // Primary base mesh (coat)
         if (baseMeshMode == 5) {
-            pushConstants.debugMode = 101;  // signal skin texture to frag shader
-            drawBaseMesh(baseMeshSolidPipeline);
-            pushConstants.debugMode = debugMode;  // restore
+            pushConstants.debugMode = 101;
+            drawBaseMesh(baseMeshSolidPipeline, heDescriptorSet, perObjectDescriptorSet, heNbFaces, 0);
+            pushConstants.debugMode = debugMode;
         } else if (baseMeshMode == 4) {
-            pushConstants.debugMode = 100;  // signal mask preview to frag shader
-            drawBaseMesh(baseMeshSolidPipeline);
-            pushConstants.debugMode = debugMode;  // restore
+            pushConstants.debugMode = 100;
+            drawBaseMesh(baseMeshSolidPipeline, heDescriptorSet, perObjectDescriptorSet, heNbFaces, 0);
+            pushConstants.debugMode = debugMode;
         } else if (baseMeshMode == 2 || baseMeshMode == 3) {
-            drawBaseMesh(baseMeshSolidPipeline);
+            drawBaseMesh(baseMeshSolidPipeline, heDescriptorSet, perObjectDescriptorSet, heNbFaces, 0);
         }
         if (baseMeshMode == 1 || baseMeshMode == 3)
-            drawBaseMesh(baseMeshPipeline);
+            drawBaseMesh(baseMeshPipeline, heDescriptorSet, perObjectDescriptorSet, heNbFaces, 0);
+
+        // Secondary base mesh (dragon body) — only when dual mesh active
+        if (dualMeshActive && secondaryHeNbFaces > 0) {
+            if (baseMeshMode == 2 || baseMeshMode == 3) {
+                drawBaseMesh(baseMeshSolidPipeline, secondaryHeDescriptorSet,
+                             secondaryPerObjectDescriptorSet, secondaryHeNbFaces, 1);
+            }
+            if (baseMeshMode == 1 || baseMeshMode == 3) {
+                drawBaseMesh(baseMeshPipeline, secondaryHeDescriptorSet,
+                             secondaryPerObjectDescriptorSet, secondaryHeNbFaces, 1);
+            }
+        }
     }
 
     // Benchmark mesh (traditional vertex pipeline)
@@ -1097,6 +1121,7 @@ void Renderer::exportProceduralMesh(const std::string& filepath, int mode) {
     pc.lodFactor = 1.0f;
     pc.chainmailMode = chainmailMode ? 1 : 0;
     pc.chainmailTiltAngle = chainmailTiltAngle;
+    pc.chainmailSurfaceOffset = chainmailSurfaceOffset;
 
     vkCmdPushConstants(cmd, computePipelineLayout,
                        VK_SHADER_STAGE_COMPUTE_BIT,

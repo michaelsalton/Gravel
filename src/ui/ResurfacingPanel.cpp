@@ -123,6 +123,7 @@ void ResurfacingPanel::render(Renderer& r) {
                 ImGui::SliderFloat("Lean Amount", &r.chainmailTiltAngle, 0.0f, 1.0f, "%.2f");
                 ImGui::SameLine();
                 ImGui::Text("(0=flat, 1=full)");
+                ImGui::SliderFloat("Surface Offset", &r.chainmailSurfaceOffset, 0.0f, 0.5f, "%.3f");
                 ImGui::Unindent();
             }
 

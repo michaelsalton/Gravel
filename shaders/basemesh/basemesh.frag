@@ -35,13 +35,20 @@ layout(set = SET_SCENE, binding = BINDING_SHADING_UBO) uniform ShadingUBOBlock {
     float _padding1;            // offset 76
     vec4  _procBaseColor;       // offset 80
     vec4  _secBaseColor;        // offset 96
-    float roughness;            // offset 112 — base mesh solid overlay material
+    float roughness;            // offset 112 — primary base mesh solid overlay material
     float metallic;
     float ao;
     float dielectricF0;
     float envReflection;
     float _pad2a; float _pad2b; float _pad2c;  // offset 132-140
     vec4  baseMeshBaseColor;    // offset 144
+    float secRoughness;         // offset 160 — secondary base mesh solid overlay material
+    float secMetallic;
+    float secAo;
+    float secDielectricF0;
+    float secEnvReflection;
+    float _pad3a; float _pad3b; float _pad3c;  // offset 180-188
+    vec4  secBaseMeshBaseColor; // offset 192
 } shadingUBO;
 
 layout(push_constant) uniform PushConstants {
@@ -56,6 +63,13 @@ layout(push_constant) uniform PushConstants {
     uint resolutionM;
     uint resolutionN;
     uint debugMode;
+    uint enableCulling;
+    float cullingThreshold;
+    uint enableLod;
+    float lodFactor;
+    uint chainmailMode;
+    float chainmailTiltAngle;
+    uint useDirectIndex;
 } push;
 
 layout(location = 0) out vec4 outColor;
@@ -94,17 +108,24 @@ void main() {
         return;
     }
 
-    // Use user-defined base color
-    vec3 baseColor = shadingUBO.baseMeshBaseColor.rgb;
+    // Select primary or secondary base mesh material
+    bool isSecondary = (push.useDirectIndex != 0u);
+    vec3  matBaseColor = isSecondary ? shadingUBO.secBaseMeshBaseColor.rgb : shadingUBO.baseMeshBaseColor.rgb;
+    float matRoughness = isSecondary ? shadingUBO.secRoughness   : shadingUBO.roughness;
+    float matMetallic  = isSecondary ? shadingUBO.secMetallic    : shadingUBO.metallic;
+    float matAo        = isSecondary ? shadingUBO.secAo          : shadingUBO.ao;
+    float matF0        = isSecondary ? shadingUBO.secDielectricF0 : shadingUBO.dielectricF0;
+    float matEnvRefl   = isSecondary ? shadingUBO.secEnvReflection : shadingUBO.envReflection;
+
     vec3 color = cookTorrancePBR(inWorldPos, N,
                                  shadingUBO.lightPosition.xyz,
                                  viewUBO.cameraPosition.xyz,
-                                 baseColor,
-                                 shadingUBO.roughness,
-                                 shadingUBO.metallic,
-                                 shadingUBO.dielectricF0,
+                                 matBaseColor,
+                                 matRoughness,
+                                 matMetallic,
+                                 matF0,
                                  shadingUBO.ambient,
-                                 shadingUBO.envReflection,
+                                 matEnvRefl,
                                  shadingUBO.lightIntensity);
     color = toneMapACES(color);
 

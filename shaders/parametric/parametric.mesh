@@ -64,7 +64,7 @@ layout(push_constant) uniform PushConstants {
     uint chainmailMode;
     float chainmailTiltAngle;
     uint useDirectIndex;
-    uint _pad;
+    float chainmailSurfaceOffset;
 } push;
 
 layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
@@ -122,6 +122,7 @@ void main() {
                                   payload.edgeTangent,
                                   payload.area, push.userScaling,
                                   payload.faceColor, push.chainmailTiltAngle,
+                                  push.chainmailSurfaceOffset,
                                   worldPos, worldNormal);
         } else {
             offsetVertex(localPos, localNormal,

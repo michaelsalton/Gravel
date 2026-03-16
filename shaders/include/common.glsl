@@ -86,9 +86,13 @@ void offsetVertexChainmail(vec3 localPos, vec3 localNormal,
                            vec3 edgeTangent,
                            float faceArea, float userScaling,
                            float faceColor, float tiltAmount,
+                           float surfaceOffset,
                            out vec3 worldPos, out vec3 worldNormal) {
     float scale = sqrt(faceArea) * userScaling;
     vec3 pos = localPos * scale;
+
+    // Lift spawn point off the mesh surface to prevent intersection when leaning
+    elementPos += normalize(elementNormal) * (surfaceOffset * scale);
 
     // Build TBN frame from mesh edge tangent (not arbitrary helper vector)
     // This ensures tilt direction follows mesh structure for organized rows

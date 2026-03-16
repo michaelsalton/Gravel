@@ -465,6 +465,16 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             ImGui::SliderFloat("Dielectric F0##solid", &baseMeshSolidDielectricF0, 0.0f, 0.2f, "%.3f");
             ImGui::SliderFloat("Env Reflection##solid", &baseMeshSolidEnvReflection, 0.0f, 1.0f);
         }
+        if (baseMeshMode > 0 && dualMeshActive) {
+            ImGui::Separator();
+            ImGui::Text("Dragon (Base Mesh) Overlay Material");
+            ImGui::ColorEdit3("Base Color##solidSec", &secBaseMeshSolidBaseColor.x);
+            ImGui::SliderFloat("Roughness##solidSec", &secBaseMeshSolidRoughness, 0.05f, 1.0f);
+            ImGui::SliderFloat("Metallic##solidSec", &secBaseMeshSolidMetallic, 0.0f, 1.0f);
+            ImGui::SliderFloat("AO##solidSec", &secBaseMeshSolidAo, 0.0f, 1.0f);
+            ImGui::SliderFloat("Dielectric F0##solidSec", &secBaseMeshSolidDielectricF0, 0.0f, 0.2f, "%.3f");
+            ImGui::SliderFloat("Env Reflection##solidSec", &secBaseMeshSolidEnvReflection, 0.0f, 1.0f);
+        }
     }
 
     // Debug visualization
@@ -557,23 +567,33 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
 void Renderer::applyPresetChainMail() {
     elementType        = 0;       // Torus
-    torusMajorR        = 0.814f;
-    torusMinorR        = 0.158f;
-    userScaling        = 0.602f;
-    resolutionM        = 24;
-    resolutionN        = 6;
+    torusMajorR        = 0.965f;
+    torusMinorR        = 0.149f;
+    userScaling        = 0.628f;
+    resolutionM        = 37;
+    resolutionN        = 37;
     chainmailMode      = true;
-    chainmailTiltAngle = 0.08f;
+    chainmailTiltAngle = 0.26f;
+    chainmailSurfaceOffset = 0.500f;
 
     // PBR lighting for metallic chainmail
+    procBaseColor      = glm::vec3(115.0f/255.0f, 115.0f/255.0f, 115.0f/255.0f);
     ambientColor       = glm::vec3(11.0f/255.0f, 11.0f/255.0f, 11.0f/255.0f);
-    ambientIntensity   = 0.717f;
-    roughness          = 0.3f;
+    ambientIntensity   = 0.311f;
+    roughness          = 0.198f;
     metallic           = 1.0f;
-    ao                 = 1.0f;
-    dielectricF0       = 0.04f;
-    envReflection      = 0.35f;
-    lightIntensity     = 3.0f;
+    ao                 = 0.697f;
+    dielectricF0       = 0.065f;
+    envReflection      = 0.572f;
+    lightIntensity     = 10.0f;
+
+    // Base mesh overlay material
+    baseMeshSolidBaseColor      = glm::vec3(0.0f, 0.0f, 0.0f);
+    baseMeshSolidRoughness      = 1.0f;
+    baseMeshSolidMetallic       = 1.0f;
+    baseMeshSolidAo             = 1.0f;
+    baseMeshSolidDielectricF0   = 0.0f;
+    baseMeshSolidEnvReflection  = 0.1f;
 }
 
 void Renderer::applyPreset(const LevelPreset& preset) {
@@ -603,6 +623,7 @@ void Renderer::applyPreset(const LevelPreset& preset) {
     // Chainmail
     chainmailMode = preset.chainmailMode;
     chainmailTiltAngle = preset.chainmailTiltAngle;
+    chainmailSurfaceOffset = preset.chainmailSurfaceOffset;
 
     // Camera / Player
     thirdPersonMode = preset.thirdPersonMode;

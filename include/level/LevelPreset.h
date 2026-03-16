@@ -24,6 +24,7 @@ struct LevelPreset {
     // Chainmail
     bool chainmailMode;
     float chainmailTiltAngle;
+    float chainmailSurfaceOffset;
 
     // Camera / Player
     bool thirdPersonMode;
