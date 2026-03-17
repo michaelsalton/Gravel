@@ -470,6 +470,12 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         resurfData.normalPerturbation = normalPerturbation;
         resurfData.minLutExtent       = scaleLutMinExtent;
         resurfData.maxLutExtent       = scaleLutMaxExtent;
+        // Straw parameters
+        resurfData.strawTaperPower     = strawTaperPower;
+        resurfData.strawBendAmount     = strawBendAmount;
+        resurfData.strawBaseRadius     = strawBaseRadius;
+        resurfData.strawBendDirection  = strawBendDirection;
+        resurfData.strawBendRandomness = strawBendRandomness;
         memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
     }
 

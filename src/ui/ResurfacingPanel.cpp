@@ -24,9 +24,9 @@ void ResurfacingPanel::render(Renderer& r) {
         if (r.renderResurfacing && !r.renderPebbles) {
             ImGui::Separator();
 
-            const char* surfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder", "Hemisphere", "Dragon Scale"};
+            const char* surfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder", "Hemisphere", "Dragon Scale", "Straw"};
             int currentType = static_cast<int>(r.elementType);
-            if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 6)) {
+            if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 7)) {
                 r.elementType = static_cast<uint32_t>(currentType);
             }
 
@@ -62,6 +62,13 @@ void ResurfacingPanel::render(Renderer& r) {
                     ImGui::TextDisabled("  LUT: %ux%u control points", r.scaleLutNx, r.scaleLutNy);
                 else
                     ImGui::TextColored(ImVec4(1,0.5f,0,1), "  scale_lut.obj not found");
+            } else if (r.elementType == 6) {
+                ImGui::Text("Straw Parameters:");
+                ImGui::SliderFloat("Base Radius", &r.strawBaseRadius, 0.01f, 0.3f);
+                ImGui::SliderFloat("Taper Power", &r.strawTaperPower, 1.0f, 5.0f);
+                ImGui::SliderFloat("Bend Amount", &r.strawBendAmount, 0.0f, 1.0f);
+                ImGui::SliderAngle("Bend Direction", &r.strawBendDirection, 0.0f, 360.0f);
+                ImGui::SliderFloat("Bend Randomness", &r.strawBendRandomness, 0.0f, 1.0f);
             }
 
             ImGui::Separator();
@@ -139,9 +146,9 @@ void ResurfacingPanel::render(Renderer& r) {
                 if (ImGui::CollapsingHeader("Dragon (Base Mesh)", ImGuiTreeNodeFlags_DefaultOpen)) {
                     ImGui::PushID("secondary");
 
-                    const char* secSurfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder", "Hemisphere", "Dragon Scale"};
+                    const char* secSurfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder", "Hemisphere", "Dragon Scale", "Straw"};
                     int secType = static_cast<int>(r.secondaryElementType);
-                    if (ImGui::Combo("Surface Type##sec", &secType, secSurfaceTypes, 6))
+                    if (ImGui::Combo("Surface Type##sec", &secType, secSurfaceTypes, 7))
                         r.secondaryElementType = static_cast<uint32_t>(secType);
 
                     ImGui::SliderFloat("Global Scale##sec", &r.secondaryUserScaling, 0.01f, 3.0f);

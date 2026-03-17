@@ -63,7 +63,17 @@ struct ResurfacingUBO {
     float     pad_lut             = 0.0f;
     glm::vec4 minLutExtent        = glm::vec4(0.0f);
     glm::vec4 maxLutExtent        = glm::vec4(1.0f);
-    // total: 112 bytes
+
+    // Straw parameters (std140 offsets 112-143)
+    float     strawTaperPower     = 2.0f;
+    float     strawBendAmount     = 0.3f;
+    float     strawBaseRadius     = 0.05f;
+    float     strawBendDirection  = 0.0f;
+    float     strawBendRandomness = 0.0f;
+    float     pad_straw0          = 0.0f;
+    float     pad_straw1          = 0.0f;
+    float     pad_straw2          = 0.0f;
+    // total: 144 bytes
 };
 
 struct GlobalShadingUBO {
@@ -235,6 +245,11 @@ public:
     bool useAOTexture = false;
     bool useMaskTexture = false;
     float    normalPerturbation = 0.2f;    // Dragon scale: per-element random twist [0, 1]
+    float    strawTaperPower     = 2.0f;   // Straw: tip sharpness exponent [1, 5]
+    float    strawBendAmount     = 0.3f;  // Straw: quadratic droop magnitude [0, 1]
+    float    strawBaseRadius     = 0.05f; // Straw: tube thickness
+    float    strawBendDirection  = 0.0f;  // Straw: bend direction angle in radians [0, 2pi]
+    float    strawBendRandomness = 0.0f;  // Straw: 0 = uniform direction, 1 = fully random
     bool     scaleLutLoaded    = false;
     uint32_t scaleLutNx        = 0;
     uint32_t scaleLutNy        = 0;

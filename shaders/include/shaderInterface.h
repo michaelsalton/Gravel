@@ -98,7 +98,17 @@ struct ResurfacingUBO {
     float pad_lut;              // std140 padding (offset 76)
     vec4  minLutExtent;         // LUT AABB min (offset 80)
     vec4  maxLutExtent;         // LUT AABB max (offset 96)
-    // total: 112 bytes
+
+    // Straw parameters (std140 offsets 112-139)
+    float strawTaperPower;      // tip sharpness exponent (offset 112)
+    float strawBendAmount;      // quadratic droop magnitude (offset 116)
+    float strawBaseRadius;      // tube thickness (offset 120)
+    float strawBendDirection;   // bend direction angle in radians (offset 124)
+    float strawBendRandomness;  // 0 = uniform direction, 1 = fully random (offset 128)
+    float pad_straw0;           // std140 padding (offset 132)
+    float pad_straw1;           // std140 padding (offset 136)
+    float pad_straw2;           // std140 padding (offset 140)
+    // total: 144 bytes
 };
 
 // ============================================================================
@@ -282,6 +292,15 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
     float pad_lut;
     vec4  minLutExtent;
     vec4  maxLutExtent;
+    // Straw parameters (offsets 112-143)
+    float strawTaperPower;
+    float strawBendAmount;
+    float strawBaseRadius;
+    float strawBendDirection;
+    float strawBendRandomness;
+    float pad_straw0;
+    float pad_straw1;
+    float pad_straw2;
 } resurfacingUBO;
 
 #endif

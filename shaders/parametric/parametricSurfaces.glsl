@@ -148,11 +148,68 @@ void parametricDragonScale(vec2 uv, out vec3 pos, out vec3 normal) {
 }
 
 // ============================================================================
+// Parametric Straw (curved tapered cone)
+// ============================================================================
+
+void parametricStraw(vec2 uv, out vec3 pos, out vec3 normal, uint elementId) {
+    float taperPower    = resurfacingUBO.strawTaperPower;
+    float bendAmount    = resurfacingUBO.strawBendAmount;
+    float baseRadius    = resurfacingUBO.strawBaseRadius;
+    float bendDirection = resurfacingUBO.strawBendDirection;
+    float bendRandomness = resurfacingUBO.strawBendRandomness;
+
+    float u = uv.x * 2.0 * PI;   // Azimuthal [0, 2pi]
+    float v = uv.y;               // Height [0, 1] base to tip
+
+    float cosU = cos(u);
+    float sinU = sin(u);
+
+    // Thin constant-radius tube with subtle taper only at the very tip.
+    // smoothstep kicks in only in the last ~10% of the length, controlled
+    // by taperPower (higher = taper starts later / is more abrupt).
+    float taperStart = clamp(1.0 - 1.0 / taperPower, 0.5, 0.98);
+    float taper = 1.0 - smoothstep(taperStart, 1.0, v);
+    float r = baseRadius * taper;
+
+    // Height: tall straw (aspect ratio ~20:1)
+    float height = 2.0;
+
+    // Per-element random offset for bend direction (golden ratio hash)
+    float randomAngle = fract(float(elementId) * 0.618033988749895) * 2.0 * PI;
+    float bendAngle = bendDirection + bendRandomness * randomAngle;
+    float bendCos = cos(bendAngle);
+    float bendSin = sin(bendAngle);
+
+    // Quadratic bend along length, rotated by bendAngle in XY plane
+    float bend = bendAmount * v * v;
+    float bendX = bend * bendCos;
+    float bendY = bend * bendSin;
+
+    pos.x = r * cosU + bendX;
+    pos.y = r * sinU + bendY;
+    pos.z = height * v;
+
+    // Analytic partial derivatives for normal
+    float taperRange = 1.0 - taperStart;
+    float t = clamp((v - taperStart) / taperRange, 0.0, 1.0);
+    float dtaperdv = -6.0 * t * (1.0 - t) / taperRange;
+    float drdv = baseRadius * dtaperdv;
+    float dbdv = 2.0 * bendAmount * v;
+    float dbxdv = dbdv * bendCos;
+    float dbydv = dbdv * bendSin;
+
+    vec3 dpdu = vec3(-r * sinU, r * cosU, 0.0);
+    vec3 dpdv = vec3(drdv * cosU + dbxdv, drdv * sinU + dbydv, height);
+    normal = normalize(cross(dpdu, dpdv));
+}
+
+// ============================================================================
 // Dispatch Function
 // ============================================================================
 
 void evaluateParametricSurface(vec2 uv, out vec3 pos, out vec3 normal, uint elementType,
-                                float torusMajorR, float torusMinorR, float sphereRadius) {
+                                float torusMajorR, float torusMinorR, float sphereRadius,
+                                uint elementId) {
     switch (elementType) {
         case 0:  parametricTorus(uv, pos, normal, torusMajorR, torusMinorR); break;
         case 1:  parametricSphere(uv, pos, normal, sphereRadius); break;
@@ -160,6 +217,7 @@ void evaluateParametricSurface(vec2 uv, out vec3 pos, out vec3 normal, uint elem
         case 3:  parametricCylinder(uv, pos, normal, 0.5, 1.0); break;
         case 4:  parametricHemisphere(uv, pos, normal, sphereRadius); break;
         case 5:  parametricDragonScale(uv, pos, normal); break;
+        case 6:  parametricStraw(uv, pos, normal, elementId); break;
         default: parametricSphere(uv, pos, normal, sphereRadius); break;
     }
 }
