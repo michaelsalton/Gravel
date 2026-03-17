@@ -108,6 +108,23 @@ void main() {
         return;
     }
 
+    // Colored faces: unique color per face from hash
+    if (push.debugMode == 102u) {
+        uint h = inFaceId;
+        h = ((h >> 16u) ^ h) * 0x45d9f3bu;
+        h = ((h >> 16u) ^ h) * 0x45d9f3bu;
+        h = (h >> 16u) ^ h;
+        vec3 faceColor = vec3(
+            float((h >>  0u) & 0xFFu) / 255.0,
+            float((h >>  8u) & 0xFFu) / 255.0,
+            float((h >> 16u) & 0xFFu) / 255.0
+        );
+        // Light shading so faces are distinguishable in 3D
+        float NdotL = max(dot(N, normalize(shadingUBO.lightPosition.xyz - inWorldPos)), 0.0);
+        outColor = vec4(faceColor * (0.3 + 0.7 * NdotL), 1.0);
+        return;
+    }
+
     // Select primary or secondary base mesh material
     bool isSecondary = (push.useDirectIndex != 0u);
     vec3  matBaseColor = isSecondary ? shadingUBO.secBaseMeshBaseColor.rgb : shadingUBO.baseMeshBaseColor.rgb;

@@ -259,37 +259,6 @@ void ResurfacingPanel::render(Renderer& r) {
             }
 
             ImGui::Separator();
-
-            // Presets
-            if (ImGui::Button("Smooth Pebbles")) {
-                ubo.subdivisionLevel = 3;
-                ubo.extrusionAmount = 0.15f;
-                ubo.extrusionVariation = 0.3f;
-                ubo.roundness = 2.0f;
-                ubo.doNoise = 0;
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Rocky Pebbles")) {
-                ubo.subdivisionLevel = 4;
-                ubo.extrusionAmount = 0.2f;
-                ubo.extrusionVariation = 0.5f;
-                ubo.roundness = 1.0f;
-                ubo.doNoise = 1;
-                ubo.noiseAmplitude = 0.08f;
-                ubo.noiseFrequency = 5.0f;
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Cobblestone")) {
-                ubo.subdivisionLevel = 2;
-                ubo.extrusionAmount = 0.1f;
-                ubo.extrusionVariation = 0.2f;
-                ubo.roundness = 2.0f;
-                ubo.doNoise = 1;
-                ubo.noiseAmplitude = 0.05f;
-                ubo.noiseFrequency = 8.0f;
-            }
-
-            ImGui::Separator();
             ImGui::Checkbox("Show Control Cage", &r.showControlCage);
 
             ImGui::Separator();
@@ -394,34 +363,6 @@ void ResurfacingPanel::renderPathway(Renderer& r) {
                 bool allowLow = ubo.allowLowLod != 0;
                 ImGui::Checkbox("Allow Low LOD##gnd", &allowLow);
                 ubo.allowLowLod = allowLow ? 1 : 0;
-            }
-
-            if (ImGui::Button("Smooth##gnd")) {
-                ubo.subdivisionLevel = 3;
-                ubo.extrusionAmount = 0.15f;
-                ubo.extrusionVariation = 0.3f;
-                ubo.roundness = 2.0f;
-                ubo.doNoise = 0;
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Rocky##gnd")) {
-                ubo.subdivisionLevel = 4;
-                ubo.extrusionAmount = 0.2f;
-                ubo.extrusionVariation = 0.5f;
-                ubo.roundness = 1.0f;
-                ubo.doNoise = 1;
-                ubo.noiseAmplitude = 0.08f;
-                ubo.noiseFrequency = 5.0f;
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Cobble##gnd")) {
-                ubo.subdivisionLevel = 2;
-                ubo.extrusionAmount = 0.1f;
-                ubo.extrusionVariation = 0.2f;
-                ubo.roundness = 2.0f;
-                ubo.doNoise = 1;
-                ubo.noiseAmplitude = 0.05f;
-                ubo.noiseFrequency = 8.0f;
             }
 
             ImGui::Separator();

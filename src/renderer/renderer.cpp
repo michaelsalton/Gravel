@@ -826,7 +826,11 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         };
 
         // Primary base mesh (coat)
-        if (baseMeshMode == 5) {
+        if (baseMeshMode == 6) {
+            pushConstants.debugMode = 102;
+            drawBaseMesh(baseMeshSolidPipeline, heDescriptorSet, perObjectDescriptorSet, heNbFaces, 0);
+            pushConstants.debugMode = debugMode;
+        } else if (baseMeshMode == 5) {
             pushConstants.debugMode = 101;
             drawBaseMesh(baseMeshSolidPipeline, heDescriptorSet, perObjectDescriptorSet, heNbFaces, 0);
             pushConstants.debugMode = debugMode;

@@ -322,61 +322,84 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::End();
     }
 
-    // ===================== Gravel Controls Panel =====================
+    // ===================== Base Mesh Panel (top-right) =====================
     ImGui::SetNextWindowPos(ImVec2(displayW - panelW, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelW, displayH), ImGuiCond_Always);
-    ImGui::Begin("Gravel Controls", nullptr,
+    ImGui::SetNextWindowSize(ImVec2(panelW, 0), ImGuiCond_Always);
+    ImGui::Begin("Base Mesh", nullptr,
+                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+                 ImGuiWindowFlags_AlwaysAutoResize);
+
+    int meshCount = static_cast<int>(assetMeshNames.size());
+    {
+        int prev = selectedMesh;
+        const char* meshPreview = (selectedMesh >= 0 && selectedMesh < meshCount)
+            ? assetMeshNames[selectedMesh].c_str() : "No meshes found";
+        if (ImGui::BeginCombo("Mesh", meshPreview)) {
+            for (int i = 0; i < meshCount; i++) {
+                bool isSelected = (selectedMesh == i);
+                if (ImGui::Selectable(assetMeshNames[i].c_str(), isSelected))
+                    selectedMesh = i;
+                if (isSelected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        bool prevTri = triangulateMesh;
+        int prevSubdiv = subdivideLevel;
+        ImGui::Checkbox("Triangulate", &triangulateMesh);
+        ImGui::SliderInt("Subdivide", &subdivideLevel, 0, 3);
+        if (selectedMesh != prev || triangulateMesh != prevTri || subdivideLevel != prevSubdiv)
+            pendingMeshLoad = assetMeshPaths[selectedMesh];
+        const char* baseMeshModes[] = { "Off", "Wireframe", "Solid", "Both", "Mask", "Skin", "Colored Faces" };
+        int modeCount = 4;
+        if (maskTextureLoaded) modeCount = 5;
+        if (skinTextureLoaded) modeCount = 6;
+        modeCount = std::max(modeCount, 7);  // Colored Faces always available
+        if (dualMeshActive) {
+            ImGui::Combo("Coat Display", &baseMeshMode, baseMeshModes, modeCount);
+            const char* dragonModes[] = { "Off", "Wireframe", "Solid", "Both" };
+            ImGui::Combo("Dragon Display", &dragonBaseMeshMode, dragonModes, 4);
+        } else {
+            ImGui::Combo("Display", &baseMeshMode, baseMeshModes, modeCount);
+        }
+    }
+    ImGui::Separator();
+    if (ImGui::Button("Clear Scene")) {
+        renderResurfacing = false;
+        renderPebbles = false;
+        renderBenchmarkMesh = false;
+        renderPathway = false;
+        showControlCage = false;
+        showGroundMesh = false;
+        baseMeshMode = 0;
+        animationPlaying = false;
+        thirdPersonMode = false;
+        activeCamera = static_cast<CameraBase*>(&freeFlyCamera);
+        if (benchmarkMeshLoaded) {
+            pendingBenchmarkLoad = "__unload__";
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Exit")) {
+        glfwSetWindowShouldClose(window.getHandle(), GLFW_TRUE);
+    }
+
+    float baseMeshPanelH = ImGui::GetWindowSize().y;
+    ImGui::End();
+
+    // ===================== Resurfacing Panel (right, below Base Mesh) =====================
+    ImGui::SetNextWindowPos(ImVec2(displayW - panelW, baseMeshPanelH), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelW, displayH - baseMeshPanelH), ImGuiCond_Always);
+    ImGui::Begin("Resurfacing Controls", nullptr,
                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
 
-    // Dynamic mesh list from assets directory
-    int meshCount = static_cast<int>(assetMeshNames.size());
-
-    // ===================== Mode Content =====================
     if (uiMode == 0) {
-        // -------------------- Resurfacing --------------------
-
-            // Base mesh selector
-            if (ImGui::CollapsingHeader("Base Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
-                int prev = selectedMesh;
-                const char* meshPreview = (selectedMesh >= 0 && selectedMesh < meshCount)
-                    ? assetMeshNames[selectedMesh].c_str() : "No meshes found";
-                if (ImGui::BeginCombo("Mesh", meshPreview)) {
-                    for (int i = 0; i < meshCount; i++) {
-                        bool isSelected = (selectedMesh == i);
-                        if (ImGui::Selectable(assetMeshNames[i].c_str(), isSelected))
-                            selectedMesh = i;
-                        if (isSelected) ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-                bool prevTri = triangulateMesh;
-                int prevSubdiv = subdivideLevel;
-                ImGui::Checkbox("Triangulate", &triangulateMesh);
-                ImGui::SliderInt("Subdivide", &subdivideLevel, 0, 3);
-                if (selectedMesh != prev || triangulateMesh != prevTri || subdivideLevel != prevSubdiv)
-                    pendingMeshLoad = assetMeshPaths[selectedMesh];
-                const char* baseMeshModes[] = { "Off", "Wireframe", "Solid", "Both", "Mask", "Skin" };
-                int modeCount = 4;
-                if (maskTextureLoaded) modeCount = 5;
-                if (skinTextureLoaded) modeCount = 6;
-                if (dualMeshActive) {
-                    ImGui::Combo("Coat Display", &baseMeshMode, baseMeshModes, modeCount);
-                    const char* dragonModes[] = { "Off", "Wireframe", "Solid", "Both" };
-                    ImGui::Combo("Dragon Display", &dragonBaseMeshMode, dragonModes, 4);
-                } else {
-                    ImGui::Combo("Display", &baseMeshMode, baseMeshModes, modeCount);
-                }
-            }
-            ImGui::Separator();
-
-            resurfacingPanel.render(*this);
-            animationPanel.render(*this);
+        resurfacingPanel.render(*this);
+        animationPanel.render(*this);
     }
 
     // -------------------- Benchmark Content --------------------
     if (uiMode == 1) {
         if (ImGui::CollapsingHeader("Benchmark Mesh", ImGuiTreeNodeFlags_DefaultOpen)) {
-            // Exported meshes dropdown
             static std::vector<std::string> exportNames;
             static std::vector<std::string> exportPaths;
             static int selectedExport = -1;
@@ -431,27 +454,6 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::Separator();
 
         resurfacingPanel.renderPathway(*this);
-    }
-
-    ImGui::Separator();
-    if (ImGui::Button("Clear Scene")) {
-        renderResurfacing = false;
-        renderPebbles = false;
-        renderBenchmarkMesh = false;
-        renderPathway = false;
-        showControlCage = false;
-        showGroundMesh = false;
-        baseMeshMode = 0;
-        animationPlaying = false;
-        thirdPersonMode = false;
-        activeCamera = static_cast<CameraBase*>(&freeFlyCamera);
-        if (benchmarkMeshLoaded) {
-            pendingBenchmarkLoad = "__unload__";
-        }
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Exit")) {
-        glfwSetWindowShouldClose(window.getHandle(), GLFW_TRUE);
     }
 
     ImGui::End();
