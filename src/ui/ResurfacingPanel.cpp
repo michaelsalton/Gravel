@@ -10,16 +10,16 @@ void ResurfacingPanel::render(Renderer& r) {
     if (ImGui::CollapsingHeader("Resurfacing", ImGuiTreeNodeFlags_DefaultOpen)) {
 
         // Unified surface type: None + parametric types + Pebble
-        const char* surfaceTypes[] = {"None", "Torus", "Sphere", "Cone", "Cylinder", "Hemisphere", "Dragon Scale", "Straw", "Pebble"};
+        const char* surfaceTypes[] = {"None", "Torus", "Sphere", "Cone", "Cylinder", "Hemisphere", "Dragon Scale", "Straw", "Stud", "Pebble"};
         int currentType = 0;
-        if (r.renderPebbles) currentType = 8;
+        if (r.renderPebbles) currentType = 9;
         else if (r.renderResurfacing) currentType = static_cast<int>(r.elementType) + 1;
 
-        if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 9)) {
+        if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 10)) {
             if (currentType == 0) {
                 r.renderResurfacing = false;
                 r.renderPebbles = false;
-            } else if (currentType == 8) {
+            } else if (currentType == 9) {
                 r.renderResurfacing = false;
                 r.renderPebbles = true;
             } else {
@@ -64,6 +64,14 @@ void ResurfacingPanel::render(Renderer& r) {
                     ImGui::TextDisabled("  LUT: %ux%u control points", r.scaleLutNx, r.scaleLutNy);
                 else
                     ImGui::TextColored(ImVec4(1,0.5f,0,1), "  scale_lut.obj not found");
+            } else if (r.elementType == 7) {
+                ImGui::Text("Stud Parameters:");
+                ImGui::SliderFloat("Elongation", &r.studElongation, 1.0f, 4.0f);
+                ImGui::SliderFloat("Height", &r.studHeight, 0.01f, 0.5f);
+                ImGui::SliderFloat("Power", &r.studPower, 1.0f, 4.0f);
+                ImGui::SliderAngle("Rotation", &r.studRotation, 0.0f, 360.0f);
+                ImGui::SliderFloat("Rotation Randomness", &r.studRotationRandomness, 0.0f, 1.0f);
+                ImGui::Checkbox("Tread Plate", &r.studTreadPlate);
             } else if (r.elementType == 6) {
                 ImGui::Text("Straw Parameters:");
                 ImGui::SliderFloat("Base Radius", &r.strawBaseRadius, 0.01f, 0.3f);
@@ -148,9 +156,9 @@ void ResurfacingPanel::render(Renderer& r) {
                 if (ImGui::CollapsingHeader("Dragon (Base Mesh)", ImGuiTreeNodeFlags_DefaultOpen)) {
                     ImGui::PushID("secondary");
 
-                    const char* secSurfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder", "Hemisphere", "Dragon Scale", "Straw"};
+                    const char* secSurfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder", "Hemisphere", "Dragon Scale", "Straw", "Stud"};
                     int secType = static_cast<int>(r.secondaryElementType);
-                    if (ImGui::Combo("Surface Type##sec", &secType, secSurfaceTypes, 7))
+                    if (ImGui::Combo("Surface Type##sec", &secType, secSurfaceTypes, 8))
                         r.secondaryElementType = static_cast<uint32_t>(secType);
 
                     ImGui::SliderFloat("Global Scale##sec", &r.secondaryUserScaling, 0.01f, 3.0f);

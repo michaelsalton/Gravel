@@ -32,7 +32,7 @@ void parametricBoundingBox(vec3 elementPos, vec3 elementNormal, float faceArea, 
     for (int i = 0; i < 9; i++) {
         vec3 localPos, localNormal;
         evaluateParametricSurface(sampleUV[i], localPos, localNormal, elementType,
-                                  torusMajorR, torusMinorR, sphereRadius, 0u);
+                                  torusMajorR, torusMinorR, sphereRadius, 0u, 0.0);
         minLocal = min(minLocal, localPos);
         maxLocal = max(maxLocal, localPos);
     }

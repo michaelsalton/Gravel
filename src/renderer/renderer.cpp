@@ -476,6 +476,13 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         resurfData.strawBaseRadius     = strawBaseRadius;
         resurfData.strawBendDirection  = strawBendDirection;
         resurfData.strawBendRandomness = strawBendRandomness;
+        // Stud parameters
+        resurfData.studElongation         = studElongation;
+        resurfData.studHeight             = studHeight;
+        resurfData.studPower              = studPower;
+        resurfData.studRotation           = studRotation;
+        resurfData.studRotationRandomness = studRotationRandomness;
+        resurfData.studTreadPlate         = studTreadPlate ? 1u : 0u;
         memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
     }
 

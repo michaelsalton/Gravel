@@ -593,6 +593,8 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     if (ImGui::Button("Playdough")) applyMaterialPreset(3);
     ImGui::SameLine();
     if (ImGui::Button("Grass")) applyMaterialPreset(4);
+    ImGui::SameLine();
+    if (ImGui::Button("Diamond Plate")) applyMaterialPreset(5);
 
     ImGui::End();
 
@@ -859,6 +861,41 @@ void Renderer::applyMaterialPreset(int index) {
         lightIntensity     = 5.0f;
         ambientColor       = glm::vec3(1.0f);
         ambientIntensity   = 0.405f;
+        break;
+
+    case 5: // Diamond Plate
+        renderResurfacing  = true;
+        renderPebbles      = false;
+        baseMeshMode       = 2;       // Solid
+        elementType        = 7;       // Stud
+        userScaling        = 0.12f;
+        resolutionM        = 16;
+        resolutionN        = 16;
+        chainmailMode      = false;
+        studElongation         = 3.0f;
+        studHeight             = 0.15f;
+        studPower              = 2.0f;
+        studRotation           = 0.785f;  // 45 degrees
+        studRotationRandomness = 0.0f;
+        studTreadPlate         = true;
+        // Procedural mesh PBR (brushed metal)
+        procBaseColor      = glm::vec3(0.55f, 0.55f, 0.55f);
+        roughness          = 0.35f;
+        metallic           = 1.0f;
+        ao                 = 0.8f;
+        dielectricF0       = 0.04f;
+        envReflection      = 0.5f;
+        // Base mesh PBR
+        baseMeshSolidBaseColor     = glm::vec3(0.45f, 0.45f, 0.45f);
+        baseMeshSolidRoughness     = 0.4f;
+        baseMeshSolidMetallic      = 1.0f;
+        baseMeshSolidAo            = 1.0f;
+        baseMeshSolidDielectricF0  = 0.04f;
+        baseMeshSolidEnvReflection = 0.5f;
+        // Lighting
+        lightIntensity     = 5.0f;
+        ambientColor       = glm::vec3(0.8f);
+        ambientIntensity   = 0.4f;
         break;
     }
 }

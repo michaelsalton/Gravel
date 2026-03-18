@@ -113,7 +113,7 @@ void main() {
         vec3 localPos, localNormal;
         evaluateParametricSurface(uv, localPos, localNormal, payload.elementType,
                                   push.torusMajorR, push.torusMinorR, push.sphereRadius,
-                                  payload.taskId);
+                                  payload.taskId, payload.faceColor);
 
         // Transform to world space
         vec3 worldPos, worldNormal;

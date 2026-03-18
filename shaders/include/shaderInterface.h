@@ -108,7 +108,17 @@ struct ResurfacingUBO {
     float pad_straw0;           // std140 padding (offset 132)
     float pad_straw1;           // std140 padding (offset 136)
     float pad_straw2;           // std140 padding (offset 140)
-    // total: 144 bytes
+
+    // Stud parameters (std140 offsets 144-163)
+    float studElongation;       // ellipse aspect ratio 1=circle, 3=elongated (offset 144)
+    float studHeight;           // dome peak height (offset 148)
+    float studPower;            // dome profile exponent (offset 152)
+    float studRotation;         // base rotation angle in radians (offset 156)
+    float studRotationRandomness; // 0=uniform, 1=fully random rotation (offset 160)
+    uint  studTreadPlate;       // 0=off, 1=alternate ±angle for tread plate (offset 164)
+    float pad_stud0;            // std140 padding (offset 168)
+    float pad_stud1;            // std140 padding (offset 172)
+    // total: 176 bytes
 };
 
 // ============================================================================
@@ -301,6 +311,15 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
     float pad_straw0;
     float pad_straw1;
     float pad_straw2;
+    // Stud parameters (offsets 144-175)
+    float studElongation;
+    float studHeight;
+    float studPower;
+    float studRotation;
+    float studRotationRandomness;
+    uint  studTreadPlate;
+    float pad_stud0;
+    float pad_stud1;
 } resurfacingUBO;
 
 #endif

@@ -209,6 +209,9 @@ void main() {
         }
     }
 
+    // Stud surface: faces only (skip vertex elements)
+    if (isVertex && payload.elementType == 7u) return;
+
     // Per-element random orientation twist for dragon scale
     if (payload.elementType == 5u && resurfacingUBO.normalPerturbation > 0.0) {
         float angle = fract(float(globalId) * 0.618033988749895)

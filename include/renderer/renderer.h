@@ -73,7 +73,17 @@ struct ResurfacingUBO {
     float     pad_straw0          = 0.0f;
     float     pad_straw1          = 0.0f;
     float     pad_straw2          = 0.0f;
-    // total: 144 bytes
+
+    // Stud parameters (std140 offsets 144-175)
+    float     studElongation         = 3.0f;
+    float     studHeight             = 0.15f;
+    float     studPower              = 2.0f;
+    float     studRotation           = 0.0f;
+    float     studRotationRandomness = 0.0f;
+    uint32_t  studTreadPlate         = 0;
+    float     pad_stud0              = 0.0f;
+    float     pad_stud1              = 0.0f;
+    // total: 176 bytes
 };
 
 struct GlobalShadingUBO {
@@ -251,6 +261,12 @@ public:
     float    strawBaseRadius     = 0.05f; // Straw: tube thickness
     float    strawBendDirection  = 0.0f;  // Straw: bend direction angle in radians [0, 2pi]
     float    strawBendRandomness = 0.0f;  // Straw: 0 = uniform direction, 1 = fully random
+    float    studElongation         = 3.0f;  // Stud: ellipse aspect ratio
+    float    studHeight             = 0.15f; // Stud: dome peak height
+    float    studPower              = 2.0f;  // Stud: dome profile exponent
+    float    studRotation           = 0.0f;  // Stud: base rotation angle in radians
+    float    studRotationRandomness = 0.0f;  // Stud: 0=uniform, 1=fully random
+    bool     studTreadPlate         = false; // Stud: alternate orientations for tread plate look
     bool     scaleLutLoaded    = false;
     uint32_t scaleLutNx        = 0;
     uint32_t scaleLutNy        = 0;

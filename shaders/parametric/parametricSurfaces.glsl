@@ -204,12 +204,66 @@ void parametricStraw(vec2 uv, out vec3 pos, out vec3 normal, uint elementId) {
 }
 
 // ============================================================================
+// Parametric Stud (elongated elliptical dome for diamond plate)
+// ============================================================================
+
+void parametricStud(vec2 uv, out vec3 pos, out vec3 normal, uint elementId, float faceColor) {
+    float elongation = resurfacingUBO.studElongation;
+    float height     = resurfacingUBO.studHeight;
+    float power      = resurfacingUBO.studPower;
+    float rotation   = resurfacingUBO.studRotation;
+    float rotRandom  = resurfacingUBO.studRotationRandomness;
+
+    float u = uv.x * 2.0 * PI;  // Azimuthal [0, 2pi]
+    float v = uv.y;              // Radial [0, 1] center to edge
+
+    float cosU = cos(u);
+    float sinU = sin(u);
+
+    // Elliptical footprint
+    float x = v * cosU * elongation;
+    float y = v * sinU;
+
+    // Smooth dome height: (1 - v^2)^power
+    float d = v * v;
+    float h = height * pow(max(1.0 - d, 0.0), power);
+
+    // Per-element rotation
+    float angle;
+    if (resurfacingUBO.studTreadPlate != 0u) {
+        // Tread plate: alternate by 90° using face 2-coloring
+        angle = rotation + faceColor * PI * 0.5;
+    } else {
+        // Random rotation (golden ratio hash)
+        float randomAngle = fract(float(elementId) * 0.618033988749895) * 2.0 * PI;
+        angle = rotation + rotRandom * randomAngle;
+    }
+    float cosA = cos(angle);
+    float sinA = sin(angle);
+    float rx = x * cosA - y * sinA;
+    float ry = x * sinA + y * cosA;
+
+    pos = vec3(rx, ry, h);
+
+    // Analytic partial derivatives (pre-rotation)
+    vec3 dpdu = vec3(-v * sinU * elongation, v * cosU, 0.0);
+    float dhdv = -2.0 * v * height * power * pow(max(1.0 - d, 0.0001), power - 1.0);
+    vec3 dpdv = vec3(cosU * elongation, sinU, dhdv);
+
+    // Apply rotation to tangent vectors
+    dpdu = vec3(dpdu.x * cosA - dpdu.y * sinA, dpdu.x * sinA + dpdu.y * cosA, dpdu.z);
+    dpdv = vec3(dpdv.x * cosA - dpdv.y * sinA, dpdv.x * sinA + dpdv.y * cosA, dpdv.z);
+
+    normal = normalize(cross(dpdu, dpdv));
+}
+
+// ============================================================================
 // Dispatch Function
 // ============================================================================
 
 void evaluateParametricSurface(vec2 uv, out vec3 pos, out vec3 normal, uint elementType,
                                 float torusMajorR, float torusMinorR, float sphereRadius,
-                                uint elementId) {
+                                uint elementId, float faceColor) {
     switch (elementType) {
         case 0:  parametricTorus(uv, pos, normal, torusMajorR, torusMinorR); break;
         case 1:  parametricSphere(uv, pos, normal, sphereRadius); break;
@@ -218,6 +272,7 @@ void evaluateParametricSurface(vec2 uv, out vec3 pos, out vec3 normal, uint elem
         case 4:  parametricHemisphere(uv, pos, normal, sphereRadius); break;
         case 5:  parametricDragonScale(uv, pos, normal); break;
         case 6:  parametricStraw(uv, pos, normal, elementId); break;
+        case 7:  parametricStud(uv, pos, normal, elementId, faceColor); break;
         default: parametricSphere(uv, pos, normal, sphereRadius); break;
     }
 }
