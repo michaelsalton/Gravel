@@ -444,6 +444,15 @@ void Renderer::cleanupMeshSkeleton() {
 }
 
 void Renderer::cleanupSecondaryMesh() {
+    // Free descriptor sets before destroying the buffers they reference
+    if (secondaryHeDescriptorSet != VK_NULL_HANDLE) {
+        vkFreeDescriptorSets(device, descriptorPool, 1, &secondaryHeDescriptorSet);
+        secondaryHeDescriptorSet = VK_NULL_HANDLE;
+    }
+    if (secondaryPerObjectDescriptorSet != VK_NULL_HANDLE) {
+        vkFreeDescriptorSets(device, descriptorPool, 1, &secondaryPerObjectDescriptorSet);
+        secondaryPerObjectDescriptorSet = VK_NULL_HANDLE;
+    }
     for (auto& buf : secondaryHeVec4Buffers) buf.destroy();
     for (auto& buf : secondaryHeVec2Buffers) buf.destroy();
     for (auto& buf : secondaryHeIntBuffers) buf.destroy();
@@ -460,8 +469,6 @@ void Renderer::cleanupSecondaryMesh() {
     }
     secondaryJointIndicesBuffer.destroy();
     secondaryJointWeightsBuffer.destroy();
-    secondaryHeDescriptorSet = VK_NULL_HANDLE;
-    secondaryPerObjectDescriptorSet = VK_NULL_HANDLE;
     secondaryHeNbFaces = 0;
     secondaryHeNbVertices = 0;
     dualMeshActive = false;

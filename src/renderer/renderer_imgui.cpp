@@ -313,12 +313,6 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             }
             ImGui::EndTabBar();
         }
-        if (uiMode == 0) {
-            for (int i = 0; i < LEVEL_PRESET_COUNT; i++) {
-                if (i > 0) ImGui::SameLine();
-                if (ImGui::Button(LEVEL_PRESETS[i].name)) applyPreset(LEVEL_PRESETS[i]);
-            }
-        }
         ImGui::End();
     }
 
@@ -349,40 +343,26 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::SliderInt("Subdivide", &subdivideLevel, 0, 3);
         if (selectedMesh != prev || triangulateMesh != prevTri || subdivideLevel != prevSubdiv)
             pendingMeshLoad = assetMeshPaths[selectedMesh];
+        if (!loadedMeshPath.empty() && std::filesystem::exists(loadedMeshPath)) {
+            auto bytes = std::filesystem::file_size(loadedMeshPath);
+            if (bytes >= 1024 * 1024)
+                ImGui::TextDisabled("  %.1f MB", bytes / (1024.0f * 1024.0f));
+            else
+                ImGui::TextDisabled("  %.1f KB", bytes / 1024.0f);
+        }
         const char* baseMeshModes[] = { "Off", "Wireframe", "Solid", "Both", "Mask", "Skin", "Colored Faces" };
         int modeCount = 4;
         if (maskTextureLoaded) modeCount = 5;
         if (skinTextureLoaded) modeCount = 6;
         modeCount = std::max(modeCount, 7);  // Colored Faces always available
         if (dualMeshActive) {
-            ImGui::Combo("Coat Display", &baseMeshMode, baseMeshModes, modeCount);
+            ImGui::Combo("Base Mesh Display", &baseMeshMode, baseMeshModes, modeCount);
             const char* dragonModes[] = { "Off", "Wireframe", "Solid", "Both" };
             ImGui::Combo("Dragon Display", &dragonBaseMeshMode, dragonModes, 4);
         } else {
             ImGui::Combo("Display", &baseMeshMode, baseMeshModes, modeCount);
         }
     }
-    ImGui::Separator();
-    if (ImGui::Button("Clear Scene")) {
-        renderResurfacing = false;
-        renderPebbles = false;
-        renderBenchmarkMesh = false;
-        renderPathway = false;
-        showControlCage = false;
-        showGroundMesh = false;
-        baseMeshMode = 0;
-        animationPlaying = false;
-        thirdPersonMode = false;
-        activeCamera = static_cast<CameraBase*>(&freeFlyCamera);
-        if (benchmarkMeshLoaded) {
-            pendingBenchmarkLoad = "__unload__";
-        }
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Exit")) {
-        glfwSetWindowShouldClose(window.getHandle(), GLFW_TRUE);
-    }
-
     float baseMeshPanelH = ImGui::GetWindowSize().y;
     ImGui::End();
 
@@ -441,6 +421,13 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                     selectedExport = -1;
                 }
                 ImGui::Checkbox("Render Benchmark", &renderBenchmarkMesh);
+                if (!benchmarkMeshPath.empty() && std::filesystem::exists(benchmarkMeshPath)) {
+                    auto bytes = std::filesystem::file_size(benchmarkMeshPath);
+                    if (bytes >= 1024 * 1024)
+                        ImGui::TextDisabled("  %.1f MB", bytes / (1024.0f * 1024.0f));
+                    else
+                        ImGui::TextDisabled("  %.1f KB", bytes / 1024.0f);
+                }
             }
         }
     }
@@ -469,7 +456,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     ImGui::ColorEdit3("Ambient Color", &ambientColor.x);
     ImGui::SliderFloat("Ambient Intensity", &ambientIntensity, 0.0f, 1.0f);
     ImGui::Separator();
-    ImGui::Text("Coat Procedural Surface");
+    ImGui::Text("Procedural Mesh");
     ImGui::ColorEdit3("Base Color##proc", &procBaseColor.x);
     ImGui::SliderFloat("Roughness##proc", &roughness, 0.05f, 1.0f);
     ImGui::SliderFloat("Metallic##proc", &metallic, 0.0f, 1.0f);
@@ -496,7 +483,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     }
     if (baseMeshMode > 0) {
         ImGui::Separator();
-        ImGui::Text("Coat Base Mesh Overlay");
+        ImGui::Text("Base Mesh");
         ImGui::ColorEdit3("Base Color##solid", &baseMeshSolidBaseColor.x);
         ImGui::SliderFloat("Roughness##solid", &baseMeshSolidRoughness, 0.05f, 1.0f);
         ImGui::SliderFloat("Metallic##solid", &baseMeshSolidMetallic, 0.0f, 1.0f);
@@ -560,6 +547,48 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
         activeCamera->renderImGuiControls();
     }
+
+    ImGui::Separator();
+    if (ImGui::Button("Clear Scene")) {
+        renderResurfacing = false;
+        renderPebbles = false;
+        renderBenchmarkMesh = false;
+        renderPathway = false;
+        showControlCage = false;
+        showGroundMesh = false;
+        baseMeshMode = 0;
+        animationPlaying = false;
+        thirdPersonMode = false;
+        activeCamera = static_cast<CameraBase*>(&freeFlyCamera);
+        if (benchmarkMeshLoaded) {
+            pendingBenchmarkLoad = "__unload__";
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Exit")) {
+        glfwSetWindowShouldClose(window.getHandle(), GLFW_TRUE);
+    }
+
+    ImGui::End();
+
+    // ===================== Presets Panel (below Settings) =====================
+    ImGui::SetNextWindowPos(ImVec2(panelW, displayH * 0.5f), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelW, 0), ImGuiCond_Always);
+    ImGui::Begin("Presets", nullptr,
+                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+                 ImGuiWindowFlags_AlwaysAutoResize);
+    for (int i = 0; i < LEVEL_PRESET_COUNT; i++) {
+        if (i > 0) ImGui::SameLine();
+        if (ImGui::Button(LEVEL_PRESETS[i].name)) applyPreset(LEVEL_PRESETS[i]);
+    }
+
+    ImGui::Separator();
+    ImGui::Text("Materials");
+    if (ImGui::Button("Chainmail")) applyMaterialPreset(0);
+    ImGui::SameLine();
+    if (ImGui::Button("Pebble")) applyMaterialPreset(1);
+    ImGui::SameLine();
+    if (ImGui::Button("Dragon")) applyMaterialPreset(2);
 
     ImGui::End();
 
@@ -634,6 +663,96 @@ void Renderer::applyPresetChainMail() {
     baseMeshSolidAo             = 1.0f;
     baseMeshSolidDielectricF0   = 0.0f;
     baseMeshSolidEnvReflection  = 0.1f;
+}
+
+void Renderer::applyMaterialPreset(int index) {
+    // All material presets use the icosphere
+    pendingMeshLoad = std::string(ASSETS_DIR) + "shapes/icosphere.obj";
+    for (int i = 0; i < static_cast<int>(assetMeshPaths.size()); i++) {
+        if (assetMeshPaths[i].find("icosphere") != std::string::npos) {
+            selectedMesh = i;
+            break;
+        }
+    }
+    triangulateMesh = false;
+    baseMeshMode = 0;
+    thirdPersonMode = false;
+    activeCamera = static_cast<CameraBase*>(&freeFlyCamera);
+    animationPlaying = false;
+    doSkinning = false;
+    pendingPreset = nullptr;
+
+    switch (index) {
+    case 0: // Chainmail
+        renderResurfacing  = true;
+        renderPebbles      = false;
+        elementType        = 0;       // Torus
+        torusMajorR        = 0.965f;
+        torusMinorR        = 0.149f;
+        userScaling        = 0.628f;
+        resolutionM        = 37;
+        resolutionN        = 37;
+        chainmailMode      = true;
+        chainmailTiltAngle = 0.26f;
+        chainmailSurfaceOffset = 0.500f;
+        procBaseColor      = glm::vec3(0.45f, 0.45f, 0.45f);
+        roughness          = 0.198f;
+        metallic           = 1.0f;
+        ao                 = 0.7f;
+        dielectricF0       = 0.065f;
+        envReflection      = 0.572f;
+        lightIntensity     = 10.0f;
+        ambientColor       = glm::vec3(0.04f);
+        ambientIntensity   = 0.3f;
+        break;
+
+    case 1: // Pebble
+        renderResurfacing  = false;
+        renderPebbles      = true;
+        chainmailMode      = false;
+        pebbleUBO.subdivisionLevel   = 4;
+        pebbleUBO.subdivOffset       = 0;
+        pebbleUBO.extrusionAmount    = 0.15f;
+        pebbleUBO.extrusionVariation = 0.4f;
+        pebbleUBO.roundness          = 1.2f;
+        pebbleUBO.doNoise            = 1;
+        pebbleUBO.noiseAmplitude     = 0.05f;
+        pebbleUBO.noiseFrequency     = 3.0f;
+        pebbleUBO.normalOffset       = 0.3f;
+        pebbleUBO.useCulling         = 0;
+        pebbleUBO.useLod             = 1;
+        pebbleUBO.lodFactor          = 1.0f;
+        procBaseColor      = glm::vec3(0.55f, 0.50f, 0.42f);
+        roughness          = 0.8f;
+        metallic           = 0.0f;
+        ao                 = 1.0f;
+        dielectricF0       = 0.04f;
+        envReflection      = 0.15f;
+        lightIntensity     = 5.0f;
+        ambientColor       = glm::vec3(0.15f, 0.13f, 0.10f);
+        ambientIntensity   = 0.8f;
+        break;
+
+    case 2: // Dragon Scale
+        renderResurfacing  = true;
+        renderPebbles      = false;
+        elementType        = 5;       // Dragon Scale
+        userScaling        = 0.15f;
+        resolutionM        = 16;
+        resolutionN        = 16;
+        chainmailMode      = false;
+        normalPerturbation = 0.3f;
+        procBaseColor      = glm::vec3(0.15f, 0.35f, 0.12f);
+        roughness          = 0.35f;
+        metallic           = 0.0f;
+        ao                 = 1.0f;
+        dielectricF0       = 0.06f;
+        envReflection      = 0.4f;
+        lightIntensity     = 5.0f;
+        ambientColor       = glm::vec3(0.05f, 0.08f, 0.04f);
+        ambientIntensity   = 0.6f;
+        break;
+    }
 }
 
 void Renderer::applyPreset(const LevelPreset& preset) {

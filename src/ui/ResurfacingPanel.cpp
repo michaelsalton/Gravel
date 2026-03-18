@@ -9,26 +9,28 @@
 void ResurfacingPanel::render(Renderer& r) {
     if (ImGui::CollapsingHeader("Resurfacing", ImGuiTreeNodeFlags_DefaultOpen)) {
 
-        // Pipeline mode: None / Parametric / Pebble
-        const char* pipelineModes[] = {"None", "Parametric", "Pebble"};
-        int currentMode = 0;
-        if (r.renderPebbles) currentMode = 2;
-        else if (r.renderResurfacing) currentMode = 1;
+        // Unified surface type: None + parametric types + Pebble
+        const char* surfaceTypes[] = {"None", "Torus", "Sphere", "Cone", "Cylinder", "Hemisphere", "Dragon Scale", "Straw", "Pebble"};
+        int currentType = 0;
+        if (r.renderPebbles) currentType = 8;
+        else if (r.renderResurfacing) currentType = static_cast<int>(r.elementType) + 1;
 
-        if (ImGui::Combo("Pipeline Mode", &currentMode, pipelineModes, 3)) {
-            r.renderResurfacing = (currentMode == 1);
-            r.renderPebbles = (currentMode == 2);
+        if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 9)) {
+            if (currentType == 0) {
+                r.renderResurfacing = false;
+                r.renderPebbles = false;
+            } else if (currentType == 8) {
+                r.renderResurfacing = false;
+                r.renderPebbles = true;
+            } else {
+                r.renderResurfacing = true;
+                r.renderPebbles = false;
+                r.elementType = static_cast<uint32_t>(currentType - 1);
+            }
         }
 
         // ==================== Parametric Controls ====================
         if (r.renderResurfacing && !r.renderPebbles) {
-            ImGui::Separator();
-
-            const char* surfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder", "Hemisphere", "Dragon Scale", "Straw"};
-            int currentType = static_cast<int>(r.elementType);
-            if (ImGui::Combo("Surface Type", &currentType, surfaceTypes, 7)) {
-                r.elementType = static_cast<uint32_t>(currentType);
-            }
 
             if (r.elementTypeTextureLoaded)
                 ImGui::Checkbox("Use Element Type Map", &r.useElementTypeTexture);
