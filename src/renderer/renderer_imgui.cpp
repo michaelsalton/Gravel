@@ -589,6 +589,10 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     if (ImGui::Button("Pebble")) applyMaterialPreset(1);
     ImGui::SameLine();
     if (ImGui::Button("Dragon")) applyMaterialPreset(2);
+    ImGui::SameLine();
+    if (ImGui::Button("Playdough")) applyMaterialPreset(3);
+    ImGui::SameLine();
+    if (ImGui::Button("Grass")) applyMaterialPreset(4);
 
     ImGui::End();
 
@@ -686,71 +690,175 @@ void Renderer::applyMaterialPreset(int index) {
     case 0: // Chainmail
         renderResurfacing  = true;
         renderPebbles      = false;
+        baseMeshMode       = 2;       // Solid
         elementType        = 0;       // Torus
-        torusMajorR        = 0.965f;
-        torusMinorR        = 0.149f;
+        torusMajorR        = 0.983f;
+        torusMinorR        = 0.159f;
         userScaling        = 0.628f;
-        resolutionM        = 37;
-        resolutionN        = 37;
+        resolutionM        = 28;
+        resolutionN        = 29;
         chainmailMode      = true;
-        chainmailTiltAngle = 0.26f;
+        chainmailTiltAngle = 0.27f;
         chainmailSurfaceOffset = 0.500f;
-        procBaseColor      = glm::vec3(0.45f, 0.45f, 0.45f);
-        roughness          = 0.198f;
+        // Procedural mesh PBR
+        procBaseColor      = glm::vec3(73.0f/255.0f);
+        roughness          = 0.249f;
         metallic           = 1.0f;
-        ao                 = 0.7f;
-        dielectricF0       = 0.065f;
-        envReflection      = 0.572f;
+        ao                 = 0.362f;
+        dielectricF0       = 0.081f;
+        envReflection      = 0.756f;
+        // Base mesh PBR
+        baseMeshSolidBaseColor     = glm::vec3(0.0f);
+        baseMeshSolidRoughness     = 0.050f;
+        baseMeshSolidMetallic      = 1.0f;
+        baseMeshSolidAo            = 1.0f;
+        baseMeshSolidDielectricF0  = 0.0f;
+        baseMeshSolidEnvReflection = 0.0f;
+        // Lighting
         lightIntensity     = 10.0f;
-        ambientColor       = glm::vec3(0.04f);
-        ambientIntensity   = 0.3f;
+        ambientColor       = glm::vec3(11.0f/255.0f);
+        ambientIntensity   = 0.311f;
         break;
 
     case 1: // Pebble
         renderResurfacing  = false;
         renderPebbles      = true;
+        baseMeshMode       = 2;       // Solid
         chainmailMode      = false;
-        pebbleUBO.subdivisionLevel   = 4;
+        pebbleUBO.subdivisionLevel   = 6;
         pebbleUBO.subdivOffset       = 0;
-        pebbleUBO.extrusionAmount    = 0.15f;
-        pebbleUBO.extrusionVariation = 0.4f;
-        pebbleUBO.roundness          = 1.2f;
+        pebbleUBO.extrusionAmount    = 0.090f;
+        pebbleUBO.extrusionVariation = 0.324f;
+        pebbleUBO.roundness          = 1.90f;
         pebbleUBO.doNoise            = 1;
-        pebbleUBO.noiseAmplitude     = 0.05f;
-        pebbleUBO.noiseFrequency     = 3.0f;
-        pebbleUBO.normalOffset       = 0.3f;
+        pebbleUBO.noiseAmplitude     = 0.005f;
+        pebbleUBO.noiseFrequency     = 10.0f;
+        pebbleUBO.normalOffset       = 0.19f;
         pebbleUBO.useCulling         = 0;
         pebbleUBO.useLod             = 1;
         pebbleUBO.lodFactor          = 1.0f;
-        procBaseColor      = glm::vec3(0.55f, 0.50f, 0.42f);
-        roughness          = 0.8f;
-        metallic           = 0.0f;
-        ao                 = 1.0f;
-        dielectricF0       = 0.04f;
-        envReflection      = 0.15f;
-        lightIntensity     = 5.0f;
-        ambientColor       = glm::vec3(0.15f, 0.13f, 0.10f);
-        ambientIntensity   = 0.8f;
+        pebbleUBO.allowLowLod        = 1;
+        // Procedural mesh PBR
+        procBaseColor      = glm::vec3(50.0f/255.0f);
+        roughness          = 1.0f;
+        metallic           = 0.097f;
+        ao                 = 0.946f;
+        dielectricF0       = 0.197f;
+        envReflection      = 0.054f;
+        // Base mesh PBR
+        baseMeshSolidBaseColor     = glm::vec3(50.0f/255.0f);
+        baseMeshSolidRoughness     = 0.291f;
+        baseMeshSolidMetallic      = 0.027f;
+        baseMeshSolidAo            = 0.892f;
+        baseMeshSolidDielectricF0  = 0.199f;
+        baseMeshSolidEnvReflection = 0.546f;
+        // Lighting
+        lightIntensity     = 3.244f;
+        ambientColor       = glm::vec3(139.0f/255.0f);
+        ambientIntensity   = 0.092f;
         break;
 
     case 2: // Dragon Scale
         renderResurfacing  = true;
         renderPebbles      = false;
+        baseMeshMode       = 2;       // Solid
         elementType        = 5;       // Dragon Scale
-        userScaling        = 0.15f;
-        resolutionM        = 16;
-        resolutionN        = 16;
+        userScaling        = 0.770f;
+        resolutionM        = 30;
+        resolutionN        = 30;
         chainmailMode      = false;
-        normalPerturbation = 0.3f;
-        procBaseColor      = glm::vec3(0.15f, 0.35f, 0.12f);
-        roughness          = 0.35f;
+        normalPerturbation = 0.235f;
+        // Procedural mesh PBR
+        procBaseColor      = glm::vec3(34.0f/255.0f, 78.0f/255.0f, 28.0f/255.0f);
+        roughness          = 0.504f;
+        metallic           = 0.092f;
+        ao                 = 0.978f;
+        dielectricF0       = 0.008f;
+        envReflection      = 0.368f;
+        // Base mesh PBR
+        baseMeshSolidBaseColor     = glm::vec3(34.0f/255.0f, 78.0f/255.0f, 28.0f/255.0f);
+        baseMeshSolidRoughness     = 0.445f;
+        baseMeshSolidMetallic      = 0.070f;
+        baseMeshSolidAo            = 1.0f;
+        baseMeshSolidDielectricF0  = 0.004f;
+        baseMeshSolidEnvReflection = 0.346f;
+        // Lighting
+        lightIntensity     = 5.0f;
+        ambientColor       = glm::vec3(1.0f);
+        ambientIntensity   = 0.405f;
+        break;
+
+    case 3: // Playdough
+        renderResurfacing  = false;
+        renderPebbles      = true;
+        baseMeshMode       = 2;       // Solid
+        chainmailMode      = false;
+        pebbleUBO.subdivisionLevel   = 8;
+        pebbleUBO.subdivOffset       = 0;
+        pebbleUBO.extrusionAmount    = 0.039f;
+        pebbleUBO.extrusionVariation = 0.0f;
+        pebbleUBO.roundness          = 0.56f;
+        pebbleUBO.doNoise            = 1;
+        pebbleUBO.noiseAmplitude     = 0.062f;
+        pebbleUBO.noiseFrequency     = 8.5f;
+        pebbleUBO.normalOffset       = 0.32f;
+        pebbleUBO.useCulling         = 1;
+        pebbleUBO.cullingThreshold   = 0.32f;
+        pebbleUBO.useLod             = 1;
+        pebbleUBO.lodFactor          = 1.0f;
+        pebbleUBO.allowLowLod        = 1;
+        // Procedural mesh PBR
+        procBaseColor      = glm::vec3(34.0f/255.0f, 20.0f/255.0f, 18.0f/255.0f);
+        roughness          = 0.292f;
+        metallic           = 0.027f;
+        ao                 = 0.892f;
+        dielectricF0       = 0.199f;
+        envReflection      = 0.544f;
+        // Base mesh PBR
+        baseMeshSolidBaseColor     = glm::vec3(34.0f/255.0f, 20.0f/255.0f, 18.0f/255.0f);
+        baseMeshSolidRoughness     = 0.291f;
+        baseMeshSolidMetallic      = 0.027f;
+        baseMeshSolidAo            = 0.892f;
+        baseMeshSolidDielectricF0  = 0.199f;
+        baseMeshSolidEnvReflection = 0.546f;
+        // Lighting
+        lightIntensity     = 6.541f;
+        ambientColor       = glm::vec3(1.0f);
+        ambientIntensity   = 0.541f;
+        break;
+
+    case 4: // Grass
+        renderResurfacing  = true;
+        renderPebbles      = false;
+        baseMeshMode       = 2;       // Solid
+        elementType        = 6;       // Straw
+        userScaling        = 3.0f;
+        resolutionM        = 42;
+        resolutionN        = 42;
+        chainmailMode      = false;
+        strawBaseRadius    = 0.023f;
+        strawTaperPower    = 3.746f;
+        strawBendAmount    = 0.676f;
+        strawBendDirection = 0.0f;
+        strawBendRandomness = 0.735f;
+        // Procedural mesh PBR
+        procBaseColor      = glm::vec3(15.0f/255.0f, 48.0f/255.0f, 10.0f/255.0f);
+        roughness          = 0.504f;
         metallic           = 0.0f;
         ao                 = 1.0f;
-        dielectricF0       = 0.06f;
-        envReflection      = 0.4f;
+        dielectricF0       = 0.0f;
+        envReflection      = 0.0f;
+        // Base mesh PBR
+        baseMeshSolidBaseColor     = glm::vec3(15.0f/255.0f, 48.0f/255.0f, 10.0f/255.0f);
+        baseMeshSolidRoughness     = 0.461f;
+        baseMeshSolidMetallic      = 0.0f;
+        baseMeshSolidAo            = 1.0f;
+        baseMeshSolidDielectricF0  = 0.0f;
+        baseMeshSolidEnvReflection = 0.0f;
+        // Lighting
         lightIntensity     = 5.0f;
-        ambientColor       = glm::vec3(0.05f, 0.08f, 0.04f);
-        ambientIntensity   = 0.6f;
+        ambientColor       = glm::vec3(1.0f);
+        ambientIntensity   = 0.405f;
         break;
     }
 }
