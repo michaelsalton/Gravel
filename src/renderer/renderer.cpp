@@ -664,6 +664,11 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         // Update PebbleUBO
         pebbleUBO.hasAOTexture = (useAOTexture && aoTextureLoaded) ? 1u : 0u;
         pebbleUBO.doSkinning = (skeletonLoaded && doSkinning) ? 1u : 0u;
+        // Sync universal culling/LOD settings into pebble UBO
+        pebbleUBO.useCulling = (enableFrustumCulling || enableBackfaceCulling) ? 1u : 0u;
+        pebbleUBO.cullingThreshold = cullingThreshold;
+        pebbleUBO.useLod = enableLod ? 1u : 0u;
+        pebbleUBO.lodFactor = lodFactor;
         memcpy(pebbleUBOMapped, &pebbleUBO, sizeof(PebbleUBO));
 
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pebblePipeline);

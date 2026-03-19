@@ -253,29 +253,6 @@ void ResurfacingPanel::render(Renderer& r) {
             }
 
             ImGui::Separator();
-
-            // Culling
-            bool useCulling = ubo.useCulling != 0;
-            ImGui::Checkbox("Culling", &useCulling);
-            ubo.useCulling = useCulling ? 1 : 0;
-            if (useCulling) {
-                ImGui::SameLine();
-                ImGui::SliderFloat("Threshold##pebble", &ubo.cullingThreshold, 0.0f, 1.0f, "%.2f");
-            }
-
-            // LOD
-            bool useLod = ubo.useLod != 0;
-            ImGui::Checkbox("LOD", &useLod);
-            ubo.useLod = useLod ? 1 : 0;
-            if (useLod) {
-                ImGui::SameLine();
-                ImGui::SliderFloat("Factor##pebbleLod", &ubo.lodFactor, 0.0f, 10.0f, "%.2f");
-                bool allowLow = ubo.allowLowLod != 0;
-                ImGui::Checkbox("Allow Low LOD (N=0)", &allowLow);
-                ubo.allowLowLod = allowLow ? 1 : 0;
-            }
-
-            ImGui::Separator();
             ImGui::Checkbox("Show Control Cage", &r.showControlCage);
 
             ImGui::Separator();
