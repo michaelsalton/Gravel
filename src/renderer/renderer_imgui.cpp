@@ -577,24 +577,31 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     ImGui::Begin("Presets", nullptr,
                  ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
                  ImGuiWindowFlags_AlwaysAutoResize);
-    for (int i = 0; i < LEVEL_PRESET_COUNT; i++) {
-        if (i > 0) ImGui::SameLine();
-        if (ImGui::Button(LEVEL_PRESETS[i].name)) applyPreset(LEVEL_PRESETS[i]);
+    {
+        static int selectedLevel = -1;
+        const char* preview = (selectedLevel >= 0 && selectedLevel < LEVEL_PRESET_COUNT)
+            ? LEVEL_PRESETS[selectedLevel].name : "Select...";
+        if (ImGui::BeginCombo("Level", preview)) {
+            for (int i = 0; i < LEVEL_PRESET_COUNT; i++) {
+                bool isSelected = (selectedLevel == i);
+                if (ImGui::Selectable(LEVEL_PRESETS[i].name, isSelected)) {
+                    selectedLevel = i;
+                    applyPreset(LEVEL_PRESETS[i]);
+                }
+                if (isSelected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
     }
 
     ImGui::Separator();
-    ImGui::Text("Materials");
-    if (ImGui::Button("Chainmail")) applyMaterialPreset(0);
-    ImGui::SameLine();
-    if (ImGui::Button("Pebble")) applyMaterialPreset(1);
-    ImGui::SameLine();
-    if (ImGui::Button("Dragon")) applyMaterialPreset(2);
-    ImGui::SameLine();
-    if (ImGui::Button("Playdough")) applyMaterialPreset(3);
-    ImGui::SameLine();
-    if (ImGui::Button("Grass")) applyMaterialPreset(4);
-    ImGui::SameLine();
-    if (ImGui::Button("Diamond Plate")) applyMaterialPreset(5);
+    {
+        const char* materials[] = {"Chainmail", "Pebble", "Dragon", "Playdough", "Grass", "Diamond Plate", "Bubblegum"};
+        static int selectedMaterial = -1;
+        if (ImGui::Combo("Material", &selectedMaterial, materials, 7)) {
+            applyMaterialPreset(selectedMaterial);
+        }
+    }
 
     ImGui::End();
 
@@ -921,6 +928,28 @@ void Renderer::applyMaterialPreset(int index) {
         lightIntensity     = 5.0f;
         ambientColor       = glm::vec3(0.8f);
         ambientIntensity   = 0.4f;
+        break;
+
+    case 6: // Bubblegum
+        renderResurfacing  = true;
+        renderPebbles      = false;
+        baseMeshMode       = 0;       // Off
+        elementType        = 4;       // Hemisphere
+        userScaling        = 0.576f;
+        resolutionM        = 64;
+        resolutionN        = 64;
+        chainmailMode      = false;
+        // Procedural mesh PBR
+        procBaseColor      = glm::vec3(168.0f/255.0f, 33.0f/255.0f, 33.0f/255.0f);
+        roughness          = 0.250f;
+        metallic           = 0.0f;
+        ao                 = 0.854f;
+        dielectricF0       = 0.132f;
+        envReflection      = 0.805f;
+        // Lighting
+        lightIntensity     = 8.243f;
+        ambientColor       = glm::vec3(0.0f);
+        ambientIntensity   = 1.0f;
         break;
     }
 }
