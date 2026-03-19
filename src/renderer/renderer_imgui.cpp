@@ -671,6 +671,31 @@ void Renderer::applyPresetChainMail() {
     baseMeshSolidEnvReflection  = 0.1f;
 }
 
+void Renderer::applyPresetDragonScales() {
+    // Secondary mesh (dragon body) resurfacing
+    secondaryElementType        = 5;       // Dragon Scale
+    secondaryUserScaling        = 0.770f;
+    secondaryResolutionM        = 30;
+    secondaryResolutionN        = 30;
+    secondaryNormalPerturbation = 0.235f;
+
+    // Secondary mesh (dragon body) PBR material
+    baseMeshBaseColor   = glm::vec3(34.0f/255.0f, 78.0f/255.0f, 28.0f/255.0f);
+    baseMeshRoughness   = 0.504f;
+    baseMeshMetallic    = 0.092f;
+    baseMeshAo          = 0.978f;
+    baseMeshDielectricF0  = 0.008f;
+    baseMeshEnvReflection = 0.368f;
+
+    // Dragon body solid overlay (underneath the scales)
+    secBaseMeshSolidBaseColor     = glm::vec3(34.0f/255.0f, 78.0f/255.0f, 28.0f/255.0f);
+    secBaseMeshSolidRoughness     = 0.445f;
+    secBaseMeshSolidMetallic      = 0.070f;
+    secBaseMeshSolidAo            = 1.0f;
+    secBaseMeshSolidDielectricF0  = 0.004f;
+    secBaseMeshSolidEnvReflection = 0.346f;
+}
+
 void Renderer::applyMaterialPreset(int index) {
     // All material presets use the icosphere
     pendingMeshLoad = std::string(ASSETS_DIR) + "shapes/icosphere.obj";

@@ -45,6 +45,9 @@ struct LevelPreset {
     float dielectricF0;
     float envReflection;
     float lightIntensity;
+
+    // Post-load actions
+    bool applyDragonScales = false;  // Apply dragon scale preset to secondary mesh after load
 };
 
 extern const LevelPreset LEVEL_PRESETS[];

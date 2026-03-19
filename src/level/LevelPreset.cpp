@@ -81,6 +81,46 @@ const LevelPreset LEVEL_PRESETS[] = {
         .envReflection      = 0.572f,
         .lightIntensity     = 10.0f,
     },
+    {
+        .name               = "Dancing Dragon",
+
+        .selectedMesh       = 10,
+        .meshPath           = ASSETS_DIR "dragon/dragon_coat.obj",
+        .triangulateMesh    = false,
+        .baseMeshMode       = 0,        // Off (coat base mesh)
+
+        .renderResurfacing  = true,
+        .elementType        = 0,        // Torus
+        .torusMajorR        = 0.965f,
+        .torusMinorR        = 0.149f,
+        .sphereRadius       = 0.5f,
+        .userScaling        = 0.628f,
+        .resolutionM        = 37,
+        .resolutionN        = 37,
+
+        .chainmailMode      = true,
+        .chainmailTiltAngle = 0.26f,
+        .chainmailSurfaceOffset = 0.500f,
+
+        .thirdPersonMode    = false,
+        .orbitCameraDistance = 5.0f,
+
+        .doSkinning         = true,
+        .animationPlaying   = true,
+        .animationSpeed     = 1.0f,
+
+        .lightPosition      = glm::vec3(5.0f, 5.0f, 5.0f),
+        .ambientColor       = glm::vec3(11.0f/255.0f, 11.0f/255.0f, 11.0f/255.0f),
+        .ambientIntensity   = 0.311f,
+        .roughness          = 0.198f,
+        .metallic           = 1.0f,
+        .ao                 = 0.697f,
+        .dielectricF0       = 0.065f,
+        .envReflection      = 0.572f,
+        .lightIntensity     = 10.0f,
+
+        .applyDragonScales  = true,
+    },
 };
 
 const int LEVEL_PRESET_COUNT = sizeof(LEVEL_PRESETS) / sizeof(LEVEL_PRESETS[0]);

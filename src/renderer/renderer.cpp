@@ -205,6 +205,13 @@ void Renderer::beginFrame() {
                 animationPlaying = pendingPreset->animationPlaying;
                 animationSpeed = pendingPreset->animationSpeed;
                 baseMeshMode = pendingPreset->baseMeshMode;
+                if (pendingPreset->chainmailMode) {
+                    applyPresetChainMail();
+                }
+                if (pendingPreset->applyDragonScales) {
+                    applyPresetDragonScales();
+                    dragonBaseMeshMode = 2;  // Solid
+                }
                 pendingPreset = nullptr;
             }
         }

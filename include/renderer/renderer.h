@@ -221,6 +221,7 @@ public:
 
     void applyPreset(const LevelPreset& preset);
     void applyPresetChainMail();
+    void applyPresetDragonScales();
     void applyMaterialPreset(int index);
 
     // ---- UI-facing state (driven by ImGui panels) ----

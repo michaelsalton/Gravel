@@ -135,6 +135,7 @@ void ResurfacingPanel::render(Renderer& r) {
                     }
                 }
             }
+
             if (r.chainmailMode) {
                 ImGui::Indent();
                 ImGui::SliderFloat("Lean Amount", &r.chainmailTiltAngle, 0.0f, 1.0f, "%.2f");
@@ -190,6 +191,10 @@ void ResurfacingPanel::render(Renderer& r) {
                     if (r.secondaryEnableLod) {
                         ImGui::SameLine();
                         ImGui::SliderFloat("Factor##secLod", &r.secondaryLodFactor, 0.1f, 10.0f);
+                    }
+
+                    if (ImGui::Button("Dragon Scales")) {
+                        r.applyPresetDragonScales();
                     }
 
                     ImGui::Text("Dragon faces: %u", r.secondaryHeNbFaces);
