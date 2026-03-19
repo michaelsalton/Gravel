@@ -503,8 +503,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         secData.torusMajorR      = secondaryTorusMajorR;
         secData.torusMinorR      = secondaryTorusMinorR;
         secData.sphereRadius     = secondarySphereRadius;
-        secData.doLod            = secondaryEnableLod ? 1u : 0u;
-        secData.lodFactor        = secondaryLodFactor;
+        secData.doLod            = enableLod ? 1u : 0u;
+        secData.lodFactor        = lodFactor;
         secData.Nx               = scaleLutNx;
         secData.Ny               = scaleLutNy;
         secData.normalPerturbation = secondaryNormalPerturbation;
@@ -801,8 +801,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         secPush.resolutionN    = secondaryResolutionN;
         secPush.debugMode      = debugMode;
         secPush.enableCulling  = 0;                     // no culling for secondary
-        secPush.enableLod      = secondaryEnableLod ? 1u : 0u;
-        secPush.lodFactor      = secondaryLodFactor;
+        secPush.enableLod      = enableLod ? 1u : 0u;
+        secPush.lodFactor      = lodFactor;
         secPush.chainmailMode  = 0;
         secPush.useDirectIndex = 1;                     // bypass visibleIndices lookup
 

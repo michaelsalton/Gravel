@@ -187,12 +187,6 @@ void ResurfacingPanel::render(Renderer& r) {
                     if (ImGui::SliderInt("Resolution N##sec", &secResN, 2, 64))
                         r.secondaryResolutionN = static_cast<uint32_t>(secResN);
 
-                    ImGui::Checkbox("LOD##sec", &r.secondaryEnableLod);
-                    if (r.secondaryEnableLod) {
-                        ImGui::SameLine();
-                        ImGui::SliderFloat("Factor##secLod", &r.secondaryLodFactor, 0.1f, 10.0f);
-                    }
-
                     if (ImGui::Button("Dragon Scales")) {
                         r.applyPresetDragonScales();
                     }
