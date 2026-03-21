@@ -302,6 +302,15 @@ public:
     uint32_t slotsPerFace      = 0;
     float    preprocessCurvatureScale = 1.0f;  // computed: 1/median curvature
     float    preprocessCurvatureBoost = 1.0f;  // UI: strength of curvature effect
+
+    // GRWM pipeline execution
+    std::string grwmBinaryPath;  // path to cuda_preprocess binary (auto-detected)
+    int         grwmSlotsPerFace = 64;
+    float       grwmFeatureThreshold = 30.0f;
+    bool        grwmRunning = false;
+    bool        grwmPendingLoad = false;  // reload preprocess data after pipeline finishes
+    std::string grwmStatus;               // status message for UI
+    void runGrwmPreprocess();
     bool doSkinning = false;
     bool animationPlaying = false;
 

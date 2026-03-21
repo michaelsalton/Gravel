@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <algorithm>
 #include <set>
+#include <thread>
 
 #ifndef ASSETS_DIR
 #define ASSETS_DIR ""
@@ -1259,6 +1260,57 @@ void Renderer::cleanupGrwmPreprocess() {
     heSlotsBuffer.destroy();
     preprocessLoaded = false;
     slotsPerFace = 0;
+}
+
+void Renderer::runGrwmPreprocess() {
+    if (loadedMeshPath.empty()) {
+        grwmStatus = "No mesh loaded";
+        return;
+    }
+
+    // Auto-detect GRWM binary: try submodule path first, then fallback
+    if (grwmBinaryPath.empty() || !std::filesystem::exists(grwmBinaryPath)) {
+        std::string paths[] = { GRWM_BINARY_PATH, GRWM_BINARY_PATH_FALLBACK };
+        grwmBinaryPath.clear();
+        for (const auto& p : paths) {
+            if (std::filesystem::exists(p)) {
+                grwmBinaryPath = p;
+                std::cout << "  GRWM binary found: " << p << std::endl;
+                break;
+            }
+        }
+    }
+    if (grwmBinaryPath.empty()) {
+        grwmStatus = "GRWM binary not found";
+        return;
+    }
+
+    std::string dir = loadedMeshPath.substr(0, loadedMeshPath.find_last_of("/\\") + 1);
+    std::string outputDir = dir + "preprocess/";
+    std::filesystem::create_directories(outputDir);
+
+    std::string cmd = grwmBinaryPath
+        + " " + loadedMeshPath
+        + " --output " + outputDir
+        + " --slots " + std::to_string(grwmSlotsPerFace)
+        + " --feature-threshold " + std::to_string(grwmFeatureThreshold)
+        + " 2>&1";
+
+    grwmStatus = "Running...";
+    grwmRunning = true;
+
+    // Run in background thread so the render loop keeps running
+    std::thread([this, cmd]() {
+        int result = system(cmd.c_str());
+
+        grwmRunning = false;
+        if (result == 0) {
+            grwmStatus = "Done — will load next frame";
+            grwmPendingLoad = true;
+        } else {
+            grwmStatus = "Pipeline failed (exit code " + std::to_string(result) + ")";
+        }
+    }).detach();
 }
 
 void Renderer::loadGrwmPreprocess(const std::string& meshPath) {

@@ -3,13 +3,39 @@
 #include "imgui.h"
 
 void GrwmPanel::render(Renderer& r) {
+    // Pipeline execution section — always visible
     if (!r.preprocessLoaded) {
-        ImGui::TextDisabled("No preprocess data loaded");
-        ImGui::TextDisabled("Place GRWM output in <mesh>/preprocess/");
+        if (r.loadedMeshPath.empty()) {
+            ImGui::TextDisabled("No mesh loaded");
+        } else if (r.grwmRunning) {
+            ImGui::TextDisabled("Running GRWM pipeline...");
+        } else {
+            // Pipeline settings
+            ImGui::SliderInt("Slots/Face", &r.grwmSlotsPerFace, 16, 128);
+            ImGui::SliderFloat("Feature Threshold", &r.grwmFeatureThreshold, 5.0f, 90.0f, "%.0f deg");
+
+            if (ImGui::Button("Run Pipeline", ImVec2(-1, 0))) {
+                r.runGrwmPreprocess();
+            }
+        }
+
+        if (!r.grwmStatus.empty()) {
+            ImGui::TextWrapped("%s", r.grwmStatus.c_str());
+        }
         return;
     }
 
+    // Loaded — show controls
     ImGui::Checkbox("Enable", &r.enablePreprocess);
+
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Rerun")) {
+        r.runGrwmPreprocess();
+    }
+
+    if (!r.grwmStatus.empty()) {
+        ImGui::TextDisabled("%s", r.grwmStatus.c_str());
+    }
 
     if (!r.enablePreprocess) return;
 
@@ -30,8 +56,7 @@ void GrwmPanel::render(Renderer& r) {
     ImGui::Checkbox("Feature Edge Enforcement", &r.enableFeatureEdges);
     if (r.enableFeatureEdges) {
         ImGui::Indent();
-        ImGui::TextDisabled("Holds resolution along sharp creases");
+        ImGui::TextDisabled("Larger elements along sharp creases");
         ImGui::Unindent();
     }
-
 }

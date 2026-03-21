@@ -69,6 +69,7 @@ Renderer::~Renderer() {
     cleanupMeshSkeleton();
     cleanupMeshTextures();
     cleanupScaleLut();
+    cleanupGrwmPreprocess();
     if (benchmarkPipeline != VK_NULL_HANDLE)
         vkDestroyPipeline(device, benchmarkPipeline, nullptr);
     if (benchmarkPipelineLayout != VK_NULL_HANDLE)
@@ -247,6 +248,15 @@ void Renderer::beginFrame() {
         loadingDone = true;
         loadingDoneTime = static_cast<float>(glfwGetTime());
     } else {
+        // Deferred GRWM buffer load (after pipeline run completes)
+        if (grwmPendingLoad) {
+            grwmPendingLoad = false;
+            vkDeviceWaitIdle(device);
+            loadGrwmPreprocess(loadedMeshPath);
+            writeGrwmDescriptors(heDescriptorSet);
+            grwmStatus = preprocessLoaded ? "Loaded successfully" : "Failed to load output";
+        }
+
         // No loading — process lightweight deferred ops
         if (pendingGroundRegenerate) {
             pendingGroundRegenerate = false;
@@ -501,21 +511,6 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         resurfData.preprocessCurvatureBoost = preprocessCurvatureBoost;
         memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
 
-        // Debug: print GRWM UBO state once per second
-        static float lastDebugTime = 0.0f;
-        float now = lastDeltaTime;
-        lastDebugTime += now;
-        if (lastDebugTime > 1.0f) {
-            lastDebugTime = 0.0f;
-            std::cout << "[GRWM] flags=" << resurfData.hasPreprocessData
-                      << " scale=" << resurfData.preprocessCurvatureScale
-                      << " boost=" << resurfData.preprocessCurvatureBoost
-                      << " loaded=" << preprocessLoaded
-                      << " enable=" << enablePreprocess
-                      << " curvDens=" << enableCurvatureDensity
-                      << " featEdge=" << enableFeatureEdges
-                      << std::endl;
-        }
     }
 
     // Update secondary ResurfacingUBO (used when dualMeshActive)

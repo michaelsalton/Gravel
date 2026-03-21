@@ -126,6 +126,8 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     SHADER_DIR="${CMAKE_BINARY_DIR}/shaders/"
     ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets/"
     BUILD_DIR="${CMAKE_BINARY_DIR}/"
+    GRWM_BINARY_PATH="${CMAKE_SOURCE_DIR}/external/GRWM/build/cuda_preprocess"
+    GRWM_BINARY_PATH_FALLBACK="${CMAKE_SOURCE_DIR}/../GRWM/build/cuda_preprocess"
 )
 
 # Compiler warnings
