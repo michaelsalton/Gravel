@@ -490,7 +490,32 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         resurfData.studRotation           = studRotation;
         resurfData.studRotationRandomness = studRotationRandomness;
         resurfData.studTreadPlate         = studTreadPlate ? 1u : 0u;
+        // hasPreprocessData bitmask: bit 0 = curvature density, bit 1 = feature edges
+        resurfData.hasPreprocessData = 0u;
+        if (preprocessLoaded && enablePreprocess) {
+            if (enableCurvatureDensity) resurfData.hasPreprocessData |= 1u;
+            if (enableFeatureEdges)     resurfData.hasPreprocessData |= 2u;
+        }
+        resurfData.preprocessSlotsPerFace = slotsPerFace;
+        resurfData.preprocessCurvatureScale = preprocessCurvatureScale;
+        resurfData.preprocessCurvatureBoost = preprocessCurvatureBoost;
         memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
+
+        // Debug: print GRWM UBO state once per second
+        static float lastDebugTime = 0.0f;
+        float now = lastDeltaTime;
+        lastDebugTime += now;
+        if (lastDebugTime > 1.0f) {
+            lastDebugTime = 0.0f;
+            std::cout << "[GRWM] flags=" << resurfData.hasPreprocessData
+                      << " scale=" << resurfData.preprocessCurvatureScale
+                      << " boost=" << resurfData.preprocessCurvatureBoost
+                      << " loaded=" << preprocessLoaded
+                      << " enable=" << enablePreprocess
+                      << " curvDens=" << enableCurvatureDensity
+                      << " featEdge=" << enableFeatureEdges
+                      << std::endl;
+        }
     }
 
     // Update secondary ResurfacingUBO (used when dualMeshActive)

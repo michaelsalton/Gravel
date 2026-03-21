@@ -21,6 +21,7 @@
 #include "ui/AdvancedPanel.h"
 #include "ui/PlayerPanel.h"
 #include "ui/AnimationPanel.h"
+#include "ui/GrwmPanel.h"
 
 class Window;
 struct HalfEdgeMesh;
@@ -81,9 +82,13 @@ struct ResurfacingUBO {
     float     studRotation           = 0.0f;
     float     studRotationRandomness = 0.0f;
     uint32_t  studTreadPlate         = 0;
-    float     pad_stud0              = 0.0f;
-    float     pad_stud1              = 0.0f;
-    // total: 176 bytes
+    uint32_t  hasPreprocessData      = 0;
+    uint32_t  preprocessSlotsPerFace = 0;
+    float     preprocessCurvatureScale = 1.0f;  // 1.0 / median curvature (normalizer)
+    float     preprocessCurvatureBoost = 1.0f;  // UI: strength of curvature density boost
+    float     pad_grwm0               = 0.0f;
+    float     pad_grwm1               = 0.0f;
+    // total: 192 bytes
 };
 
 struct GlobalShadingUBO {
@@ -199,6 +204,25 @@ struct BenchmarkPushConstants {
     float pad[3];
 };
 
+struct PreprocessHeader {
+    uint32_t magic;          // 0x47525650 ("GRVP")
+    uint32_t version;        // 1
+    uint32_t vertex_count;
+    uint32_t face_count;
+    uint32_t edge_count;
+    uint32_t slots_per_face;
+    uint32_t padding[2];
+};
+static_assert(sizeof(PreprocessHeader) == 32, "GRVP header must be 32 bytes");
+
+struct SlotEntry {
+    float    u;
+    float    v;
+    float    priority;
+    uint32_t slot_index;
+};
+static_assert(sizeof(SlotEntry) == 16, "SlotEntry must be 16 bytes");
+
 class Renderer {
 public:
     Renderer(Window& window);
@@ -271,6 +295,13 @@ public:
     bool     scaleLutLoaded    = false;
     uint32_t scaleLutNx        = 0;
     uint32_t scaleLutNy        = 0;
+    bool     preprocessLoaded  = false;
+    bool     enablePreprocess  = true;   // use GRWM data when available
+    bool     enableCurvatureDensity = true;  // curvature-aware LOD density
+    bool     enableFeatureEdges     = true;  // feature edge resolution enforcement
+    uint32_t slotsPerFace      = 0;
+    float    preprocessCurvatureScale = 1.0f;  // computed: 1/median curvature
+    float    preprocessCurvatureBoost = 1.0f;  // UI: strength of curvature effect
     bool doSkinning = false;
     bool animationPlaying = false;
 
@@ -394,6 +425,7 @@ public:
     bool heMeshUploaded = false;
     uint32_t heNbFaces = 0;
     uint32_t heNbVertices = 0;
+    uint32_t heNbHalfEdges = 0;
     uint32_t baseMeshTriCount = 0;
     uint32_t boneCount = 0;
 
@@ -504,6 +536,9 @@ private:
                                VkFormat format, bool& loadedFlag);
     void loadScaleLut();
     void cleanupScaleLut();
+    void loadGrwmPreprocess(const std::string& meshPath);
+    void cleanupGrwmPreprocess();
+    void writeGrwmDescriptors(VkDescriptorSet dstSet);
     size_t calculateVRAM() const;
 
     void initImGui();
@@ -629,6 +664,11 @@ private:
     std::vector<StorageBuffer> heIntBuffers;    // 10: topology arrays
     std::vector<StorageBuffer> heFloatBuffers;  // 1: faceAreas
 
+    // GRWM preprocessed data buffers (Set 1 bindings 4-6)
+    StorageBuffer heCurvatureBuffer;
+    StorageBuffer heFeatureFlagsBuffer;
+    StorageBuffer heSlotsBuffer;
+
     VkDescriptorSet heDescriptorSet = VK_NULL_HANDLE;
 
     VkBuffer meshInfoBuffer = VK_NULL_HANDLE;
@@ -716,6 +756,7 @@ private:
     AdvancedPanel    advancedPanel;
     PlayerPanel      playerPanel;
     AnimationPanel   animationPanel;
+    GrwmPanel        grwmPanel;
 
 #ifdef NDEBUG
     const bool enableValidationLayers = false;

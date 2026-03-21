@@ -831,7 +831,10 @@ void Renderer::createDescriptorSetLayouts() {
     // Binding 1: vec2 buffers[1] (texCoords)
     // Binding 2: int  buffers[10] (topology arrays)
     // Binding 3: float buffers[1] (faceAreas)
-    std::array<VkDescriptorSetLayoutBinding, 4> heBindings{};
+    // Binding 4: curvature float[1] (GRWM, optional)
+    // Binding 5: feature flags uint[1] (GRWM, optional)
+    // Binding 6: slot entries SlotEntry[1] (GRWM, optional)
+    std::array<VkDescriptorSetLayoutBinding, 7> heBindings{};
     VkShaderStageFlags heStages = VK_SHADER_STAGE_TASK_BIT_EXT |
                                    VK_SHADER_STAGE_MESH_BIT_EXT |
                                    VK_SHADER_STAGE_COMPUTE_BIT;
@@ -856,8 +859,40 @@ void Renderer::createDescriptorSetLayouts() {
     heBindings[3].descriptorCount = 1;
     heBindings[3].stageFlags = heStages;
 
+    // GRWM preprocessed data (optional, PARTIALLY_BOUND)
+    heBindings[4].binding = 4;
+    heBindings[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    heBindings[4].descriptorCount = 1;
+    heBindings[4].stageFlags = heStages;
+
+    heBindings[5].binding = 5;
+    heBindings[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    heBindings[5].descriptorCount = 1;
+    heBindings[5].stageFlags = heStages;
+
+    heBindings[6].binding = 6;
+    heBindings[6].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    heBindings[6].descriptorCount = 1;
+    heBindings[6].stageFlags = heStages;
+
+    std::array<VkDescriptorBindingFlags, 7> heBindingFlags{};
+    heBindingFlags[0] = 0;
+    heBindingFlags[1] = 0;
+    heBindingFlags[2] = 0;
+    heBindingFlags[3] = 0;
+    heBindingFlags[4] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    heBindingFlags[5] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    heBindingFlags[6] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+
+    VkDescriptorSetLayoutBindingFlagsCreateInfo heBindingFlagsInfo{};
+    heBindingFlagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+    heBindingFlagsInfo.bindingCount = static_cast<uint32_t>(heBindingFlags.size());
+    heBindingFlagsInfo.pBindingFlags = heBindingFlags.data();
+
     VkDescriptorSetLayoutCreateInfo heLayoutInfo{};
     heLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    heLayoutInfo.pNext = &heBindingFlagsInfo;
+    heLayoutInfo.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
     heLayoutInfo.bindingCount = static_cast<uint32_t>(heBindings.size());
     heLayoutInfo.pBindings = heBindings.data();
 
@@ -1091,9 +1126,9 @@ void Renderer::createDescriptorPool() {
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2 + 4);
 
-    // SSBOs: 17 HE + 3 skeleton + 17 secondary HE + 2 secondary skeleton joints/weights + 1 shared bone matrices + 17 ground HE + 2 visible indices (one per frame) + 1 scale LUT
+    // SSBOs: 20 HE (17+3 GRWM) + 3 skeleton + 20 secondary HE + 3 secondary skeleton + 20 ground HE + 2 visible indices (one per frame) + 1 scale LUT
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[1].descriptorCount = 17 + 3 + 17 + 3 + 17 + MAX_FRAMES_IN_FLIGHT + 1;
+    poolSizes[1].descriptorCount = 20 + 3 + 20 + 3 + 20 + MAX_FRAMES_IN_FLIGHT + 1;
 
     // Samplers: 2 primary + 2 secondary + 2 ground
     poolSizes[2].type = VK_DESCRIPTOR_TYPE_SAMPLER;

@@ -603,6 +603,16 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         }
     }
 
+    float presetsPanelH = ImGui::GetWindowSize().y;
+    ImGui::End();
+
+    // ===================== GRWM Panel (below Presets) =====================
+    ImGui::SetNextWindowPos(ImVec2(panelW, displayH * 0.5f + presetsPanelH), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(panelW, 0), ImGuiCond_Always);
+    ImGui::Begin("GRWM", nullptr,
+                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+                 ImGuiWindowFlags_AlwaysAutoResize);
+    grwmPanel.render(*this);
     ImGui::End();
 
     // Loading overlay (in progress)

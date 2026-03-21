@@ -98,7 +98,7 @@ void Renderer::uploadHEBuffers(const HalfEdgeMesh& mesh,
     meshInfo.nbVertices = mesh.nbVertices;
     meshInfo.nbFaces = mesh.nbFaces;
     meshInfo.nbHalfEdges = mesh.nbHalfEdges;
-    meshInfo.padding = 0;
+    meshInfo.slotsPerFace = 0;
 
     if (meshInfoBuf != VK_NULL_HANDLE) {
         vkDestroyBuffer(device, meshInfoBuf, nullptr);
@@ -219,6 +219,7 @@ void Renderer::uploadHalfEdgeMesh(const HalfEdgeMesh& mesh) {
     visibleCacheDirty = true;
     heNbFaces = mesh.nbFaces;
     heNbVertices = mesh.nbVertices;
+    heNbHalfEdges = mesh.nbHalfEdges;
     baseMeshTriCount = 0;
     for (uint32_t i = 0; i < mesh.nbFaces; i++)
         baseMeshTriCount += static_cast<uint32_t>(mesh.faceVertCounts[i]) - 2;
@@ -1252,6 +1253,224 @@ void Renderer::cleanupScaleLut() {
     scaleLutLoaded = false;
 }
 
+void Renderer::cleanupGrwmPreprocess() {
+    heCurvatureBuffer.destroy();
+    heFeatureFlagsBuffer.destroy();
+    heSlotsBuffer.destroy();
+    preprocessLoaded = false;
+    slotsPerFace = 0;
+}
+
+void Renderer::loadGrwmPreprocess(const std::string& meshPath) {
+    cleanupGrwmPreprocess();
+
+    std::string dir = meshPath.substr(0, meshPath.find_last_of("/\\") + 1);
+    std::string preprocessDir = dir + "preprocess/";
+
+    if (!std::filesystem::is_directory(preprocessDir)) {
+        std::cout << "  No preprocess directory found at " << preprocessDir << std::endl;
+        return;
+    }
+
+    auto readHeader = [](const std::string& path, PreprocessHeader& hdr) -> bool {
+        std::ifstream f(path, std::ios::binary);
+        if (!f) return false;
+        f.read(reinterpret_cast<char*>(&hdr), sizeof(PreprocessHeader));
+        return f.good() && hdr.magic == 0x47525650 && hdr.version == 1;
+    };
+
+    // Read all three headers first to validate
+    PreprocessHeader curvHdr{}, featHdr{}, slotsHdr{};
+    std::string curvPath = preprocessDir + "curvature.bin";
+    std::string featPath = preprocessDir + "features.bin";
+    std::string slotsPath = preprocessDir + "slots.bin";
+
+    if (!readHeader(curvPath, curvHdr) || !readHeader(featPath, featHdr) || !readHeader(slotsPath, slotsHdr)) {
+        std::cerr << "  Warning: GRWM preprocess files missing or invalid header" << std::endl;
+        return;
+    }
+
+    if (curvHdr.vertex_count != heNbVertices) {
+        std::cerr << "  Warning: curvature.bin vertex count (" << curvHdr.vertex_count
+                  << ") != mesh (" << heNbVertices << ")" << std::endl;
+        return;
+    }
+
+    // Determine if we need tri->ngon remapping.
+    // GRWM always triangulates, so its face_count may differ from ours.
+    bool needsRemap = (featHdr.face_count != heNbFaces);
+    uint32_t grwmFaceCount = featHdr.face_count;
+    uint32_t grwmSlotsPerFace = slotsHdr.slots_per_face;
+
+    if (needsRemap) {
+        // Verify the triangle count is consistent: each original face of N verts
+        // produces (N-2) triangles. Sum should equal GRWM face count.
+        uint32_t expectedTriCount = 0;
+        for (uint32_t i = 0; i < heNbFaces; i++)
+            expectedTriCount += static_cast<uint32_t>(cpuFaceVertCounts[i]) - 2;
+
+        if (expectedTriCount != grwmFaceCount) {
+            std::cerr << "  Warning: GRWM face count (" << grwmFaceCount
+                      << ") != expected triangulated count (" << expectedTriCount
+                      << ") from " << heNbFaces << " original faces" << std::endl;
+            return;
+        }
+        std::cout << "  Remapping GRWM data: " << grwmFaceCount << " triangles -> "
+                  << heNbFaces << " original faces" << std::endl;
+    }
+
+    // --- Curvature (per-vertex, no remapping needed) ---
+    {
+        std::vector<float> curvature(curvHdr.vertex_count);
+        std::ifstream f(curvPath, std::ios::binary);
+        f.seekg(sizeof(PreprocessHeader));
+        f.read(reinterpret_cast<char*>(curvature.data()), curvature.size() * sizeof(float));
+        heCurvatureBuffer.create(device, physicalDevice,
+            curvature.size() * sizeof(float), curvature.data());
+
+        // Compute median curvature for normalization
+        std::vector<float> sorted = curvature;
+        std::sort(sorted.begin(), sorted.end());
+        float median = sorted[sorted.size() / 2];
+        preprocessCurvatureScale = (median > 1e-6f) ? (1.0f / median) : 1.0f;
+        std::cout << "  Loaded curvature.bin (" << curvHdr.vertex_count
+                  << " vertices, median=" << median << ")" << std::endl;
+    }
+
+    // --- Features (per-face, remap: OR child triangle flags) ---
+    {
+        std::vector<uint8_t> triFlags(grwmFaceCount);
+        std::ifstream f(featPath, std::ios::binary);
+        f.seekg(sizeof(PreprocessHeader));
+        f.read(reinterpret_cast<char*>(triFlags.data()), triFlags.size());
+
+        std::vector<uint32_t> flags(heNbFaces);
+        if (needsRemap) {
+            uint32_t triIdx = 0;
+            for (uint32_t faceId = 0; faceId < heNbFaces; faceId++) {
+                uint32_t numTris = static_cast<uint32_t>(cpuFaceVertCounts[faceId]) - 2;
+                uint32_t merged = 0;
+                for (uint32_t t = 0; t < numTris; t++)
+                    merged |= triFlags[triIdx++];
+                flags[faceId] = merged;
+            }
+        } else {
+            for (uint32_t i = 0; i < grwmFaceCount; i++) flags[i] = triFlags[i];
+        }
+
+        heFeatureFlagsBuffer.create(device, physicalDevice,
+            flags.size() * sizeof(uint32_t), flags.data());
+        std::cout << "  Loaded features.bin (" << heNbFaces << " faces)" << std::endl;
+    }
+
+    // --- Slots (per-face, remap: merge child triangle slots, sort, keep top N) ---
+    {
+        std::vector<SlotEntry> triSlots(grwmFaceCount * grwmSlotsPerFace);
+        std::ifstream f(slotsPath, std::ios::binary);
+        f.seekg(sizeof(PreprocessHeader));
+        f.read(reinterpret_cast<char*>(triSlots.data()), triSlots.size() * sizeof(SlotEntry));
+
+        slotsPerFace = grwmSlotsPerFace;
+        std::vector<SlotEntry> finalSlots(heNbFaces * slotsPerFace);
+
+        if (needsRemap) {
+            uint32_t triIdx = 0;
+            for (uint32_t faceId = 0; faceId < heNbFaces; faceId++) {
+                uint32_t numTris = static_cast<uint32_t>(cpuFaceVertCounts[faceId]) - 2;
+
+                // Gather all slots from child triangles
+                std::vector<SlotEntry> merged;
+                merged.reserve(numTris * grwmSlotsPerFace);
+                for (uint32_t t = 0; t < numTris; t++) {
+                    uint32_t base = (triIdx + t) * grwmSlotsPerFace;
+                    for (uint32_t s = 0; s < grwmSlotsPerFace; s++)
+                        merged.push_back(triSlots[base + s]);
+                }
+                triIdx += numTris;
+
+                // Sort by priority descending, keep top slotsPerFace
+                std::sort(merged.begin(), merged.end(),
+                    [](const SlotEntry& a, const SlotEntry& b) {
+                        return a.priority > b.priority;
+                    });
+
+                uint32_t outBase = faceId * slotsPerFace;
+                for (uint32_t s = 0; s < slotsPerFace; s++) {
+                    if (s < merged.size())
+                        finalSlots[outBase + s] = merged[s];
+                    else
+                        finalSlots[outBase + s] = {0.5f, 0.5f, 0.0f, s};
+                }
+            }
+        } else {
+            finalSlots = std::move(triSlots);
+        }
+
+        heSlotsBuffer.create(device, physicalDevice,
+            finalSlots.size() * sizeof(SlotEntry), finalSlots.data());
+        std::cout << "  Loaded slots.bin (" << heNbFaces << " faces x "
+                  << slotsPerFace << " slots)" << std::endl;
+    }
+
+    preprocessLoaded = true;
+
+    // Re-upload MeshInfoUBO with slotsPerFace
+    MeshInfoUBO meshInfo{};
+    meshInfo.nbVertices = heNbVertices;
+    meshInfo.nbFaces = heNbFaces;
+    meshInfo.nbHalfEdges = heNbHalfEdges;
+    meshInfo.slotsPerFace = slotsPerFace;
+    void* data;
+    vkMapMemory(device, meshInfoMemory, 0, sizeof(MeshInfoUBO), 0, &data);
+    memcpy(data, &meshInfo, sizeof(MeshInfoUBO));
+    vkUnmapMemory(device, meshInfoMemory);
+
+    std::cout << "  GRWM preprocessed data loaded successfully" << std::endl;
+}
+
+void Renderer::writeGrwmDescriptors(VkDescriptorSet dstSet) {
+    if (!preprocessLoaded) return;
+
+    VkDescriptorBufferInfo curvInfo{};
+    curvInfo.buffer = heCurvatureBuffer.getBuffer();
+    curvInfo.offset = 0;
+    curvInfo.range  = heCurvatureBuffer.getSize();
+
+    VkDescriptorBufferInfo featInfo{};
+    featInfo.buffer = heFeatureFlagsBuffer.getBuffer();
+    featInfo.offset = 0;
+    featInfo.range  = heFeatureFlagsBuffer.getSize();
+
+    VkDescriptorBufferInfo slotsInfo{};
+    slotsInfo.buffer = heSlotsBuffer.getBuffer();
+    slotsInfo.offset = 0;
+    slotsInfo.range  = heSlotsBuffer.getSize();
+
+    std::array<VkWriteDescriptorSet, 3> writes{};
+    for (auto& w : writes) w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+
+    writes[0].dstSet = dstSet;
+    writes[0].dstBinding = 4;
+    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writes[0].descriptorCount = 1;
+    writes[0].pBufferInfo = &curvInfo;
+
+    writes[1].dstSet = dstSet;
+    writes[1].dstBinding = 5;
+    writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writes[1].descriptorCount = 1;
+    writes[1].pBufferInfo = &featInfo;
+
+    writes[2].dstSet = dstSet;
+    writes[2].dstBinding = 6;
+    writes[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writes[2].descriptorCount = 1;
+    writes[2].pBufferInfo = &slotsInfo;
+
+    vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
+                           writes.data(), 0, nullptr);
+}
+
 void Renderer::loadAndUploadTexture(const std::string& path, VulkanTexture& texture,
                                      VkFormat format, bool& loadedFlag) {
     if (!std::filesystem::exists(path)) return;
@@ -1275,6 +1494,7 @@ void Renderer::loadMesh(const std::string& path) {
     cleanupSecondaryMesh();
     cleanupMeshTextures();
     cleanupMeshSkeleton();
+    cleanupGrwmPreprocess();
 
     loadedMeshPath = path;
     NGonMesh ngon = ObjLoader::load(path);
@@ -1284,9 +1504,14 @@ void Renderer::loadMesh(const std::string& path) {
     if (subdivideLevel > 0) {
         ObjLoader::subdivide(ngon, subdivideLevel);
     }
+
     HalfEdgeMesh heMesh = HalfEdgeBuilder::build(ngon);
     computeFace2Coloring(heMesh);
     uploadHalfEdgeMesh(heMesh);
+
+    // Load GRWM preprocessed data if available
+    loadGrwmPreprocess(path);
+    writeGrwmDescriptors(heDescriptorSet);
 
     // Auto-detect textures in the same directory as the mesh
     std::string dir = path.substr(0, path.find_last_of("/\\") + 1);

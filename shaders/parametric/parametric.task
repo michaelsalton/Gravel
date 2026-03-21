@@ -264,6 +264,49 @@ void main() {
         N = push.resolutionN;
     }
 
+    // GRWM: curvature-aware density (bit 0) and feature edge enforcement (bit 1)
+    // Applied after LOD or fixed resolution, independent of LOD toggle.
+    uint grwmFlags = resurfacingUBO.hasPreprocessData;
+
+    // Compute per-element curvature (shared by both curvature density and features)
+    float grwmCurvature = 0.0;
+    if (grwmFlags != 0u) {
+        if (isVertex) {
+            grwmCurvature = abs(getVertexCurvature(vertId));
+        } else {
+            int edge = readFaceEdge(faceId);
+            int he = edge;
+            float sum = 0.0;
+            int count = 0;
+            for (int i = 0; i < 4; i++) {
+                uint vid = uint(getHalfEdgeVertex(uint(he)));
+                sum += abs(getVertexCurvature(vid));
+                count++;
+                he = getHalfEdgeNext(uint(he));
+                if (he == edge) break;
+            }
+            grwmCurvature = sum / float(max(count, 1));
+        }
+    }
+
+    if ((grwmFlags & 1u) != 0u) {
+        // Curvature-aware scaling: modulate element size by curvature.
+        // High curvature = larger elements (more coverage), low = smaller.
+        float normalized = grwmCurvature * resurfacingUBO.preprocessCurvatureScale;
+        float scaleFactor = clamp(
+            mix(1.0, normalized, resurfacingUBO.preprocessCurvatureBoost * 0.5),
+            0.3, 2.0);
+        payload.area *= scaleFactor * scaleFactor;  // area scales as square of linear size
+    }
+
+    if ((grwmFlags & 2u) != 0u) {
+        // Feature edge enforcement: faces along sharp creases get larger
+        // elements to ensure full coverage at crease boundaries.
+        if (!isVertex && getFaceFeatureFlag(faceId) != 0u) {
+            payload.area *= 1.5;
+        }
+    }
+
     payload.resolutionM = M;
     payload.resolutionN = N;
 

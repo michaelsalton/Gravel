@@ -75,6 +75,7 @@ set(SOURCES
     src/ui/AdvancedPanel.cpp
     src/ui/PlayerPanel.cpp
     src/ui/AnimationPanel.cpp
+    src/ui/GrwmPanel.cpp
     src/geometry/HalfEdge.cpp
     src/vulkan/vkHelper.cpp
     src/loaders/ObjWriter.cpp

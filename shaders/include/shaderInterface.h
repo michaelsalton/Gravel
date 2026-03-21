@@ -40,12 +40,15 @@
 #define BINDING_HE_VEC2 1
 #define BINDING_HE_INT 2
 #define BINDING_HE_FLOAT 3
+#define BINDING_HE_CURVATURE 4
+#define BINDING_HE_FEATURES  5
+#define BINDING_HE_SLOTS     6
 
 struct MeshInfoUBO {
     uint nbVertices;
     uint nbFaces;
     uint nbHalfEdges;
-    uint padding;
+    uint slotsPerFace;
 };
 
 // ============================================================================
@@ -116,9 +119,13 @@ struct ResurfacingUBO {
     float studRotation;         // base rotation angle in radians (offset 156)
     float studRotationRandomness; // 0=uniform, 1=fully random rotation (offset 160)
     uint  studTreadPlate;       // 0=off, 1=alternate ±angle for tread plate (offset 164)
-    float pad_stud0;            // std140 padding (offset 168)
-    float pad_stud1;            // std140 padding (offset 172)
-    // total: 176 bytes
+    uint  hasPreprocessData;    // 0=off, 1=GRWM curvature/features/slots loaded (offset 168)
+    uint  preprocessSlotsPerFace; // slots per face from GRWM (offset 172)
+    float preprocessCurvatureScale; // 1.0 / median curvature (normalizer) (offset 176)
+    float preprocessCurvatureBoost; // UI strength of curvature density boost (offset 180)
+    float pad_grwm0;            // std140 padding (offset 184)
+    float pad_grwm1;            // std140 padding (offset 188)
+    // total: 192 bytes
 };
 
 // ============================================================================
@@ -158,6 +165,26 @@ LAYOUT_STD430(SET_HALF_EDGE, BINDING_HE_INT) readonly buffer HEIntBuffer {
 LAYOUT_STD430(SET_HALF_EDGE, BINDING_HE_FLOAT) readonly buffer HEFloatBuffer {
     float data[];
 } heFloatBuffer[1];
+
+// GRWM preprocessed data (bindings 4-6, optional — PARTIALLY_BOUND)
+LAYOUT_STD430(SET_HALF_EDGE, BINDING_HE_CURVATURE) readonly buffer HECurvatureBuffer {
+    float data[];
+} heCurvatureBuffer[1];
+
+LAYOUT_STD430(SET_HALF_EDGE, BINDING_HE_FEATURES) readonly buffer HEFeaturesBuffer {
+    uint data[];
+} heFeaturesBuffer[1];
+
+struct SlotEntry {
+    float u;
+    float v;
+    float priority;
+    uint slot_index;
+};
+
+LAYOUT_STD430(SET_HALF_EDGE, BINDING_HE_SLOTS) readonly buffer HESlotsBuffer {
+    SlotEntry data[];
+} heSlotsBuffer[1];
 
 // --- Vertex data access ---
 
@@ -235,6 +262,20 @@ int getHalfEdgeTwin(uint heId) {
 
 int getVertexFaceIndex(uint index) {
     return heIntBuffer[9].data[index];
+}
+
+// --- GRWM preprocessed data access ---
+
+float getVertexCurvature(uint vertId) {
+    return heCurvatureBuffer[0].data[vertId];
+}
+
+uint getFaceFeatureFlag(uint faceId) {
+    return heFeaturesBuffer[0].data[faceId];
+}
+
+SlotEntry getSlotEntry(uint faceId, uint slotIdx, uint slotsPerFace) {
+    return heSlotsBuffer[0].data[faceId * slotsPerFace + slotIdx];
 }
 
 // --- Config UBO (set 2, binding 0): per-object configuration ---
@@ -318,8 +359,12 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
     float studRotation;
     float studRotationRandomness;
     uint  studTreadPlate;
-    float pad_stud0;
-    float pad_stud1;
+    uint  hasPreprocessData;
+    uint  preprocessSlotsPerFace;
+    float preprocessCurvatureScale;
+    float preprocessCurvatureBoost;
+    float pad_grwm0;
+    float pad_grwm1;
 } resurfacingUBO;
 
 #endif
