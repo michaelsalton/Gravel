@@ -509,6 +509,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         resurfData.preprocessSlotsPerFace = slotsPerFace;
         resurfData.preprocessCurvatureScale = preprocessCurvatureScale;
         resurfData.preprocessCurvatureBoost = preprocessCurvatureBoost;
+        resurfData.featureEdgeBoostUBO = featureEdgeBoost;
+        resurfData.grwmIntensityUBO = grwmIntensity;
         memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
 
     }

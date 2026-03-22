@@ -289,23 +289,31 @@ void main() {
         }
     }
 
+    float grwmAreaScale = 1.0;
+    float intensity = resurfacingUBO.grwmIntensityUBO;
+
     if ((grwmFlags & 1u) != 0u) {
         // Curvature-aware scaling: modulate element size by curvature.
-        // High curvature = larger elements (more coverage), low = smaller.
         float normalized = grwmCurvature * resurfacingUBO.preprocessCurvatureScale;
         float scaleFactor = clamp(
             mix(1.0, normalized, resurfacingUBO.preprocessCurvatureBoost * 0.5),
             0.3, 2.0);
-        payload.area *= scaleFactor * scaleFactor;  // area scales as square of linear size
+        grwmAreaScale *= scaleFactor * scaleFactor;
     }
 
     if ((grwmFlags & 2u) != 0u) {
-        // Feature edge enforcement: faces along sharp creases get larger
-        // elements to ensure full coverage at crease boundaries.
+        // Feature edge boost: scale up on feature faces, shrink non-feature.
+        float featureBoost = resurfacingUBO.featureEdgeBoostUBO;
         if (!isVertex && getFaceFeatureFlag(faceId) != 0u) {
-            payload.area *= 1.5;
+            grwmAreaScale *= featureBoost * featureBoost;
+        } else {
+            float shrink = 1.0 / max(featureBoost, 1.0);
+            grwmAreaScale *= shrink * shrink;
         }
     }
+
+    // Apply with global intensity: lerp between 1.0 (no effect) and full effect
+    payload.area *= mix(1.0, grwmAreaScale, intensity);
 
     payload.resolutionM = M;
     payload.resolutionN = N;

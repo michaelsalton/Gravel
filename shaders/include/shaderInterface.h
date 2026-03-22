@@ -123,8 +123,8 @@ struct ResurfacingUBO {
     uint  preprocessSlotsPerFace; // slots per face from GRWM (offset 172)
     float preprocessCurvatureScale; // 1.0 / median curvature (normalizer) (offset 176)
     float preprocessCurvatureBoost; // UI strength of curvature density boost (offset 180)
-    float pad_grwm0;            // std140 padding (offset 184)
-    float pad_grwm1;            // std140 padding (offset 188)
+    float featureEdgeBoostUBO;            // std140 padding (offset 184)
+    float grwmIntensityUBO;            // std140 padding (offset 188)
     // total: 192 bytes
 };
 
@@ -363,8 +363,8 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
     uint  preprocessSlotsPerFace;
     float preprocessCurvatureScale;
     float preprocessCurvatureBoost;
-    float pad_grwm0;
-    float pad_grwm1;
+    float featureEdgeBoostUBO;
+    float grwmIntensityUBO;
 } resurfacingUBO;
 
 #endif

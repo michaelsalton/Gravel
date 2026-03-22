@@ -39,6 +39,8 @@ void GrwmPanel::render(Renderer& r) {
 
     if (!r.enablePreprocess) return;
 
+    ImGui::SliderFloat("Intensity", &r.grwmIntensity, 0.0f, 1.0f, "%.2f");
+
     ImGui::Separator();
 
     // Curvature density
@@ -56,7 +58,8 @@ void GrwmPanel::render(Renderer& r) {
     ImGui::Checkbox("Feature Edge Enforcement", &r.enableFeatureEdges);
     if (r.enableFeatureEdges) {
         ImGui::Indent();
-        ImGui::TextDisabled("Larger elements along sharp creases");
+        ImGui::SliderFloat("Feature Boost", &r.featureEdgeBoost, 1.0f, 3.0f, "%.2f");
+        ImGui::TextDisabled("1 = no change  |  >1 = larger on creases");
         ImGui::Unindent();
     }
 }

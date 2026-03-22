@@ -86,8 +86,8 @@ struct ResurfacingUBO {
     uint32_t  preprocessSlotsPerFace = 0;
     float     preprocessCurvatureScale = 1.0f;  // 1.0 / median curvature (normalizer)
     float     preprocessCurvatureBoost = 1.0f;  // UI: strength of curvature density boost
-    float     pad_grwm0               = 0.0f;
-    float     pad_grwm1               = 0.0f;
+    float     featureEdgeBoostUBO      = 1.5f;  // feature edge area scale
+    float     grwmIntensityUBO        = 1.0f;  // global GRWM intensity
     // total: 192 bytes
 };
 
@@ -297,8 +297,10 @@ public:
     uint32_t scaleLutNy        = 0;
     bool     preprocessLoaded  = false;
     bool     enablePreprocess  = true;   // use GRWM data when available
+    float    grwmIntensity    = 1.0f;   // global GRWM effect strength [0,1]
     bool     enableCurvatureDensity = true;  // curvature-aware LOD density
     bool     enableFeatureEdges     = true;  // feature edge resolution enforcement
+    float    featureEdgeBoost       = 1.5f;  // scale multiplier for feature edge faces
     uint32_t slotsPerFace      = 0;
     float    preprocessCurvatureScale = 1.0f;  // computed: 1/median curvature
     float    preprocessCurvatureBoost = 1.0f;  // UI: strength of curvature effect
