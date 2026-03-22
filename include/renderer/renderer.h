@@ -396,6 +396,7 @@ public:
 
     // Lighting config (global)
     glm::vec3 lightPosition = glm::vec3(5.0f, 5.0f, 5.0f);
+    glm::vec3 backgroundColor = glm::vec3(0.1f, 0.1f, 0.1f);
     glm::vec3 ambientColor = glm::vec3(0.2f, 0.2f, 0.25f);
     float ambientIntensity = 1.0f;
     float lightIntensity = 3.0f;

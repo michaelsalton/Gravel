@@ -12,6 +12,8 @@ Window::Window(int width, int height, const std::string& title)
 
     // No OpenGL context — we're using Vulkan
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHintString(GLFW_X11_CLASS_NAME, "Gravel");
+    glfwWindowHintString(GLFW_X11_INSTANCE_NAME, "Gravel");
 
     window = glfwCreateWindow(this->width, this->height, title.c_str(), nullptr, nullptr);
     if (!window) {
@@ -28,6 +30,8 @@ Window::Window(int width, int height, const std::string& title)
             GLFWimage icon{w, h, pixels};
             glfwSetWindowIcon(window, 1, &icon);
             stbi_image_free(pixels);
+        } else {
+            std::cerr << "Failed to load window icon: " << ASSETS_DIR "application/chainmail_icon_128.png" << std::endl;
         }
     }
 

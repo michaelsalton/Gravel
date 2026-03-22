@@ -89,6 +89,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             if (ImGui::MenuItem(window.isFullscreen() ? "Windowed" : "Fullscreen")) {
                 window.toggleFullscreen();
             }
+            ImGui::ColorEdit3("Background", &backgroundColor.x, ImGuiColorEditFlags_NoInputs);
             if (ImGui::MenuItem("Reset Layout")) {
                 resetLayout = true;
             }

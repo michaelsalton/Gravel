@@ -47,7 +47,7 @@ const LevelPreset LEVEL_PRESETS[] = {
         .name               = "Chainmail Man",
 
         .selectedMesh       = 10,
-        .meshPath           = ASSETS_DIR "man/man.obj",
+        .meshPath           = ASSETS_DIR "base_mesh/man/man.obj",
         .triangulateMesh    = false,
         .baseMeshMode       = 5,        // Skin
 
@@ -85,7 +85,7 @@ const LevelPreset LEVEL_PRESETS[] = {
         .name               = "Dancing Dragon",
 
         .selectedMesh       = 10,
-        .meshPath           = ASSETS_DIR "dragon/dragon_coat.obj",
+        .meshPath           = ASSETS_DIR "base_mesh/dragon/dragon_coat.obj",
         .triangulateMesh    = false,
         .baseMeshMode       = 0,        // Off (coat base mesh)
 
