@@ -565,6 +565,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     pushConstants.chainmailMode = chainmailMode ? 1u : 0u;
     pushConstants.chainmailTiltAngle = chainmailTiltAngle;
     pushConstants.chainmailSurfaceOffset = chainmailSurfaceOffset;
+    pushConstants.activeSlots = (enableSlotPlacement && preprocessLoaded && enablePreprocess)
+        ? static_cast<uint32_t>(activeSlotCount) : 0u;
 
     vkCmdPushConstants(cmd, pipelineLayout,
                         VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
@@ -583,11 +585,15 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
             glm::mat4 mvp = activeCamera->getProjectionMatrix(aspect) *
                             activeCamera->getViewMatrix() * model;
 
+            uint32_t slotK = (enableSlotPlacement && preprocessLoaded && enablePreprocess)
+                ? static_cast<uint32_t>(activeSlotCount) : 0u;
+
             bool settingsChanged = (enableFrustumCulling  != lastEnableFrustumCulling)
                                 || (enableBackfaceCulling != lastEnableBackfaceCulling)
                                 || (cullingThreshold      != lastCullingThreshold)
                                 || (userScaling           != lastCullUserScaling)
-                                || (doMaskCull            != lastDoMaskCull);
+                                || (doMaskCull            != lastDoMaskCull)
+                                || (slotK                 != lastSlotK);
             bool cameraChanged = (mvp != lastCullMVP);
 
             if (visibleCacheDirty || settingsChanged || (doCulling && cameraChanged)) {
@@ -625,19 +631,34 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
 
                 auto cullStart = std::chrono::high_resolution_clock::now();
 
-                for (uint32_t i = 0; i < heNbFaces; i++) {
-                    if (isMasked(cpuFaceUVs[i])) continue;
-                    cachedTotalElements++;
-                    if (isVisible(cpuFaceCenters[i], cpuFaceNormals[i], cpuFaceAreas[i]))
-                        if (cachedVisibleIndices.size() < VISIBLE_INDICES_MAX)
-                            cachedVisibleIndices.push_back(i);
-                }
-                for (uint32_t i = 0; i < heNbVertices; i++) {
-                    if (isMasked(cpuVertexUVs[i])) continue;
-                    cachedTotalElements++;
-                    if (isVisible(cpuVertexPositions[i], cpuVertexNormals[i], cpuVertexFaceAreas[i]))
-                        if (cachedVisibleIndices.size() < VISIBLE_INDICES_MAX)
-                            cachedVisibleIndices.push_back(heNbFaces + i);
+                if (slotK > 0) {
+                    // Slot mode: emit K indices per visible face
+                    for (uint32_t i = 0; i < heNbFaces; i++) {
+                        if (isMasked(cpuFaceUVs[i])) continue;
+                        cachedTotalElements += slotK;
+                        if (isVisible(cpuFaceCenters[i], cpuFaceNormals[i], cpuFaceAreas[i])) {
+                            for (uint32_t s = 0; s < slotK; s++) {
+                                if (cachedVisibleIndices.size() < VISIBLE_INDICES_MAX)
+                                    cachedVisibleIndices.push_back(i * slotK + s);
+                            }
+                        }
+                    }
+                    // Skip vertex elements in slot mode
+                } else {
+                    for (uint32_t i = 0; i < heNbFaces; i++) {
+                        if (isMasked(cpuFaceUVs[i])) continue;
+                        cachedTotalElements++;
+                        if (isVisible(cpuFaceCenters[i], cpuFaceNormals[i], cpuFaceAreas[i]))
+                            if (cachedVisibleIndices.size() < VISIBLE_INDICES_MAX)
+                                cachedVisibleIndices.push_back(i);
+                    }
+                    for (uint32_t i = 0; i < heNbVertices; i++) {
+                        if (isMasked(cpuVertexUVs[i])) continue;
+                        cachedTotalElements++;
+                        if (isVisible(cpuVertexPositions[i], cpuVertexNormals[i], cpuVertexFaceAreas[i]))
+                            if (cachedVisibleIndices.size() < VISIBLE_INDICES_MAX)
+                                cachedVisibleIndices.push_back(heNbFaces + i);
+                    }
                 }
 
                 cpuCullTimeMs = std::chrono::duration<float, std::milli>(
@@ -649,6 +670,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                 lastCullingThreshold        = cullingThreshold;
                 lastCullUserScaling         = userScaling;
                 lastDoMaskCull              = doMaskCull;
+                lastSlotK                   = slotK;
                 visibleCacheDirty           = false;
             }
 

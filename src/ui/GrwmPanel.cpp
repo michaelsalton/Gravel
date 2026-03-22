@@ -62,4 +62,15 @@ void GrwmPanel::render(Renderer& r) {
         ImGui::TextDisabled("1 = no change  |  >1 = larger on creases");
         ImGui::Unindent();
     }
+
+    ImGui::Separator();
+
+    // Slot placement
+    ImGui::Checkbox("Slot Placement", &r.enableSlotPlacement);
+    if (r.enableSlotPlacement) {
+        ImGui::Indent();
+        ImGui::SliderInt("Active Slots", &r.activeSlotCount, 1, 64);
+        ImGui::TextDisabled("1 = center only  |  64 = max density");
+        ImGui::Unindent();
+    }
 }

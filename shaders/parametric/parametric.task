@@ -56,6 +56,7 @@ layout(push_constant) uniform PushConstants {
     float chainmailTiltAngle;       // Tilt angle in radians
     uint useDirectIndex;            // 1 = globalId = gl_WorkGroupID.x (secondary mesh dispatch)
     float chainmailSurfaceOffset;   // Normal lift to avoid mesh intersection
+    uint activeSlots;               // 0 = off, 1-64 = slot placement mode
 } push;
 
 // ============================================================================
@@ -126,7 +127,15 @@ void main() {
         ? gl_WorkGroupID.x
         : visibleIndices[gl_WorkGroupID.x];
 
-    bool isVertex = (globalId >= push.nbFaces);
+    // Slot placement: decode compound index into (faceId, slotIdx)
+    uint slotIdx = 0u;
+    bool useSlots = (push.activeSlots > 0u);
+    if (useSlots) {
+        slotIdx = globalId % push.activeSlots;
+        globalId = globalId / push.activeSlots;
+    }
+
+    bool isVertex = (!useSlots) && (globalId >= push.nbFaces);
 
     uint faceId = 0;
     uint vertId = 0;
@@ -180,6 +189,43 @@ void main() {
         vec3 edgeDir = readVertexPosition(uint(v1id)) - readVertexPosition(uint(v0id));
         // Project onto tangent plane (remove normal component)
         payload.edgeTangent = normalize(edgeDir - dot(edgeDir, payload.normal) * payload.normal);
+
+        // Slot placement: override position/normal with interpolated slot location
+        if (useSlots) {
+            SlotEntry slot = getSlotEntry(faceId, slotIdx, resurfacingUBO.preprocessSlotsPerFace);
+            float su = slot.u;
+            float sv = slot.v;
+
+            // Gather face vertices via half-edge traversal
+            int he0 = readFaceEdge(faceId);
+            int he1 = getHalfEdgeNext(uint(he0));
+            int he2 = getHalfEdgeNext(uint(he1));
+
+            vec3 p0 = readVertexPosition(uint(getHalfEdgeVertex(uint(he0))));
+            vec3 p1 = readVertexPosition(uint(getHalfEdgeVertex(uint(he1))));
+            vec3 p2 = readVertexPosition(uint(getHalfEdgeVertex(uint(he2))));
+
+            vec3 n0 = readVertexNormal(uint(getHalfEdgeVertex(uint(he0))));
+            vec3 n1 = readVertexNormal(uint(getHalfEdgeVertex(uint(he1))));
+            vec3 n2 = readVertexNormal(uint(getHalfEdgeVertex(uint(he2))));
+
+            // Check if quad (4th half-edge doesn't loop back)
+            int he3 = getHalfEdgeNext(uint(he2));
+            if (he3 != he0) {
+                // Bilinear interpolation for quads
+                vec3 p3 = readVertexPosition(uint(getHalfEdgeVertex(uint(he3))));
+                vec3 n3 = readVertexNormal(uint(getHalfEdgeVertex(uint(he3))));
+                payload.position = (1.0-su)*(1.0-sv)*p0 + su*(1.0-sv)*p1 + su*sv*p2 + (1.0-su)*sv*p3;
+                payload.normal = normalize((1.0-su)*(1.0-sv)*n0 + su*(1.0-sv)*n1 + su*sv*n2 + (1.0-su)*sv*n3);
+            } else {
+                // Barycentric interpolation for triangles
+                payload.position = (1.0 - su - sv) * p0 + su * p1 + sv * p2;
+                payload.normal = normalize((1.0 - su - sv) * n0 + su * n1 + sv * n2);
+            }
+
+            // Each slot element occupies 1/K of the face area
+            payload.area = readFaceArea(faceId) / float(push.activeSlots);
+        }
     }
 
     // Bone skinning: transform position and normal by weighted bone matrices
@@ -196,7 +242,7 @@ void main() {
         }
     }
 
-    payload.taskId = globalId;
+    payload.taskId = useSlots ? (faceId * push.activeSlots + slotIdx) : globalId;
     payload.isVertex = isVertex ? 1u : 0u;
     payload.elementType = push.elementType;
 

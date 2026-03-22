@@ -195,6 +195,7 @@ struct PushConstants {
     float chainmailTiltAngle;
     uint32_t useDirectIndex;   // 1 = globalId = gl_WorkGroupID.x (no visibleIndices lookup)
     float chainmailSurfaceOffset;  // Normal-direction lift to prevent mesh intersection
+    uint32_t activeSlots;    // 0 = off (1 element at face center), 1-64 = slot mode
 };
 
 struct BenchmarkPushConstants {
@@ -302,6 +303,8 @@ public:
     bool     enableCurvatureDensity = true;  // curvature-aware LOD density
     bool     enableFeatureEdges     = true;  // feature edge resolution enforcement
     float    featureEdgeBoost       = 1.5f;  // scale multiplier for feature edge faces
+    bool     enableSlotPlacement   = false;  // use GRWM slots for multi-element placement
+    int      activeSlotCount       = 8;      // 1-64, how many top-priority slots per face
     uint32_t slotsPerFace      = 0;
     float    preprocessCurvatureScale = 1.0f;  // computed: 1/median curvature
     float    preprocessCurvatureBoost = 1.0f;  // UI: strength of curvature effect
@@ -491,13 +494,14 @@ public:
     float     lastCullingThreshold      = 0.0f;
     float     lastCullUserScaling       = 1.0f;
     bool      lastDoMaskCull            = false;
+    uint32_t  lastSlotK                 = 0;
     bool     showGPUInvocStats     = false;  // enables task/mesh invoc query (has GPU perf cost)
 
 private:
     VkQueryPool statsQueryPool  = VK_NULL_HANDLE;
     bool        invocStatsActive = false;  // tracks current pool configuration
     static const uint32_t STATS_QUERY_COUNT = 2;  // one per frame-in-flight
-    static constexpr uint32_t VISIBLE_INDICES_MAX = 65536;  // max pre-cull elements
+    static constexpr uint32_t VISIBLE_INDICES_MAX = 262144;  // max pre-cull elements (increased for slot placement)
 
     // Visible indices SSBO (per frame, host-visible, written by CPU pre-cull)
     std::vector<VkBuffer> visibleIndicesBuffers;
