@@ -212,6 +212,13 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
     ImGui::Text("Base Mesh:");
     ImGui::Indent();
+    if (!loadedMeshPath.empty() && std::filesystem::exists(loadedMeshPath)) {
+        auto bytes = std::filesystem::file_size(loadedMeshPath);
+        if (bytes >= 1024 * 1024)
+            ImGui::Text("File Size:          %.1f MB", bytes / (1024.0f * 1024.0f));
+        else
+            ImGui::Text("File Size:          %.1f KB", bytes / 1024.0f);
+    }
     ImGui::Text("Faces:              %u", heNbFaces);
     ImGui::Text("Vertices:           %u", heNbVertices);
     ImGui::Text("Triangles:          %u", baseMeshTriCount);
@@ -365,13 +372,6 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::SliderInt("Subdivide", &subdivideLevel, 0, 3);
         if (selectedMesh != prev || triangulateMesh != prevTri || subdivideLevel != prevSubdiv)
             pendingMeshLoad = assetMeshPaths[selectedMesh];
-        if (!loadedMeshPath.empty() && std::filesystem::exists(loadedMeshPath)) {
-            auto bytes = std::filesystem::file_size(loadedMeshPath);
-            if (bytes >= 1024 * 1024)
-                ImGui::TextDisabled("  %.1f MB", bytes / (1024.0f * 1024.0f));
-            else
-                ImGui::TextDisabled("  %.1f KB", bytes / 1024.0f);
-        }
         const char* baseMeshModes[] = { "Off", "Wireframe", "Solid", "Both", "Mask", "Skin", "Colored Faces" };
         int modeCount = 4;
         if (maskTextureLoaded) modeCount = 5;
@@ -467,58 +467,50 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
     ImGui::End();
 
-    // ===================== Lighting & Materials Panel (bottom-left) =====================
+    // ===================== Presets Panel (bottom-left col 1) =====================
     ImGui::SetNextWindowPos(ImVec2(0, menuBarH + displayH * 0.6f), posCond);
-    ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.4f), sizeCond);
-    ImGui::Begin("Lighting & Materials", nullptr,
-                 ImGuiWindowFlags_NoMove );
+    ImGui::SetNextWindowSize(ImVec2(panelW, 150), sizeCond);
+    ImGui::Begin("Presets", nullptr,
+                 ImGuiWindowFlags_NoMove);
+    {
+        static int selectedLevel = -1;
+        const char* preview = (selectedLevel >= 0 && selectedLevel < LEVEL_PRESET_COUNT)
+            ? LEVEL_PRESETS[selectedLevel].name : "Select...";
+        if (ImGui::BeginCombo("Level", preview)) {
+            for (int i = 0; i < LEVEL_PRESET_COUNT; i++) {
+                bool isSelected = (selectedLevel == i);
+                if (ImGui::Selectable(LEVEL_PRESETS[i].name, isSelected)) {
+                    selectedLevel = i;
+                    applyPreset(LEVEL_PRESETS[i]);
+                }
+                if (isSelected) ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+    }
 
-    ImGui::DragFloat3("Light Position", &lightPosition.x, 0.1f, -20.0f, 20.0f);
-    ImGui::SliderFloat("Light Intensity", &lightIntensity, 0.0f, 10.0f);
-    ImGui::ColorEdit3("Ambient Color", &ambientColor.x);
-    ImGui::SliderFloat("Ambient Intensity", &ambientIntensity, 0.0f, 1.0f);
     ImGui::Separator();
-    ImGui::Text("Procedural Mesh");
-    ImGui::ColorEdit3("Base Color##proc", &procBaseColor.x);
-    ImGui::SliderFloat("Roughness##proc", &roughness, 0.05f, 1.0f);
-    ImGui::SliderFloat("Metallic##proc", &metallic, 0.0f, 1.0f);
-    ImGui::SliderFloat("AO##proc", &ao, 0.0f, 1.0f);
-    ImGui::SliderFloat("Dielectric F0##proc", &dielectricF0, 0.0f, 0.2f, "%.3f");
-    ImGui::SliderFloat("Env Reflection##proc", &envReflection, 0.0f, 1.0f);
-    if (dualMeshActive) {
-        ImGui::Separator();
-        ImGui::Text("Dragon Procedural Surface");
-        ImGui::ColorEdit3("Base Color##base", &baseMeshBaseColor.x);
-        ImGui::SliderFloat("Roughness##base", &baseMeshRoughness, 0.05f, 1.0f);
-        ImGui::SliderFloat("Metallic##base", &baseMeshMetallic, 0.0f, 1.0f);
-        ImGui::SliderFloat("AO##base", &baseMeshAo, 0.0f, 1.0f);
-        ImGui::SliderFloat("Dielectric F0##base", &baseMeshDielectricF0, 0.0f, 0.2f, "%.3f");
-        ImGui::SliderFloat("Env Reflection##base", &baseMeshEnvReflection, 0.0f, 1.0f);
-        ImGui::Separator();
-        ImGui::Text("Dragon Base Mesh");
-        ImGui::ColorEdit3("Base Color##solidSec", &secBaseMeshSolidBaseColor.x);
-        ImGui::SliderFloat("Roughness##solidSec", &secBaseMeshSolidRoughness, 0.05f, 1.0f);
-        ImGui::SliderFloat("Metallic##solidSec", &secBaseMeshSolidMetallic, 0.0f, 1.0f);
-        ImGui::SliderFloat("AO##solidSec", &secBaseMeshSolidAo, 0.0f, 1.0f);
-        ImGui::SliderFloat("Dielectric F0##solidSec", &secBaseMeshSolidDielectricF0, 0.0f, 0.2f, "%.3f");
-        ImGui::SliderFloat("Env Reflection##solidSec", &secBaseMeshSolidEnvReflection, 0.0f, 1.0f);
-    }
-    if (baseMeshMode > 0) {
-        ImGui::Separator();
-        ImGui::Text("Base Mesh");
-        ImGui::ColorEdit3("Base Color##solid", &baseMeshSolidBaseColor.x);
-        ImGui::SliderFloat("Roughness##solid", &baseMeshSolidRoughness, 0.05f, 1.0f);
-        ImGui::SliderFloat("Metallic##solid", &baseMeshSolidMetallic, 0.0f, 1.0f);
-        ImGui::SliderFloat("AO##solid", &baseMeshSolidAo, 0.0f, 1.0f);
-        ImGui::SliderFloat("Dielectric F0##solid", &baseMeshSolidDielectricF0, 0.0f, 0.2f, "%.3f");
-        ImGui::SliderFloat("Env Reflection##solid", &baseMeshSolidEnvReflection, 0.0f, 1.0f);
+    {
+        const char* materials[] = {"Chainmail", "Pebble", "Dragon", "Playdough", "Grass", "Diamond Plate", "Bubblegum"};
+        static int selectedMaterial = -1;
+        if (ImGui::Combo("Material", &selectedMaterial, materials, 7)) {
+            applyMaterialPreset(selectedMaterial);
+        }
     }
 
+    float presetsPanelH = ImGui::GetWindowSize().y;
     ImGui::End();
 
-    // ===================== Settings Panel (bottom-left, below Lighting) =====================
-    // Note: Settings now contains Debug Visualization, Camera, and Advanced panels
-    // It shares the left column with Performance + Lighting via scrolling
+    // ===================== GRWM Panel (below Presets, left col 1) =====================
+    ImGui::SetNextWindowPos(ImVec2(0, menuBarH + displayH * 0.6f + presetsPanelH), posCond);
+    ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.4f - presetsPanelH), sizeCond);
+    ImGui::Begin("GRWM", nullptr,
+                 ImGuiWindowFlags_NoMove  |
+                 0);
+    grwmPanel.render(*this);
+    ImGui::End();
+
+    // ===================== Settings Panel (left col 2, top) =====================
     float leftCol2X = panelW;  // second left column
     ImGui::SetNextWindowPos(ImVec2(leftCol2X, menuBarH), posCond);
     ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.5f), sizeCond);
@@ -594,47 +586,53 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
     ImGui::End();
 
-    // ===================== Presets Panel (below Settings) =====================
+    // ===================== Lighting & Materials Panel (left col 2, bottom) =====================
     ImGui::SetNextWindowPos(ImVec2(leftCol2X, menuBarH + displayH * 0.5f), posCond);
-    ImGui::SetNextWindowSize(ImVec2(panelW, 150), sizeCond);
-    ImGui::Begin("Presets", nullptr,
-                 ImGuiWindowFlags_NoMove);
-    {
-        static int selectedLevel = -1;
-        const char* preview = (selectedLevel >= 0 && selectedLevel < LEVEL_PRESET_COUNT)
-            ? LEVEL_PRESETS[selectedLevel].name : "Select...";
-        if (ImGui::BeginCombo("Level", preview)) {
-            for (int i = 0; i < LEVEL_PRESET_COUNT; i++) {
-                bool isSelected = (selectedLevel == i);
-                if (ImGui::Selectable(LEVEL_PRESETS[i].name, isSelected)) {
-                    selectedLevel = i;
-                    applyPreset(LEVEL_PRESETS[i]);
-                }
-                if (isSelected) ImGui::SetItemDefaultFocus();
-            }
-            ImGui::EndCombo();
-        }
-    }
+    ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.5f), sizeCond);
+    ImGui::Begin("Lighting & Materials", nullptr,
+                 ImGuiWindowFlags_NoMove );
 
+    ImGui::DragFloat3("Light Position", &lightPosition.x, 0.1f, -20.0f, 20.0f);
+    ImGui::SliderFloat("Light Intensity", &lightIntensity, 0.0f, 10.0f);
+    ImGui::ColorEdit3("Ambient Color", &ambientColor.x);
+    ImGui::SliderFloat("Ambient Intensity", &ambientIntensity, 0.0f, 1.0f);
     ImGui::Separator();
-    {
-        const char* materials[] = {"Chainmail", "Pebble", "Dragon", "Playdough", "Grass", "Diamond Plate", "Bubblegum"};
-        static int selectedMaterial = -1;
-        if (ImGui::Combo("Material", &selectedMaterial, materials, 7)) {
-            applyMaterialPreset(selectedMaterial);
-        }
+    ImGui::Text("Procedural Mesh");
+    ImGui::ColorEdit3("Base Color##proc", &procBaseColor.x);
+    ImGui::SliderFloat("Roughness##proc", &roughness, 0.05f, 1.0f);
+    ImGui::SliderFloat("Metallic##proc", &metallic, 0.0f, 1.0f);
+    ImGui::SliderFloat("AO##proc", &ao, 0.0f, 1.0f);
+    ImGui::SliderFloat("Dielectric F0##proc", &dielectricF0, 0.0f, 0.2f, "%.3f");
+    ImGui::SliderFloat("Env Reflection##proc", &envReflection, 0.0f, 1.0f);
+    if (dualMeshActive) {
+        ImGui::Separator();
+        ImGui::Text("Dragon Procedural Surface");
+        ImGui::ColorEdit3("Base Color##base", &baseMeshBaseColor.x);
+        ImGui::SliderFloat("Roughness##base", &baseMeshRoughness, 0.05f, 1.0f);
+        ImGui::SliderFloat("Metallic##base", &baseMeshMetallic, 0.0f, 1.0f);
+        ImGui::SliderFloat("AO##base", &baseMeshAo, 0.0f, 1.0f);
+        ImGui::SliderFloat("Dielectric F0##base", &baseMeshDielectricF0, 0.0f, 0.2f, "%.3f");
+        ImGui::SliderFloat("Env Reflection##base", &baseMeshEnvReflection, 0.0f, 1.0f);
+        ImGui::Separator();
+        ImGui::Text("Dragon Base Mesh");
+        ImGui::ColorEdit3("Base Color##solidSec", &secBaseMeshSolidBaseColor.x);
+        ImGui::SliderFloat("Roughness##solidSec", &secBaseMeshSolidRoughness, 0.05f, 1.0f);
+        ImGui::SliderFloat("Metallic##solidSec", &secBaseMeshSolidMetallic, 0.0f, 1.0f);
+        ImGui::SliderFloat("AO##solidSec", &secBaseMeshSolidAo, 0.0f, 1.0f);
+        ImGui::SliderFloat("Dielectric F0##solidSec", &secBaseMeshSolidDielectricF0, 0.0f, 0.2f, "%.3f");
+        ImGui::SliderFloat("Env Reflection##solidSec", &secBaseMeshSolidEnvReflection, 0.0f, 1.0f);
+    }
+    if (baseMeshMode > 0) {
+        ImGui::Separator();
+        ImGui::Text("Base Mesh");
+        ImGui::ColorEdit3("Base Color##solid", &baseMeshSolidBaseColor.x);
+        ImGui::SliderFloat("Roughness##solid", &baseMeshSolidRoughness, 0.05f, 1.0f);
+        ImGui::SliderFloat("Metallic##solid", &baseMeshSolidMetallic, 0.0f, 1.0f);
+        ImGui::SliderFloat("AO##solid", &baseMeshSolidAo, 0.0f, 1.0f);
+        ImGui::SliderFloat("Dielectric F0##solid", &baseMeshSolidDielectricF0, 0.0f, 0.2f, "%.3f");
+        ImGui::SliderFloat("Env Reflection##solid", &baseMeshSolidEnvReflection, 0.0f, 1.0f);
     }
 
-    float presetsPanelH = ImGui::GetWindowSize().y;
-    ImGui::End();
-
-    // ===================== GRWM Panel (below Presets) =====================
-    ImGui::SetNextWindowPos(ImVec2(leftCol2X, menuBarH + displayH * 0.5f + presetsPanelH), posCond);
-    ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.5f - presetsPanelH), sizeCond);
-    ImGui::Begin("GRWM", nullptr,
-                 ImGuiWindowFlags_NoMove  |
-                 0);
-    grwmPanel.render(*this);
     ImGui::End();
 
     // Loading overlay (in progress)

@@ -148,11 +148,13 @@ void main() {
         payload.faceColor = 1.0 - readFaceColor(faceId);
         payload.baseUV = getVertexTexCoord(vertId);
 
-        // Edge tangent: use the vertex's outgoing edge direction
+        // Edge tangent: use the adjacent face's first edge direction (matches face elements)
         if (edge >= 0) {
-            int nextHE = getHalfEdgeNext(uint(edge));
-            vec3 v1 = readVertexPosition(uint(getHalfEdgeVertex(uint(nextHE))));
-            vec3 edgeDir = v1 - payload.position;
+            int faceEdge = readFaceEdge(faceId);
+            int v0id = getHalfEdgeVertex(uint(faceEdge));
+            int nextHE = getHalfEdgeNext(uint(faceEdge));
+            int v1id = getHalfEdgeVertex(uint(nextHE));
+            vec3 edgeDir = readVertexPosition(uint(v1id)) - readVertexPosition(uint(v0id));
             // Project onto tangent plane (remove normal component)
             payload.edgeTangent = normalize(edgeDir - dot(edgeDir, payload.normal) * payload.normal);
         } else {

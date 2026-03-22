@@ -1,6 +1,7 @@
 #include "core/window.h"
 #include <stdexcept>
 #include <iostream>
+#include <stb_image.h>
 
 Window::Window(int width, int height, const std::string& title)
     : width(width), height(height), title(title) {
@@ -16,6 +17,18 @@ Window::Window(int width, int height, const std::string& title)
     if (!window) {
         glfwTerminate();
         throw std::runtime_error("Failed to create GLFW window");
+    }
+
+    // Set window icon
+    {
+        int w, h, channels;
+        unsigned char* pixels = stbi_load(ASSETS_DIR "application/chainmail_icon_128.png",
+                                          &w, &h, &channels, 4);
+        if (pixels) {
+            GLFWimage icon{w, h, pixels};
+            glfwSetWindowIcon(window, 1, &icon);
+            stbi_image_free(pixels);
+        }
     }
 
     glfwSetWindowUserPointer(window, this);
