@@ -11,10 +11,6 @@ void AdvancedPanel::render(Renderer& r) {
         if (r.vsync != prevVsync) {
             r.pendingSwapChainRecreation = true;
         }
-        if (ImGui::Button(r.getWindow().isFullscreen() ? "Windowed" : "Fullscreen")) {
-            r.getWindow().toggleFullscreen();
-        }
-
         ImGui::Separator();
 
         // Culling
