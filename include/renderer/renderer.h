@@ -196,6 +196,7 @@ struct PushConstants {
     uint32_t useDirectIndex;   // 1 = globalId = gl_WorkGroupID.x (no visibleIndices lookup)
     float chainmailSurfaceOffset;  // Normal-direction lift to prevent mesh intersection
     uint32_t activeSlots;    // 0 = off (1 element at face center), 1-64 = slot mode
+    uint32_t slotUniformSizeFlag; // 1 = don't shrink elements with slot count
 };
 
 struct BenchmarkPushConstants {
@@ -259,13 +260,13 @@ public:
 
     // Resurfacing config
     bool renderResurfacing = true;
-    uint32_t elementType = 0;       // 0=torus, 1=sphere, 2=cone, 3=cylinder
+    uint32_t elementType = 1;       // 0=torus, 1=sphere, 2=cone, 3=cylinder
     float userScaling = 0.1f;
     float torusMajorR = 1.0f;
     float torusMinorR = 0.3f;
     float sphereRadius = 0.5f;
-    uint32_t resolutionM = 8;
-    uint32_t resolutionN = 8;
+    uint32_t resolutionM = 45;
+    uint32_t resolutionN = 45;
     uint32_t debugMode = 0;         // 0=shading, 1=normals, 2=UV, 3=taskID, 4=element type (face/vertex)
     bool enableFrustumCulling = false;
     bool enableBackfaceCulling = false;
@@ -305,6 +306,7 @@ public:
     float    featureEdgeBoost       = 1.5f;  // scale multiplier for feature edge faces
     bool     enableSlotPlacement   = false;  // use GRWM slots for multi-element placement
     int      activeSlotCount       = 8;      // 1-64, how many top-priority slots per face
+    bool     slotUniformSize       = true;   // keep element size constant regardless of slot count
     uint32_t slotsPerFace      = 0;
     float    preprocessCurvatureScale = 1.0f;  // computed: 1/median curvature
     float    preprocessCurvatureBoost = 1.0f;  // UI: strength of curvature effect
@@ -479,6 +481,10 @@ public:
     uint64_t gpuRenderedTriangles      = 0;
     uint64_t gpuTaskShaderInvocations  = 0;
     uint64_t gpuMeshShaderInvocations  = 0;
+    uint32_t gpuRenderedElements       = 0;  // from atomic counter in task shader
+    std::vector<VkBuffer> elementStatsBuffers;
+    std::vector<VkDeviceMemory> elementStatsMemory;
+    std::vector<void*> elementStatsMapped;
 
     // CPU pre-cull cache — rebuilt only when camera/settings change
     std::vector<uint32_t> cachedVisibleIndices;

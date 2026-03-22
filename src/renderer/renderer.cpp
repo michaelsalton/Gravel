@@ -339,6 +339,10 @@ void Renderer::beginFrame() {
             gpuRenderedTriangles = clipping;
     }
 
+    // Read back rendered element count from this frame's atomic counter, then reset
+    gpuRenderedElements = *reinterpret_cast<uint32_t*>(elementStatsMapped[currentFrame]);
+    *reinterpret_cast<uint32_t*>(elementStatsMapped[currentFrame]) = 0;
+
     VkResult result = vkAcquireNextImageKHR(
         device, swapChain, UINT64_MAX,
         imageAvailableSemaphores[currentFrame],
@@ -579,6 +583,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     pushConstants.chainmailSurfaceOffset = chainmailSurfaceOffset;
     pushConstants.activeSlots = (enableSlotPlacement && preprocessLoaded && enablePreprocess)
         ? static_cast<uint32_t>(activeSlotCount) : 0u;
+    pushConstants.slotUniformSizeFlag = slotUniformSize ? 1u : 0u;
 
     vkCmdPushConstants(cmd, pipelineLayout,
                         VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |

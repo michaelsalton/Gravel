@@ -70,6 +70,7 @@ void GrwmPanel::render(Renderer& r) {
     if (r.enableSlotPlacement) {
         ImGui::Indent();
         ImGui::SliderInt("Active Slots", &r.activeSlotCount, 1, 64);
+        ImGui::Checkbox("Uniform Size", &r.slotUniformSize);
         ImGui::TextDisabled("1 = center only  |  64 = max density");
         ImGui::Unindent();
     }

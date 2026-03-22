@@ -60,9 +60,9 @@ void Renderer::scanAssetMeshes() {
         assetMeshPaths.push_back(std::move(path));
     }
 
-    // Default to "shapes/cube" if available
+    // Default to teapot if available
     for (int i = 0; i < static_cast<int>(assetMeshNames.size()); i++) {
-        if (assetMeshNames[i] == "cube") {
+        if (assetMeshNames[i] == "teapot") {
             selectedMesh = i;
             break;
         }

@@ -66,6 +66,7 @@ layout(push_constant) uniform PushConstants {
     uint useDirectIndex;
     float chainmailSurfaceOffset;
     uint activeSlots;
+    uint slotUniformSize;
 } push;
 
 layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {

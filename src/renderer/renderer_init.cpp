@@ -800,14 +800,21 @@ void Renderer::createDescriptorSetLayouts() {
     visibleIndicesBinding.descriptorCount = 1;
     visibleIndicesBinding.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT;
 
-    std::array<VkDescriptorSetLayoutBinding, 3> sceneBindings = {
-        viewBinding, shadingBinding, visibleIndicesBinding
+    VkDescriptorSetLayoutBinding elementStatsBinding{};
+    elementStatsBinding.binding = 3;
+    elementStatsBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    elementStatsBinding.descriptorCount = 1;
+    elementStatsBinding.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT;
+
+    std::array<VkDescriptorSetLayoutBinding, 4> sceneBindings = {
+        viewBinding, shadingBinding, visibleIndicesBinding, elementStatsBinding
     };
 
-    std::array<VkDescriptorBindingFlags, 3> sceneBindingFlags = {
+    std::array<VkDescriptorBindingFlags, 4> sceneBindingFlags = {
         (VkDescriptorBindingFlags)0,
         (VkDescriptorBindingFlags)0,
-        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT
+        VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT,
+        (VkDescriptorBindingFlags)0
     };
     VkDescriptorSetLayoutBindingFlagsCreateInfo sceneBindingFlagsInfo{};
     sceneBindingFlagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
@@ -1116,6 +1123,19 @@ void Renderer::createUniformBuffers() {
         vkMapMemory(device, visibleIndicesMemory[i], 0, visibleIndicesSize, 0, &visibleIndicesMapped[i]);
     }
 
+    // Element stats buffers (per-frame atomic counter for rendered element count)
+    elementStatsBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    elementStatsMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    elementStatsMapped.resize(MAX_FRAMES_IN_FLIGHT);
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        createBuffer(sizeof(uint32_t),
+                     VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     elementStatsBuffers[i], elementStatsMemory[i]);
+        vkMapMemory(device, elementStatsMemory[i], 0, sizeof(uint32_t), 0, &elementStatsMapped[i]);
+        *reinterpret_cast<uint32_t*>(elementStatsMapped[i]) = 0;
+    }
+
     std::cout << "Uniform buffers created and mapped" << std::endl;
 }
 
@@ -1126,9 +1146,9 @@ void Renderer::createDescriptorPool() {
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2 + 4);
 
-    // SSBOs: 20 HE (17+3 GRWM) + 3 skeleton + 20 secondary HE + 3 secondary skeleton + 20 ground HE + 2 visible indices (one per frame) + 1 scale LUT
+    // SSBOs: 20 HE (17+3 GRWM) + 3 skeleton + 20 secondary HE + 3 secondary skeleton + 20 ground HE + 2 visible indices (per frame) + 1 scale LUT + 2 element stats (per frame)
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[1].descriptorCount = 20 + 3 + 20 + 3 + 20 + MAX_FRAMES_IN_FLIGHT + 1;
+    poolSizes[1].descriptorCount = 20 + 3 + 20 + 3 + 20 + MAX_FRAMES_IN_FLIGHT + 1 + MAX_FRAMES_IN_FLIGHT;
 
     // Samplers: 2 primary + 2 secondary + 2 ground
     poolSizes[2].type = VK_DESCRIPTOR_TYPE_SAMPLER;
@@ -1185,7 +1205,12 @@ void Renderer::createDescriptorSets() {
         visibleIndicesBufferInfo.offset = 0;
         visibleIndicesBufferInfo.range = VISIBLE_INDICES_MAX * sizeof(uint32_t);
 
-        std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
+        VkDescriptorBufferInfo elementStatsBufferInfo{};
+        elementStatsBufferInfo.buffer = elementStatsBuffers[i];
+        elementStatsBufferInfo.offset = 0;
+        elementStatsBufferInfo.range = sizeof(uint32_t);
+
+        std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
 
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet = sceneDescriptorSets[i];
@@ -1210,6 +1235,14 @@ void Renderer::createDescriptorSets() {
         descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         descriptorWrites[2].descriptorCount = 1;
         descriptorWrites[2].pBufferInfo = &visibleIndicesBufferInfo;
+
+        descriptorWrites[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[3].dstSet = sceneDescriptorSets[i];
+        descriptorWrites[3].dstBinding = 3;
+        descriptorWrites[3].dstArrayElement = 0;
+        descriptorWrites[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptorWrites[3].descriptorCount = 1;
+        descriptorWrites[3].pBufferInfo = &elementStatsBufferInfo;
 
         vkUpdateDescriptorSets(device,
             static_cast<uint32_t>(descriptorWrites.size()),

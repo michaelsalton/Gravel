@@ -57,6 +57,7 @@ layout(push_constant) uniform PushConstants {
     uint useDirectIndex;            // 1 = globalId = gl_WorkGroupID.x (secondary mesh dispatch)
     float chainmailSurfaceOffset;   // Normal lift to avoid mesh intersection
     uint activeSlots;               // 0 = off, 1-64 = slot placement mode
+    uint slotUniformSize;           // 1 = don't shrink elements with slot count
 } push;
 
 // ============================================================================
@@ -227,10 +228,14 @@ void main() {
             }
 
             // Each slot element occupies 1/K of the face area
-            payload.area = readFaceArea(faceId) / float(push.activeSlots);
+            payload.area = (push.slotUniformSize != 0u)
+                ? readFaceArea(faceId)
+                : readFaceArea(faceId) / float(push.activeSlots);
         } else if (useSlots) {
             // Slot 0: keep face center position but still scale area
-            payload.area = readFaceArea(faceId) / float(push.activeSlots);
+            payload.area = (push.slotUniformSize != 0u)
+                ? readFaceArea(faceId)
+                : readFaceArea(faceId) / float(push.activeSlots);
         }
     }
 
@@ -307,19 +312,8 @@ void main() {
                                    viewUBO.cameraPosition.xyz, push.cullingThreshold);
     }
 
-    // Resolution: adaptive LOD or fixed
-    uint M, N;
-    if (push.enableLod != 0u) {
-        getLodMN(payload.position, payload.normal, payload.area, push.userScaling,
-                 push.elementType, push.torusMajorR, push.torusMinorR, push.sphereRadius,
-                 mvp, push.resolutionM, push.lodFactor, 2u, 64u, M, N);
-    } else {
-        M = push.resolutionM;
-        N = push.resolutionN;
-    }
-
     // GRWM: curvature-aware density (bit 0) and feature edge enforcement (bit 1)
-    // Applied after LOD or fixed resolution, independent of LOD toggle.
+    // Applied before LOD so LOD accounts for the scaled element size.
     uint grwmFlags = resurfacingUBO.hasPreprocessData;
 
     // Compute per-element curvature (shared by both curvature density and features)
@@ -369,6 +363,17 @@ void main() {
     // Apply with global intensity: lerp between 1.0 (no effect) and full effect
     payload.area *= mix(1.0, grwmAreaScale, intensity);
 
+    // Resolution: adaptive LOD or fixed (uses GRWM-scaled area for correct screen-space sizing)
+    uint M, N;
+    if (push.enableLod != 0u) {
+        getLodMN(payload.position, payload.normal, payload.area, push.userScaling,
+                 push.elementType, push.torusMajorR, push.torusMinorR, push.sphereRadius,
+                 mvp, push.resolutionM, push.lodFactor, 2u, 64u, M, N);
+    } else {
+        M = push.resolutionM;
+        N = push.resolutionN;
+    }
+
     payload.resolutionM = M;
     payload.resolutionN = N;
 
@@ -382,7 +387,8 @@ void main() {
     uint numTilesV = (N + deltaV - 1) / deltaV;
 
     // Single EmitMeshTasksEXT: fold all culling into visible flag
-    bool culled = !isVisible || elementTypeCulled || maskCulled;
+    bool culled = !isVisible || elementTypeCulled || maskCulled || (push.userScaling == 0.0);
     uint visible = culled ? 0u : 1u;
+    if (visible == 1u) atomicAdd(renderedElementCount, 1u);
     EmitMeshTasksEXT(numTilesU * visible, numTilesV * visible, 1);
 }

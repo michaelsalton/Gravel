@@ -245,19 +245,21 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         uint32_t totalElements   = cachedTotalElements;
         uint32_t culledElements  = totalElements - visibleElements;
 
-        ImGui::Text("Elements:           %u / %u visible", visibleElements, totalElements);
+        uint64_t baseMeshTris = (baseMeshMode > 0 ? baseMeshTriCount : 0u)
+                              + (dualMeshActive && dragonBaseMeshMode > 0 ? secondaryHeNbFaces * 2 : 0u)
+                              + (renderBenchmarkMesh && benchmarkMeshLoaded ? benchmarkTriCount : 0u);
+        uint64_t procGpuRendered = (gpuRenderedTriangles > baseMeshTris)
+                                 ? gpuRenderedTriangles - baseMeshTris : 0;
+
+        ImGui::Text("Elements:           %u / %u visible", gpuRenderedElements, totalElements);
         if (totalElements > 0) {
-            float pct = 100.0f * culledElements / totalElements;
-            ImGui::Text("Culled:             %u (%.1f%%)", culledElements, pct);
+            uint32_t culled = totalElements > gpuRenderedElements ? totalElements - gpuRenderedElements : 0;
+            float pct = 100.0f * culled / totalElements;
+            ImGui::Text("Culled:             %u (%.1f%%)", culled, pct);
         }
+        uint32_t trisPerElement = resolutionM * resolutionN * 2;
         {
-            uint32_t trisPerElement = resolutionM * resolutionN * 2;
-            uint32_t procTotal    = totalElements   * trisPerElement;
-            uint64_t baseMeshTris = (baseMeshMode > 0 ? baseMeshTriCount : 0u)
-                                  + (dualMeshActive && dragonBaseMeshMode > 0 ? secondaryHeNbFaces * 2 : 0u)
-                                  + (renderBenchmarkMesh && benchmarkMeshLoaded ? benchmarkTriCount : 0u);
-            uint64_t procGpuRendered = (gpuRenderedTriangles > baseMeshTris)
-                                     ? gpuRenderedTriangles - baseMeshTris : 0;
+            uint32_t procTotal = totalElements * trisPerElement;
             ImGui::Text("Triangles:          %llu / %u  (%u/elem)",
                         static_cast<unsigned long long>(procGpuRendered), procTotal, trisPerElement);
             sceneTriangles += procTotal;

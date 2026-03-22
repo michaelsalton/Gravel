@@ -46,7 +46,7 @@ void ResurfacingPanel::render(Renderer& r) {
                 }
             }
 
-            ImGui::SliderFloat("Global Scale", &r.userScaling, 0.01f, 3.0f);
+            ImGui::SliderFloat("Global Scale", &r.userScaling, 0.0f, 3.0f);
 
             ImGui::Separator();
 
@@ -180,7 +180,7 @@ void ResurfacingPanel::render(Renderer& r) {
                         r.secondaryElementType = static_cast<uint32_t>(secType);
                     }
 
-                    ImGui::SliderFloat("Global Scale##sec", &r.secondaryUserScaling, 0.01f, 3.0f);
+                    ImGui::SliderFloat("Global Scale##sec", &r.secondaryUserScaling, 0.0f, 3.0f);
 
                     ImGui::Separator();
 

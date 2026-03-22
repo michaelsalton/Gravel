@@ -31,6 +31,7 @@
 #define BINDING_VIEW_UBO 0
 #define BINDING_SHADING_UBO 1
 #define BINDING_VISIBLE_INDICES 2  // CPU pre-cull index list (task shader only)
+#define BINDING_ELEMENT_STATS 3    // Atomic counter for rendered element count
 
 // ============================================================================
 // Descriptor Bindings - Set 1 (HESet - Half-Edge Data)
@@ -137,6 +138,11 @@ struct ResurfacingUBO {
 // Visible element index list (Set 0, binding 2) — written by CPU pre-cull each frame
 layout(set = SET_SCENE, binding = BINDING_VISIBLE_INDICES) readonly buffer VisibleIndicesBuffer {
     uint visibleIndices[];
+};
+
+// Element stats (Set 0, binding 3) — atomic counter for rendered elements
+layout(set = SET_SCENE, binding = BINDING_ELEMENT_STATS) buffer ElementStatsBuffer {
+    uint renderedElementCount;
 };
 
 // Vec4 buffers (binding 0, array size 5)
