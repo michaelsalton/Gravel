@@ -104,6 +104,9 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     ImGuiCond posCond = ImGuiCond_Always;
     ImGuiCond sizeCond = resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
 
+    // Shared flags for content panels: fixed position, scrollable
+    const ImGuiWindowFlags panelFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove;
+
     // ===================== Performance Stats Panel =====================
     float displayH = static_cast<float>(swapChainExtent.height) - menuBarH;
     float displayW = static_cast<float>(swapChainExtent.width);
@@ -111,9 +114,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     float rightX = displayW - panelW;  // right-column X anchor
     ImGui::SetNextWindowPos(ImVec2(0, menuBarH), posCond);
     ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.6f), sizeCond);
-    ImGui::Begin("Performance", nullptr,
-                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
-                 0);
+    ImGui::Begin("Performance", nullptr, panelFlags);
 
     // FPS (displayed value updates every 0.5s for readability)
     static float displayFps = 0.0f;
@@ -349,9 +350,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     // ===================== Base Mesh Panel (top-right) =====================
     ImGui::SetNextWindowPos(ImVec2(rightX, menuBarH), posCond);
     ImGui::SetNextWindowSize(ImVec2(panelW, 200), sizeCond);
-    ImGui::Begin("Base Mesh", nullptr,
-                 ImGuiWindowFlags_NoMove  |
-                 0);
+    ImGui::Begin("Base Mesh", nullptr, panelFlags);
 
     int meshCount = static_cast<int>(assetMeshNames.size());
     {
@@ -400,8 +399,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     // ===================== Resurfacing Panel (right, below Base Mesh) =====================
     ImGui::SetNextWindowPos(ImVec2(rightX, menuBarH + baseMeshPanelH), posCond);
     ImGui::SetNextWindowSize(ImVec2(panelW, displayH - baseMeshPanelH), sizeCond);
-    ImGui::Begin("Resurfacing Controls", nullptr,
-                 ImGuiWindowFlags_NoMove );
+    ImGui::Begin("Resurfacing Controls", nullptr, panelFlags);
 
     if (uiMode == 0) {
         resurfacingPanel.render(*this);
@@ -479,8 +477,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     // ===================== Presets Panel (bottom-left col 1) =====================
     ImGui::SetNextWindowPos(ImVec2(0, menuBarH + displayH * 0.6f), posCond);
     ImGui::SetNextWindowSize(ImVec2(panelW, 150), sizeCond);
-    ImGui::Begin("Presets", nullptr,
-                 ImGuiWindowFlags_NoMove);
+    ImGui::Begin("Presets", nullptr, panelFlags);
     {
         static int selectedLevel = -1;
         const char* preview = (selectedLevel >= 0 && selectedLevel < LEVEL_PRESET_COUNT)
@@ -513,9 +510,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     // ===================== GRWM Panel (below Presets, left col 1) =====================
     ImGui::SetNextWindowPos(ImVec2(0, menuBarH + displayH * 0.6f + presetsPanelH), posCond);
     ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.4f - presetsPanelH), sizeCond);
-    ImGui::Begin("GRWM", nullptr,
-                 ImGuiWindowFlags_NoMove  |
-                 0);
+    ImGui::Begin("GRWM", nullptr, panelFlags);
     grwmPanel.render(*this);
     ImGui::End();
 
@@ -523,8 +518,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     float leftCol2X = panelW;  // second left column
     ImGui::SetNextWindowPos(ImVec2(leftCol2X, menuBarH), posCond);
     ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.5f), sizeCond);
-    ImGui::Begin("Settings", nullptr,
-                 ImGuiWindowFlags_NoMove );
+    ImGui::Begin("Settings", nullptr, panelFlags);
 
     advancedPanel.render(*this);
 
@@ -602,8 +596,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     // ===================== Lighting & Materials Panel (left col 2, bottom) =====================
     ImGui::SetNextWindowPos(ImVec2(leftCol2X, menuBarH + displayH * 0.5f), posCond);
     ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.5f), sizeCond);
-    ImGui::Begin("Lighting & Materials", nullptr,
-                 ImGuiWindowFlags_NoMove );
+    ImGui::Begin("Lighting & Materials", nullptr, panelFlags);
 
     ImGui::DragFloat3("Light Position", &lightPosition.x, 0.1f, -20.0f, 20.0f);
     ImGui::SliderFloat("Light Intensity", &lightIntensity, 0.0f, 10.0f);
