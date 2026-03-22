@@ -378,12 +378,20 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         if (maskTextureLoaded) modeCount = 5;
         if (skinTextureLoaded) modeCount = 6;
         modeCount = std::max(modeCount, 7);  // Colored Faces always available
-        if (dualMeshActive) {
-            ImGui::Combo("Base Mesh Display", &baseMeshMode, baseMeshModes, modeCount);
-            const char* dragonModes[] = { "Off", "Wireframe", "Solid", "Both" };
-            ImGui::Combo("Dragon Display", &dragonBaseMeshMode, dragonModes, 4);
-        } else {
-            ImGui::Combo("Display", &baseMeshMode, baseMeshModes, modeCount);
+        ImGui::Combo("Display", &baseMeshMode, baseMeshModes, modeCount);
+        if (dragonCoatAvailable) {
+            bool prevCoat = dragonCoatEnabled;
+            ImGui::Checkbox("Dragon Coat", &dragonCoatEnabled);
+            if (dragonCoatEnabled && !prevCoat) {
+                // Load the coat as secondary mesh
+                loadSecondaryMesh(dragonCoatPath);
+            } else if (!dragonCoatEnabled && prevCoat) {
+                cleanupSecondaryMesh();
+            }
+            if (dualMeshActive) {
+                const char* dragonModes[] = { "Off", "Wireframe", "Solid", "Both" };
+                ImGui::Combo("Coat Display", &dragonBaseMeshMode, dragonModes, 4);
+            }
         }
     }
     float baseMeshPanelH = ImGui::GetWindowSize().y;

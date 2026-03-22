@@ -48,6 +48,7 @@ struct LevelPreset {
 
     // Post-load actions
     bool applyDragonScales = false;  // Apply dragon scale preset to secondary mesh after load
+    bool enableDragonCoat  = false;  // Auto-enable dragon coat toggle
 };
 
 extern const LevelPreset LEVEL_PRESETS[];

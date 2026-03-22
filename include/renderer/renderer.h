@@ -316,6 +316,11 @@ public:
     bool doSkinning = false;
     bool animationPlaying = false;
 
+    // Dragon coat toggle
+    bool     dragonCoatAvailable   = false;
+    bool     dragonCoatEnabled     = false;
+    std::string dragonCoatPath;
+
     // Secondary mesh (read-only for UI)
     bool     dualMeshActive        = false;
     uint32_t secondaryHeNbFaces    = 0;

@@ -85,9 +85,9 @@ const LevelPreset LEVEL_PRESETS[] = {
         .name               = "Dancing Dragon",
 
         .selectedMesh       = 10,
-        .meshPath           = ASSETS_DIR "base_mesh/dragon/dragon_coat.obj",
+        .meshPath           = ASSETS_DIR "base_mesh/dragon/dragon_8k.obj",
         .triangulateMesh    = false,
-        .baseMeshMode       = 0,        // Off (coat base mesh)
+        .baseMeshMode       = 0,
 
         .renderResurfacing  = true,
         .elementType        = 0,        // Torus
@@ -120,6 +120,7 @@ const LevelPreset LEVEL_PRESETS[] = {
         .lightIntensity     = 10.0f,
 
         .applyDragonScales  = true,
+        .enableDragonCoat   = true,
     },
 };
 

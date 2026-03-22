@@ -40,9 +40,13 @@ void Renderer::scanAssetMeshes() {
         if (entry.path().extension() != ".obj") continue;
 
         std::string fullPath = entry.path().string();
+        std::string stem = entry.path().stem().string();
+
+        // Skip secondary meshes (loaded via toggle, not standalone)
+        if (stem == "dragon_coat") continue;
 
         // Display just the filename without extension
-        std::string name = entry.path().stem().string();
+        std::string name = (stem == "dragon_8k") ? "dragon" : stem;
 
         entries.push_back({name, fullPath});
     }
@@ -423,6 +427,9 @@ void Renderer::cleanupMeshTextures() {
     elementTypeTextureLoaded = false;
     maskTextureLoaded = false;
     skinTextureLoaded = false;
+    dragonCoatAvailable = false;
+    dragonCoatEnabled = false;
+    dragonCoatPath.clear();
     useElementTypeTexture = false;
     useAOTexture = false;
     useMaskTexture = false;
@@ -1698,8 +1705,12 @@ void Renderer::loadMesh(const std::string& path) {
         std::cout << "  No glTF file found for skeleton" << std::endl;
     }
 
-    // Dragon Coat: also load base dragon mesh for solid rendering underneath
-    if (filename.find("dragon_coat") != std::string::npos) {
-        loadSecondaryMesh(dir + "dragon_8k.obj");
+    // Dragon: check if coat mesh exists alongside so we can offer the toggle
+    if (filename.find("dragon_8k") != std::string::npos) {
+        std::string coatPath = dir + "dragon_coat.obj";
+        if (std::filesystem::exists(coatPath)) {
+            dragonCoatAvailable = true;
+            dragonCoatPath = coatPath;
+        }
     }
 }

@@ -209,6 +209,10 @@ void Renderer::beginFrame() {
                 if (pendingPreset->chainmailMode) {
                     applyPresetChainMail();
                 }
+                if (pendingPreset->enableDragonCoat && dragonCoatAvailable) {
+                    dragonCoatEnabled = true;
+                    loadSecondaryMesh(dragonCoatPath);
+                }
                 if (pendingPreset->applyDragonScales) {
                     applyPresetDragonScales();
                     dragonBaseMeshMode = 2;  // Solid
