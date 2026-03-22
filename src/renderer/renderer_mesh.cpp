@@ -46,7 +46,7 @@ void Renderer::scanAssetMeshes() {
         if (stem == "dragon_coat") continue;
 
         // Display just the filename without extension
-        std::string name = (stem == "dragon_8k") ? "dragon" : stem;
+        std::string name = stem;
 
         entries.push_back({name, fullPath});
     }
@@ -1582,8 +1582,8 @@ void Renderer::loadMesh(const std::string& path) {
         loadAndUploadTexture(dir + "dragon_coat_ao.png", aoTexture,
                              VK_FORMAT_R8G8B8A8_SRGB, aoTextureLoaded);
     } else if (filename.find("dragon") != std::string::npos) {
-        // Note: the AO file is named "dargon_8k_ao.png" (typo in asset)
-        loadAndUploadTexture(dir + "dargon_8k_ao.png", aoTexture,
+        // Note: the AO file is named "dargon_ao.png" (typo in asset)
+        loadAndUploadTexture(dir + "dargon_ao.png", aoTexture,
                              VK_FORMAT_R8G8B8A8_SRGB, aoTextureLoaded);
     }
 
@@ -1705,8 +1705,8 @@ void Renderer::loadMesh(const std::string& path) {
         std::cout << "  No glTF file found for skeleton" << std::endl;
     }
 
-    // Dragon: check if coat mesh exists alongside so we can offer the toggle
-    if (filename.find("dragon_8k") != std::string::npos) {
+    // Check if a coat mesh exists alongside (e.g. dragon_coat.obj next to dragon.obj)
+    {
         std::string coatPath = dir + "dragon_coat.obj";
         if (std::filesystem::exists(coatPath)) {
             dragonCoatAvailable = true;

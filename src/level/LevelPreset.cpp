@@ -85,7 +85,7 @@ const LevelPreset LEVEL_PRESETS[] = {
         .name               = "Dancing Dragon",
 
         .selectedMesh       = 10,
-        .meshPath           = ASSETS_DIR "base_mesh/dragon/dragon_8k.obj",
+        .meshPath           = ASSETS_DIR "base_mesh/dragon/dragon.obj",
         .triangulateMesh    = false,
         .baseMeshMode       = 0,
 
