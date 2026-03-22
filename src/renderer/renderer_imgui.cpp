@@ -570,6 +570,10 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     // Camera controls
     if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
         activeCamera->renderImGuiControls();
+        ImGui::Checkbox("Turntable", &turntableMode);
+        if (turntableMode && ImGui::Button("Reset Rotation")) {
+            objectRotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+        }
     }
 
     ImGui::Separator();

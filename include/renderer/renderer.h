@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <vector>
 #include <string>
 #include <optional>
@@ -480,6 +481,9 @@ public:
     uint32_t cachedEstMeshShaders  = 0;  // CPU-estimated mesh shader workgroups (LOD off only)
     uint32_t frameDrawCalls        = 0;  // draw/dispatch calls this frame
     float    cpuCullTimeMs         = 0.0f;
+    // Object rotation (turntable drag)
+    bool     turntableMode         = false;
+    glm::quat objectRotation       = glm::quat(1.0f, 0.0f, 0.0f, 0.0f); // identity
     bool     visibleCacheDirty     = true;  // force rebuild on next frame
     glm::mat4 lastCullMVP          = glm::mat4(0.0f);
     bool      lastEnableFrustumCulling  = false;

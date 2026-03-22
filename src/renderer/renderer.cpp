@@ -542,7 +542,11 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
 
     PushConstants pushConstants{};
 
-    pushConstants.model = thirdPersonMode ? player.getModelMatrix() : glm::mat4(1.0f);
+    glm::mat4 baseModel = thirdPersonMode ? player.getModelMatrix() : glm::mat4(1.0f);
+    if (turntableMode) {
+        baseModel = glm::mat4_cast(objectRotation) * baseModel;
+    }
+    pushConstants.model = baseModel;
     pushConstants.nbFaces = heNbFaces;
     pushConstants.nbVertices = heNbVertices;
     pushConstants.elementType = elementType;

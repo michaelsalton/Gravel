@@ -6,6 +6,7 @@
 #include "loaders/GltfLoader.h"
 #include <tiny_gltf.h>
 #include "core/window.h"
+#include "imgui.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -374,6 +375,26 @@ void Renderer::processInput(Window& win, float deltaTime) {
             animationSpeed = player.getAnimationSpeed();
         } else {
             animationPlaying = false;
+        }
+    }
+
+    // Turntable: left-click drag rotates the object
+    if (turntableMode && !ImGui::GetIO().WantCaptureMouse) {
+        auto& kb = win.keyboardMouse;
+        if (kb.getMouseButton(GLFW_MOUSE_BUTTON_LEFT)) {
+            float dx = kb.getMouseDeltaX();
+            float dy = kb.getMouseDeltaY();
+            float sensitivity = 0.005f;
+            if (dx != 0.0f || dy != 0.0f) {
+                // Rotate around the camera's right and up axes for intuitive drag
+                glm::mat4 view = activeCamera->getViewMatrix();
+                glm::vec3 camRight = glm::vec3(view[0][0], view[1][0], view[2][0]);
+                glm::vec3 camUp    = glm::vec3(view[0][1], view[1][1], view[2][1]);
+                float angle = glm::length(glm::vec2(dx, dy)) * sensitivity;
+                glm::vec3 axis = glm::normalize(camUp * dx + camRight * dy);
+                glm::quat drag = glm::angleAxis(angle, axis);
+                objectRotation = glm::normalize(drag * objectRotation);
+            }
         }
     }
 

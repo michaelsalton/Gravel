@@ -131,8 +131,11 @@ void main() {
                          worldPos, worldNormal);
         }
 
-        vOut[i].worldPosU = vec4(worldPos, uv.x);
-        vOut[i].normalV = vec4(worldNormal, uv.y);
+        // Apply model matrix to world position and normal for correct lighting
+        vec3 transformedPos = (push.model * vec4(worldPos, 1.0)).xyz;
+        vec3 transformedNormal = normalize(mat3(push.model) * worldNormal);
+        vOut[i].worldPosU = vec4(transformedPos, uv.x);
+        vOut[i].normalV = vec4(transformedNormal, uv.y);
         gl_MeshVerticesEXT[i].gl_Position = mvp * vec4(worldPos, 1.0);
     }
 
