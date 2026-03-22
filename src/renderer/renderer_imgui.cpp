@@ -113,7 +113,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     float panelW = 310.0f;
     float rightX = displayW - panelW;  // right-column X anchor
     ImGui::SetNextWindowPos(ImVec2(0, menuBarH), posCond);
-    ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.6f), sizeCond);
+    ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.7f), sizeCond);
     ImGui::Begin("Performance", nullptr, panelFlags);
 
     // FPS (displayed value updates every 0.5s for readability)
@@ -224,12 +224,6 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     ImGui::Text("Faces:              %u", heNbFaces);
     ImGui::Text("Vertices:           %u", heNbVertices);
     ImGui::Text("Triangles:          %u", baseMeshTriCount);
-    {
-        uint32_t renderedTris = (baseMeshMode > 0 ? baseMeshTriCount : 0u);
-        if (dualMeshActive && dragonBaseMeshMode > 0)
-            renderedTris += secondaryHeNbFaces * 2;  // approximate tri count for dragon body
-        ImGui::Text("Rendered Triangles: %u", renderedTris);
-    }
     ImGui::Unindent();
 
     if (baseMeshMode > 0 && heMeshUploaded) {
@@ -256,14 +250,17 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             float pct = 100.0f * culledElements / totalElements;
             ImGui::Text("Culled:             %u (%.1f%%)", culledElements, pct);
         }
-        if (!enableLod) {
+        {
             uint32_t trisPerElement = resolutionM * resolutionN * 2;
             uint32_t procTotal    = totalElements   * trisPerElement;
-            uint32_t procRendered = visibleElements * trisPerElement;
-            ImGui::Text("Triangles:          %u  (%u/elem)", procTotal, trisPerElement);
-            ImGui::Text("Rendered Triangles: %u", procRendered);
+            uint64_t baseMeshTris = (baseMeshMode > 0 ? baseMeshTriCount : 0u)
+                                  + (dualMeshActive && dragonBaseMeshMode > 0 ? secondaryHeNbFaces * 2 : 0u)
+                                  + (renderBenchmarkMesh && benchmarkMeshLoaded ? benchmarkTriCount : 0u);
+            uint64_t procGpuRendered = (gpuRenderedTriangles > baseMeshTris)
+                                     ? gpuRenderedTriangles - baseMeshTris : 0;
+            ImGui::Text("Triangles:          %llu / %u  (%u/elem)",
+                        static_cast<unsigned long long>(procGpuRendered), procTotal, trisPerElement);
             sceneTriangles += procTotal;
-            sceneRendered  += procRendered;
         }
         ImGui::Unindent();
     }
@@ -285,8 +282,8 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     ImGui::Separator();
     ImGui::Text("Scene:");
     ImGui::Indent();
-    ImGui::Text("Triangles:          %u", sceneTriangles);
-    ImGui::Text("Rendered Triangles: %llu", static_cast<unsigned long long>(gpuRenderedTriangles));
+    ImGui::Text("Triangles:          %llu / %u",
+                static_cast<unsigned long long>(gpuRenderedTriangles), sceneTriangles);
     ImGui::Unindent();
     ImGui::Text("Resolution: %ux%u", swapChainExtent.width, swapChainExtent.height);
 
@@ -382,10 +379,9 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             bool prevCoat = dragonCoatEnabled;
             ImGui::Checkbox("Dragon Coat", &dragonCoatEnabled);
             if (dragonCoatEnabled && !prevCoat) {
-                // Load the coat as secondary mesh
-                loadSecondaryMesh(dragonCoatPath);
+                pendingCoatLoad = true;
             } else if (!dragonCoatEnabled && prevCoat) {
-                cleanupSecondaryMesh();
+                pendingCoatUnload = true;
             }
             if (dualMeshActive) {
                 const char* dragonModes[] = { "Off", "Wireframe", "Solid", "Both" };
@@ -472,11 +468,13 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         resurfacingPanel.renderPathway(*this);
     }
 
+    float resurfPanelH = ImGui::GetWindowSize().y;
     ImGui::End();
 
-    // ===================== Presets Panel (bottom-left col 1) =====================
-    ImGui::SetNextWindowPos(ImVec2(0, menuBarH + displayH * 0.6f), posCond);
-    ImGui::SetNextWindowSize(ImVec2(panelW, 150), sizeCond);
+    // ===================== Presets Panel (bottom-right) =====================
+    float presetsPanelH = 150.0f;
+    ImGui::SetNextWindowPos(ImVec2(rightX, menuBarH + displayH - presetsPanelH), posCond);
+    ImGui::SetNextWindowSize(ImVec2(panelW, presetsPanelH), sizeCond);
     ImGui::Begin("Presets", nullptr, panelFlags);
     {
         static int selectedLevel = -1;
@@ -503,13 +501,11 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             applyMaterialPreset(selectedMaterial);
         }
     }
-
-    float presetsPanelH = ImGui::GetWindowSize().y;
     ImGui::End();
 
-    // ===================== GRWM Panel (below Presets, left col 1) =====================
-    ImGui::SetNextWindowPos(ImVec2(0, menuBarH + displayH * 0.6f + presetsPanelH), posCond);
-    ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.4f - presetsPanelH), sizeCond);
+    // ===================== GRWM Panel (bottom-left col 1) =====================
+    ImGui::SetNextWindowPos(ImVec2(0, menuBarH + displayH * 0.7f), posCond);
+    ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.3f), sizeCond);
     ImGui::Begin("GRWM", nullptr, panelFlags);
     grwmPanel.render(*this);
     ImGui::End();

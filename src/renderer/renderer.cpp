@@ -261,6 +261,18 @@ void Renderer::beginFrame() {
             grwmStatus = preprocessLoaded ? "Loaded successfully" : "Failed to load output";
         }
 
+        // Deferred dragon coat load/unload
+        if (pendingCoatLoad) {
+            pendingCoatLoad = false;
+            vkDeviceWaitIdle(device);
+            loadSecondaryMesh(dragonCoatPath);
+        }
+        if (pendingCoatUnload) {
+            pendingCoatUnload = false;
+            vkDeviceWaitIdle(device);
+            cleanupSecondaryMesh();
+        }
+
         // No loading — process lightweight deferred ops
         if (pendingGroundRegenerate) {
             pendingGroundRegenerate = false;

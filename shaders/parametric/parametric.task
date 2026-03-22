@@ -191,10 +191,13 @@ void main() {
         payload.edgeTangent = normalize(edgeDir - dot(edgeDir, payload.normal) * payload.normal);
 
         // Slot placement: override position/normal with interpolated slot location
-        if (useSlots) {
+        // Slot 0 stays at face center (matches regular pipeline); slots 1+ use GRWM positions
+        if (useSlots && slotIdx > 0u) {
             SlotEntry slot = getSlotEntry(faceId, slotIdx, resurfacingUBO.preprocessSlotsPerFace);
             float su = slot.u;
             float sv = slot.v;
+            // Fold into triangle if out of bounds
+            if (su + sv > 1.0) { su = 1.0 - su; sv = 1.0 - sv; }
 
             // Gather face vertices via half-edge traversal
             int he0 = readFaceEdge(faceId);
@@ -224,6 +227,9 @@ void main() {
             }
 
             // Each slot element occupies 1/K of the face area
+            payload.area = readFaceArea(faceId) / float(push.activeSlots);
+        } else if (useSlots) {
+            // Slot 0: keep face center position but still scale area
             payload.area = readFaceArea(faceId) / float(push.activeSlots);
         }
     }

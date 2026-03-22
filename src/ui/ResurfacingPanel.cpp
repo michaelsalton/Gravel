@@ -145,6 +145,20 @@ void ResurfacingPanel::render(Renderer& r) {
                 ImGui::Unindent();
             }
 
+            // Dragon Scales preset (available when dragon mesh is loaded)
+            if (r.dragonCoatAvailable) {
+                ImGui::Separator();
+                if (ImGui::Button("Dragon Scales Preset")) {
+                    r.elementType = 5;  // Dragon Scale
+                    r.renderResurfacing = true;
+                    r.renderPebbles = false;
+                    r.userScaling = 0.628f;
+                    r.resolutionM = 12;
+                    r.resolutionN = 12;
+                    r.normalPerturbation = 0.15f;
+                }
+            }
+
             ImGui::Separator();
             uint32_t totalElements = r.heNbFaces + r.heNbVertices;
             ImGui::Text("Elements: %u (%u faces + %u verts)",
@@ -154,13 +168,17 @@ void ResurfacingPanel::render(Renderer& r) {
             // Secondary mesh resurfacing (dragon coat dual-mesh)
             if (r.dualMeshActive) {
                 ImGui::Separator();
-                if (ImGui::CollapsingHeader("Dragon (Base Mesh)", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (ImGui::CollapsingHeader("Dragon Coat", ImGuiTreeNodeFlags_DefaultOpen)) {
                     ImGui::PushID("secondary");
 
-                    const char* secSurfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder", "Hemisphere", "Dragon Scale", "Straw", "Stud"};
+                    const char* secSurfaceTypes[] = {"Torus", "Sphere", "Cone", "Cylinder", "Hemisphere", "Straw", "Stud"};
+                    // Map internal type to combo index (skip Dragon Scale = 5)
                     int secType = static_cast<int>(r.secondaryElementType);
-                    if (ImGui::Combo("Surface Type##sec", &secType, secSurfaceTypes, 8))
+                    if (secType >= 5) secType--;  // shift down past removed Dragon Scale
+                    if (ImGui::Combo("Surface Type##sec", &secType, secSurfaceTypes, 7)) {
+                        if (secType >= 5) secType++;  // shift back up past Dragon Scale
                         r.secondaryElementType = static_cast<uint32_t>(secType);
+                    }
 
                     ImGui::SliderFloat("Global Scale##sec", &r.secondaryUserScaling, 0.01f, 3.0f);
 
@@ -173,9 +191,6 @@ void ResurfacingPanel::render(Renderer& r) {
                     } else if (r.secondaryElementType == 1) {
                         ImGui::Text("Sphere Parameters:");
                         ImGui::SliderFloat("Radius##sec", &r.secondarySphereRadius, 0.1f, 2.0f);
-                    } else if (r.secondaryElementType == 5) {
-                        ImGui::Text("Dragon Scale Parameters:");
-                        ImGui::SliderFloat("Normal Perturbation##sec", &r.secondaryNormalPerturbation, 0.0f, 1.0f);
                     }
 
                     ImGui::Separator();
@@ -186,10 +201,6 @@ void ResurfacingPanel::render(Renderer& r) {
                         r.secondaryResolutionM = static_cast<uint32_t>(secResM);
                     if (ImGui::SliderInt("Resolution N##sec", &secResN, 2, 64))
                         r.secondaryResolutionN = static_cast<uint32_t>(secResN);
-
-                    if (ImGui::Button("Dragon Scales")) {
-                        r.applyPresetDragonScales();
-                    }
 
                     ImGui::Text("Dragon faces: %u", r.secondaryHeNbFaces);
 
