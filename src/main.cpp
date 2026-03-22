@@ -13,7 +13,7 @@ int main() {
     std::cout << "--- Loading OBJ meshes ---\n" << std::endl;
 
     try {
-        NGonMesh cube = ObjLoader::load(std::string(ASSETS_DIR) + "shapes/cube.obj");
+        NGonMesh cube = ObjLoader::load(std::string(ASSETS_DIR) + "base_mesh/shapes/cube.obj");
         std::cout << "Cube: " << cube.nbVertices << " vertices, "
                   << cube.nbFaces << " faces" << std::endl;
         if (!cube.faces.empty()) {
@@ -24,7 +24,7 @@ int main() {
         }
         std::cout << std::endl;
 
-        NGonMesh ico = ObjLoader::load(std::string(ASSETS_DIR) + "shapes/icosphere.obj");
+        NGonMesh ico = ObjLoader::load(std::string(ASSETS_DIR) + "base_mesh/shapes/icosphere.obj");
         std::cout << "Icosphere: " << ico.nbVertices << " vertices, "
                   << ico.nbFaces << " faces" << std::endl;
         if (!ico.faces.empty()) {
@@ -45,11 +45,11 @@ int main() {
     std::cout << "--- Building half-edge structures ---\n" << std::endl;
 
     try {
-        NGonMesh cubeMesh = ObjLoader::load(std::string(ASSETS_DIR) + "shapes/cube.obj");
+        NGonMesh cubeMesh = ObjLoader::load(std::string(ASSETS_DIR) + "base_mesh/shapes/cube.obj");
         HalfEdgeMesh heCube = HalfEdgeBuilder::build(cubeMesh);
         std::cout << std::endl;
 
-        NGonMesh icoMesh = ObjLoader::load(std::string(ASSETS_DIR) + "shapes/icosphere.obj");
+        NGonMesh icoMesh = ObjLoader::load(std::string(ASSETS_DIR) + "base_mesh/shapes/icosphere.obj");
         HalfEdgeMesh heIco = HalfEdgeBuilder::build(icoMesh);
         std::cout << std::endl;
 
@@ -81,7 +81,7 @@ int main() {
 
     HalfEdgeMesh heMeshForGPU;
     try {
-        NGonMesh cubeMeshGPU = ObjLoader::load(std::string(ASSETS_DIR) + "shapes/cube.obj");
+        NGonMesh cubeMeshGPU = ObjLoader::load(std::string(ASSETS_DIR) + "base_mesh/shapes/cube.obj");
         heMeshForGPU = HalfEdgeBuilder::build(cubeMeshGPU);
     } catch (const std::exception& e) {
         std::cerr << "Mesh preparation error: " << e.what() << std::endl;

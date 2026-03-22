@@ -512,7 +512,6 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         resurfData.featureEdgeBoostUBO = featureEdgeBoost;
         resurfData.grwmIntensityUBO = grwmIntensity;
         memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
-
     }
 
     // Update secondary ResurfacingUBO (used when dualMeshActive)

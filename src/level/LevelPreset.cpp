@@ -9,7 +9,7 @@ const LevelPreset LEVEL_PRESETS[] = {
         .name               = "Sphere World",
 
         .selectedMesh       = 6,
-        .meshPath           = ASSETS_DIR "shapes/icosphere.obj",
+        .meshPath           = ASSETS_DIR "base_mesh/shapes/icosphere.obj",
         .triangulateMesh    = false,
         .baseMeshMode       = 0,
 

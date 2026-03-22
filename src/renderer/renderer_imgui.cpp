@@ -82,15 +82,31 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
+    // ===================== Main Menu Bar =====================
+    float menuBarH = 0.0f;
+    if (ImGui::BeginMainMenuBar()) {
+        if (ImGui::BeginMenu("Window")) {
+            if (ImGui::MenuItem("Reset Layout")) {
+                resetLayout = true;
+            }
+            ImGui::EndMenu();
+        }
+        menuBarH = ImGui::GetWindowSize().y;
+        ImGui::EndMainMenuBar();
+    }
+
+    // Layout condition: force positions/sizes on reset, otherwise only on first use
+    ImGuiCond layoutCond = resetLayout ? ImGuiCond_Always : ImGuiCond_FirstUseEver;
+
     // ===================== Performance Stats Panel =====================
-    float displayH = static_cast<float>(swapChainExtent.height);
+    float displayH = static_cast<float>(swapChainExtent.height) - menuBarH;
     float displayW = static_cast<float>(swapChainExtent.width);
     float panelW = 310.0f;
-    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelW, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(0, menuBarH), layoutCond);
+    ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.6f), layoutCond);
     ImGui::Begin("Performance", nullptr,
                  ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
-                 ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize);
+                 0);
 
     // FPS (displayed value updates every 0.5s for readability)
     static float displayFps = 0.0f;
@@ -284,12 +300,12 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     // ===================== Mode Tabs (centered at top) =====================
     {
         float tabW = 400.0f;
-        ImGui::SetNextWindowPos(ImVec2((displayW - tabW) * 0.5f, 0), ImGuiCond_Always);
-        ImGui::SetNextWindowSize(ImVec2(tabW, 0), ImGuiCond_Always);
+        ImGui::SetNextWindowPos(ImVec2((displayW - tabW) * 0.5f, menuBarH), layoutCond);
+        ImGui::SetNextWindowSize(ImVec2(tabW, 0), layoutCond);
         ImGui::Begin("##ModeTabs", nullptr,
-                     ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+                     ImGuiWindowFlags_NoMove  |
                      ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar |
-                     ImGuiWindowFlags_AlwaysAutoResize);
+                     0);
         if (ImGui::BeginTabBar("ModeTabs")) {
             if (ImGui::BeginTabItem("Resurfacing")) {
                 if (uiMode != 0) uiMode = 0;
@@ -317,11 +333,11 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     }
 
     // ===================== Base Mesh Panel (top-right) =====================
-    ImGui::SetNextWindowPos(ImVec2(displayW - panelW, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelW, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(displayW - panelW, menuBarH), layoutCond);
+    ImGui::SetNextWindowSize(ImVec2(panelW, 200), layoutCond);
     ImGui::Begin("Base Mesh", nullptr,
-                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-                 ImGuiWindowFlags_AlwaysAutoResize);
+                 ImGuiWindowFlags_NoMove  |
+                 0);
 
     int meshCount = static_cast<int>(assetMeshNames.size());
     {
@@ -367,10 +383,10 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     ImGui::End();
 
     // ===================== Resurfacing Panel (right, below Base Mesh) =====================
-    ImGui::SetNextWindowPos(ImVec2(displayW - panelW, baseMeshPanelH), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelW, displayH - baseMeshPanelH), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(displayW - panelW, menuBarH + baseMeshPanelH), layoutCond);
+    ImGui::SetNextWindowSize(ImVec2(panelW, displayH - baseMeshPanelH), layoutCond);
     ImGui::Begin("Resurfacing Controls", nullptr,
-                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+                 ImGuiWindowFlags_NoMove );
 
     if (uiMode == 0) {
         resurfacingPanel.render(*this);
@@ -445,11 +461,11 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
     ImGui::End();
 
-    // ===================== Lighting & Materials Panel (top-left, below Performance) =====================
-    ImGui::SetNextWindowPos(ImVec2(0, perfH), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelW, displayH - perfH), ImGuiCond_Always);
+    // ===================== Lighting & Materials Panel (bottom-left) =====================
+    ImGui::SetNextWindowPos(ImVec2(0, menuBarH + displayH * 0.6f), layoutCond);
+    ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.4f), layoutCond);
     ImGui::Begin("Lighting & Materials", nullptr,
-                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+                 ImGuiWindowFlags_NoMove );
 
     ImGui::DragFloat3("Light Position", &lightPosition.x, 0.1f, -20.0f, 20.0f);
     ImGui::SliderFloat("Light Intensity", &lightIntensity, 0.0f, 10.0f);
@@ -497,10 +513,10 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     // ===================== Settings Panel (bottom-left, below Lighting) =====================
     // Note: Settings now contains Debug Visualization, Camera, and Advanced panels
     // It shares the left column with Performance + Lighting via scrolling
-    ImGui::SetNextWindowPos(ImVec2(panelW, 0), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.5f), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(panelW, menuBarH), layoutCond);
+    ImGui::SetNextWindowSize(ImVec2(panelW, displayH * 0.5f), layoutCond);
     ImGui::Begin("Settings", nullptr,
-                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+                 ImGuiWindowFlags_NoMove );
 
     advancedPanel.render(*this);
 
@@ -572,11 +588,10 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     ImGui::End();
 
     // ===================== Presets Panel (below Settings) =====================
-    ImGui::SetNextWindowPos(ImVec2(panelW, displayH * 0.5f), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelW, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(panelW, menuBarH + displayH * 0.5f), layoutCond);
+    ImGui::SetNextWindowSize(ImVec2(panelW, 150), layoutCond);
     ImGui::Begin("Presets", nullptr,
-                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-                 ImGuiWindowFlags_AlwaysAutoResize);
+                 ImGuiWindowFlags_NoMove);
     {
         static int selectedLevel = -1;
         const char* preview = (selectedLevel >= 0 && selectedLevel < LEVEL_PRESET_COUNT)
@@ -607,11 +622,11 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     ImGui::End();
 
     // ===================== GRWM Panel (below Presets) =====================
-    ImGui::SetNextWindowPos(ImVec2(panelW, displayH * 0.5f + presetsPanelH), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(panelW, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(panelW, menuBarH + displayH * 0.5f + presetsPanelH), layoutCond);
+    ImGui::SetNextWindowSize(ImVec2(panelW, 250), layoutCond);
     ImGui::Begin("GRWM", nullptr,
-                 ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-                 ImGuiWindowFlags_AlwaysAutoResize);
+                 ImGuiWindowFlags_NoMove  |
+                 0);
     grwmPanel.render(*this);
     ImGui::End();
 
@@ -619,12 +634,12 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     if (loadingActive) {
         ImVec2 displaySize = ImGui::GetIO().DisplaySize;
         ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f, displaySize.y * 0.5f),
-                                ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+                                layoutCond, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowSize(ImVec2(350, 0));
         ImGui::Begin("##Loading", nullptr,
-                     ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                     ImGuiWindowFlags_NoTitleBar  |
                      ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-                     ImGuiWindowFlags_AlwaysAutoResize);
+                     0);
         ImGui::Text("%s", loadingMessage.c_str());
         float progress = static_cast<float>(fmod(ImGui::GetTime() * 0.5, 1.0));
         ImGui::ProgressBar(progress, ImVec2(-1, 0), "");
@@ -639,12 +654,12 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             ImGui::SetNextWindowBgAlpha(alpha * 0.9f);
             ImVec2 displaySize = ImGui::GetIO().DisplaySize;
             ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f, displaySize.y * 0.5f),
-                                    ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+                                    layoutCond, ImVec2(0.5f, 0.5f));
             ImGui::SetNextWindowSize(ImVec2(350, 0));
             ImGui::Begin("##LoadDone", nullptr,
-                         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                         ImGuiWindowFlags_NoTitleBar  |
                          ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-                         ImGuiWindowFlags_AlwaysAutoResize);
+                         0);
             ImGui::ProgressBar(1.0f, ImVec2(-1, 0), "");
             ImGui::Text("Done (%.2f s)", loadingDuration);
             ImGui::End();
@@ -652,6 +667,8 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             loadingDone = false;
         }
     }
+
+    resetLayout = false;
 
     ImGui::Render();
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
@@ -715,7 +732,7 @@ void Renderer::applyPresetDragonScales() {
 
 void Renderer::applyMaterialPreset(int index) {
     // All material presets use the icosphere
-    pendingMeshLoad = std::string(ASSETS_DIR) + "shapes/icosphere.obj";
+    pendingMeshLoad = std::string(ASSETS_DIR) + "base_mesh/shapes/icosphere.obj";
     for (int i = 0; i < static_cast<int>(assetMeshPaths.size()); i++) {
         if (assetMeshPaths[i].find("icosphere") != std::string::npos) {
             selectedMesh = i;

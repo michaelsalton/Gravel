@@ -337,6 +337,7 @@ public:
     int uiMode = 0;  // 0=Resurfacing, 1=Benchmark, 2=Player
     bool vsync = false;
     bool pendingSwapChainRecreation = false;
+    bool resetLayout = false;
     std::string pendingMeshLoad;  // deferred mesh load (set by ImGui, processed between frames)
     std::string loadedMeshPath;   // path of the currently loaded mesh (for export)
     const LevelPreset* pendingPreset = nullptr;  // post-load state to apply after mesh load

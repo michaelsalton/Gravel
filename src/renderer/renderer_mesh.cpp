@@ -26,22 +26,23 @@ void Renderer::scanAssetMeshes() {
     assetMeshNames.clear();
     assetMeshPaths.clear();
 
-    std::string assetsDir = ASSETS_DIR;
-    if (assetsDir.empty() || !std::filesystem::is_directory(assetsDir)) return;
+    std::string baseMeshDir = std::string(ASSETS_DIR) + "base_mesh/";
+    std::cout << "  Scanning for meshes in: " << baseMeshDir << std::endl;
+    if (baseMeshDir.empty() || !std::filesystem::is_directory(baseMeshDir)) {
+        std::cout << "  Warning: base_mesh directory not found!" << std::endl;
+        return;
+    }
 
-    // Recursively find all .obj files
+    // Recursively find all .obj files in base mesh folder
     std::vector<std::pair<std::string, std::string>> entries; // (name, path)
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(assetsDir)) {
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(baseMeshDir)) {
         if (!entry.is_regular_file()) continue;
         if (entry.path().extension() != ".obj") continue;
 
         std::string fullPath = entry.path().string();
 
-        // Build display name from relative path: "subfolder/stem"
-        auto relPath = std::filesystem::relative(entry.path(), assetsDir);
-        std::string name = relPath.parent_path().string();
-        if (!name.empty()) name += "/";
-        name += entry.path().stem().string();
+        // Display just the filename without extension
+        std::string name = entry.path().stem().string();
 
         entries.push_back({name, fullPath});
     }
@@ -56,7 +57,7 @@ void Renderer::scanAssetMeshes() {
 
     // Default to "shapes/cube" if available
     for (int i = 0; i < static_cast<int>(assetMeshNames.size()); i++) {
-        if (assetMeshNames[i] == "shapes/cube") {
+        if (assetMeshNames[i] == "cube") {
             selectedMesh = i;
             break;
         }
