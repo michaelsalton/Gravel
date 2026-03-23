@@ -30,5 +30,13 @@ void AdvancedPanel::render(Renderer& r) {
             ImGui::SliderFloat("LOD Factor", &r.lodFactor, 0.1f, 5.0f, "%.2f");
             ImGui::TextDisabled("< 1.0 = performance  |  > 1.0 = quality");
         }
+
+        ImGui::Separator();
+
+        // Specular AA
+        ImGui::Checkbox("Specular AA", &r.enableSpecularAA);
+        if (r.enableSpecularAA) {
+            ImGui::SliderFloat("AA Strength", &r.specularAAStrength, 0.0f, 2.0f, "%.2f");
+        }
     }
 }

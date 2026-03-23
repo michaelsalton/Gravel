@@ -17,6 +17,7 @@ layout(location = 2) perprimitiveEXT in PerPrimitiveData {
 } pIn;
 
 layout(location = 3) perprimitiveEXT in vec2 baseUV;
+layout(location = 4) perprimitiveEXT in vec3 faceNormal;
 
 // UBOs
 layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
@@ -87,6 +88,15 @@ void main() {
     float matAo         = isSecondary ? shadingUBO.secondaryAo             : shadingUBO.ao;
     float matF0         = isSecondary ? shadingUBO.secondaryDielectricF0   : shadingUBO.dielectricF0;
     float matEnvRefl    = isSecondary ? shadingUBO.secondaryEnvReflection  : shadingUBO.envReflection;
+
+    // Geometric specular antialiasing (Tokuyoshi & Kaplanyan 2021, extended for procedural geometry)
+    float aaDebugValue = 0.0;
+    if (resurfacingUBO.enableSpecularAA != 0u) {
+        float oldRoughness = matRoughness;
+        matRoughness = filterRoughnessProceduralAA(normal, normalize(faceNormal), matRoughness,
+                                                         resurfacingUBO.specularAAStrengthUBO);
+        aaDebugValue = matRoughness - oldRoughness;  // how much roughness was added
+    }
 
     vec3 color;
 

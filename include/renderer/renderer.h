@@ -89,7 +89,9 @@ struct ResurfacingUBO {
     float     preprocessCurvatureBoost = 1.0f;  // UI: strength of curvature density boost
     float     featureEdgeBoostUBO      = 1.5f;  // feature edge area scale
     float     grwmIntensityUBO        = 1.0f;  // global GRWM intensity
-    // total: 192 bytes
+    uint32_t  enableSpecularAA        = 1;     // geometric specular AA (Tokuyoshi 2021)
+    float     specularAAStrengthUBO   = 0.5f; // geometric frequency scale
+    float     pad_saa[2]              = {};
 };
 
 struct GlobalShadingUBO {
@@ -273,6 +275,8 @@ public:
     float cullingThreshold = 0.0f;  // Back-face dot product threshold [-1, 1]
     bool enableLod = false;
     float lodFactor = 1.0f;
+    bool enableSpecularAA = true;  // geometric specular AA (Tokuyoshi 2021)
+    float specularAAStrength = 0.5f; // geometric frequency scale factor
     int baseMeshMode = 0;  // 0=off, 1=wireframe, 2=solid, 3=both  (coat base mesh)
     int dragonBaseMeshMode = 2;  // 0=off, 1=wireframe, 2=solid, 3=both  (dragon body base mesh)
     bool chainmailMode = false;

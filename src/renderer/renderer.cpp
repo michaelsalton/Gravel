@@ -531,6 +531,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         resurfData.preprocessCurvatureBoost = preprocessCurvatureBoost;
         resurfData.featureEdgeBoostUBO = featureEdgeBoost;
         resurfData.grwmIntensityUBO = grwmIntensity;
+        resurfData.enableSpecularAA = enableSpecularAA ? 1u : 0u;
+        resurfData.specularAAStrengthUBO = specularAAStrength;
         memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
     }
 

@@ -18,6 +18,56 @@ vec3 getDebugColor(uint id) {
 }
 
 // ============================================================================
+// Geometric Specular Antialiasing (Tokuyoshi & Kaplanyan, JCGT 2021)
+// Projected-space NDF filtering — widens roughness based on screen-space
+// normal derivatives to suppress specular fireflies from sub-pixel geometry.
+// ============================================================================
+
+// Per-triangle NDF filtering (Tokuyoshi & Kaplanyan 2021, Listing 5 / Eq. 13)
+// Widens roughness based on screen-space normal derivatives within a triangle.
+float filterRoughnessSpecularAA(vec3 worldNormal, float roughness) {
+    const float SIGMA2 = 0.15915494;  // 1/(2*pi)
+    const float KAPPA = 0.18;         // clamping threshold to prevent overfiltering
+    vec3 dndu = dFdx(worldNormal);
+    vec3 dndv = dFdy(worldNormal);
+    float kernelRoughness2 = 2.0 * SIGMA2 * (dot(dndu, dndu) + dot(dndv, dndv));
+    float clampedKernel = min(kernelRoughness2, KAPPA);
+    float roughness2 = roughness * roughness;
+    return sqrt(min(roughness2 + clampedKernel, 1.0));
+}
+
+// Extended specular AA for procedural mesh shader geometry.
+// The standard Tokuyoshi filter captures normal variation within a triangle,
+// but for procedural elements the dominant aliasing is cross-element: adjacent
+// elements have wildly different normals, but dFdx/dFdy can't see across
+// element boundaries. We solve this by measuring the angular divergence between
+// the procedural element's surface normal and the underlying base mesh face
+// normal. At distance, a pixel covers many elements whose normals span this
+// angular range, so we widen roughness proportionally.
+float filterRoughnessProceduralAA(vec3 worldNormal, vec3 faceNormal, float roughness, float strength) {
+    const float SIGMA2 = 0.15915494;
+    const float KAPPA = 0.18;
+
+    // Standard Tokuyoshi per-triangle kernel (intra-element normal variation)
+    vec3 dndu = dFdx(worldNormal);
+    vec3 dndv = dFdy(worldNormal);
+    float tokuyoshiKernel = 2.0 * SIGMA2 * (dot(dndu, dndu) + dot(dndv, dndv));
+
+    // Cross-element kernel: angular divergence between procedural normal and face normal.
+    // 1 - dot(N, faceN) is 0 when aligned, ~1 when perpendicular, 2 when opposite.
+    float divergence = 1.0 - max(dot(worldNormal, faceNormal), 0.0);
+
+    // The divergence directly represents the angular spread of normals within
+    // this element. Multiply by strength to control the effect.
+    float crossElementKernel = divergence * divergence * strength;
+
+    float kernelRoughness2 = tokuyoshiKernel + crossElementKernel;
+    float clampedKernel = min(kernelRoughness2, KAPPA);
+    float roughness2 = roughness * roughness;
+    return sqrt(min(roughness2 + clampedKernel, 1.0));
+}
+
+// ============================================================================
 // Cook-Torrance PBR
 // ============================================================================
 

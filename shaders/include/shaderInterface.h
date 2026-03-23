@@ -125,8 +125,10 @@ struct ResurfacingUBO {
     float preprocessCurvatureScale; // 1.0 / median curvature (normalizer) (offset 176)
     float preprocessCurvatureBoost; // UI strength of curvature density boost (offset 180)
     float featureEdgeBoostUBO;            // std140 padding (offset 184)
-    float grwmIntensityUBO;            // std140 padding (offset 188)
-    // total: 192 bytes
+    float grwmIntensityUBO;            // (offset 188)
+    uint enableSpecularAA;             // geometric specular AA (offset 192)
+    float specularAAStrengthUBO;       // geometric frequency scale (offset 196)
+    float pad_saa[2];                  // std140 padding
 };
 
 // ============================================================================
@@ -371,6 +373,9 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
     float preprocessCurvatureBoost;
     float featureEdgeBoostUBO;
     float grwmIntensityUBO;
+    uint enableSpecularAA;
+    float specularAAStrengthUBO;
+    float pad_saa[2];
 } resurfacingUBO;
 
 #endif

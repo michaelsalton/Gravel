@@ -44,6 +44,7 @@ layout(location = 2) perprimitiveEXT out PerPrimitiveData {
 } pOut[];
 
 layout(location = 3) perprimitiveEXT out vec2 outBaseUV[];
+layout(location = 4) perprimitiveEXT out vec3 outFaceNormal[];
 
 layout(push_constant) uniform PushConstants {
     mat4 model;
@@ -161,5 +162,8 @@ void main() {
         pOut[triId1].data = uvec4(payload.taskId, payload.isVertex, payload.elementType, 0);
         outBaseUV[triId0] = payload.baseUV;
         outBaseUV[triId1] = payload.baseUV;
+        vec3 faceN = normalize(mat3(push.model) * payload.normal);
+        outFaceNormal[triId0] = faceN;
+        outFaceNormal[triId1] = faceN;
     }
 }
