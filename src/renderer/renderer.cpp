@@ -4,6 +4,8 @@
 #include "loaders/ObjLoader.h"
 #include "loaders/GltfLoader.h"
 #include "core/window.h"
+#include "imgui.h"
+#include "imgui_impl_vulkan.h"
 #include <stdexcept>
 #include <iostream>
 #include <filesystem>
@@ -23,6 +25,7 @@ Renderer::Renderer(Window& window) : window(window) {
     createSwapChain();
     createImageViews();
     createDepthResources();
+    createMsaaColorResources();
     createRenderPass();
     createFramebuffers();
     createCommandBuffers();
@@ -533,6 +536,9 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         resurfData.grwmIntensityUBO = grwmIntensity;
         resurfData.enableSpecularAA = enableSpecularAA ? 1u : 0u;
         resurfData.specularAAStrengthUBO = specularAAStrength;
+        resurfData.enableCoverageFade = enableCoverageFade ? 1u : 0u;
+        resurfData.coverageFadeStartUBO = coverageFadeStart;
+        resurfData.coverageFadeEndUBO = coverageFadeEnd;
         memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
     }
 
@@ -1061,7 +1067,38 @@ void Renderer::endFrame() {
 
     VkResult result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || pendingSwapChainRecreation) {
+    if (pendingMsaaChange) {
+        pendingMsaaChange = false;
+        msaaSamples = static_cast<VkSampleCountFlagBits>(msaaSampleCount);
+        vkDeviceWaitIdle(device);
+        // Full rebuild: render pass + pipelines + framebuffers + MSAA resources + ImGui
+        cleanupSwapChain();
+        vkDestroyRenderPass(device, renderPass, nullptr);
+        createSwapChain();
+        createImageViews();
+        createDepthResources();
+        createMsaaColorResources();
+        createRenderPass();
+        createFramebuffers();
+        // Pipelines reference the render pass, so recreate them
+        recreatePipelines();
+        // Reinitialize ImGui with new MSAA sample count
+        ImGui_ImplVulkan_Shutdown();
+        ImGui_ImplVulkan_InitInfo initInfo{};
+        initInfo.Instance = instance;
+        initInfo.PhysicalDevice = physicalDevice;
+        initInfo.Device = device;
+        initInfo.QueueFamily = queueFamilyIndices.graphicsFamily.value();
+        initInfo.Queue = graphicsQueue;
+        initInfo.DescriptorPool = descriptorPool;
+        initInfo.MinImageCount = 2;
+        initInfo.ImageCount = static_cast<uint32_t>(swapChainImageViews.size());
+        initInfo.RenderPass = renderPass;
+        initInfo.Subpass = 0;
+        initInfo.MSAASamples = msaaSamples;
+        ImGui_ImplVulkan_Init(&initInfo);
+        std::cout << "MSAA changed to " << msaaSamples << "x" << std::endl;
+    } else if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || pendingSwapChainRecreation) {
         pendingSwapChainRecreation = false;
         recreateSwapChain();
     } else if (result != VK_SUCCESS) {
@@ -1087,6 +1124,7 @@ void Renderer::recreateSwapChain() {
     createSwapChain();
     createImageViews();
     createDepthResources();
+    createMsaaColorResources();
     createFramebuffers();
 
     std::cout << "Swap chain recreated: " << width << "x" << height << std::endl;

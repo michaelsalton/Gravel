@@ -516,6 +516,19 @@ void Renderer::cleanupSwapChain() {
     vkDestroyImage(device, depthImage, nullptr);
     vkFreeMemory(device, depthImageMemory, nullptr);
 
+    if (msaaColorImageView != VK_NULL_HANDLE) {
+        vkDestroyImageView(device, msaaColorImageView, nullptr);
+        msaaColorImageView = VK_NULL_HANDLE;
+    }
+    if (msaaColorImage != VK_NULL_HANDLE) {
+        vkDestroyImage(device, msaaColorImage, nullptr);
+        msaaColorImage = VK_NULL_HANDLE;
+    }
+    if (msaaColorMemory != VK_NULL_HANDLE) {
+        vkFreeMemory(device, msaaColorMemory, nullptr);
+        msaaColorMemory = VK_NULL_HANDLE;
+    }
+
     for (auto imageView : swapChainImageViews) {
         vkDestroyImageView(device, imageView, nullptr);
     }
@@ -574,7 +587,7 @@ void Renderer::createDepthResources() {
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.samples = msaaSamples;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     if (vkCreateImage(device, &imageInfo, nullptr, &depthImage) != VK_SUCCESS) {
@@ -614,26 +627,90 @@ void Renderer::createDepthResources() {
     std::cout << "Depth buffer created (format: " << depthFormat << ")" << std::endl;
 }
 
-void Renderer::createRenderPass() {
-    VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = swapChainImageFormat;
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+void Renderer::createMsaaColorResources() {
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.extent.width = swapChainExtent.width;
+    imageInfo.extent.height = swapChainExtent.height;
+    imageInfo.extent.depth = 1;
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.format = swapChainImageFormat;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageInfo.usage = VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    imageInfo.samples = msaaSamples;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+    if (vkCreateImage(device, &imageInfo, nullptr, &msaaColorImage) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create MSAA color image!");
+    }
+
+    VkMemoryRequirements memRequirements;
+    vkGetImageMemoryRequirements(device, msaaColorImage, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,
+                                                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+    if (vkAllocateMemory(device, &allocInfo, nullptr, &msaaColorMemory) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate MSAA color image memory!");
+    }
+
+    vkBindImageMemory(device, msaaColorImage, msaaColorMemory, 0);
+
+    VkImageViewCreateInfo viewInfo{};
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = msaaColorImage;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = swapChainImageFormat;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+
+    if (vkCreateImageView(device, &viewInfo, nullptr, &msaaColorImageView) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create MSAA color image view!");
+    }
+}
+
+void Renderer::createRenderPass() {
+    // Attachment 0: MSAA color (render target, not stored — resolved into attachment 2)
+    VkAttachmentDescription msaaColorAttachment{};
+    msaaColorAttachment.format = swapChainImageFormat;
+    msaaColorAttachment.samples = msaaSamples;
+    msaaColorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    msaaColorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    msaaColorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    msaaColorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    msaaColorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    msaaColorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    // Attachment 1: Depth (multisampled)
     VkAttachmentDescription depthAttachment{};
     depthAttachment.format = findDepthFormat();
-    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    depthAttachment.samples = msaaSamples;
     depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    // Attachment 2: Resolve target (single-sampled swap chain image)
+    VkAttachmentDescription resolveAttachment{};
+    resolveAttachment.format = swapChainImageFormat;
+    resolveAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    resolveAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    resolveAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    resolveAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    resolveAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    resolveAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    resolveAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     VkAttachmentReference colorAttachmentRef{};
     colorAttachmentRef.attachment = 0;
@@ -643,11 +720,16 @@ void Renderer::createRenderPass() {
     depthAttachmentRef.attachment = 1;
     depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+    VkAttachmentReference resolveAttachmentRef{};
+    resolveAttachmentRef.attachment = 2;
+    resolveAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
     VkSubpassDescription subpass{};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &colorAttachmentRef;
     subpass.pDepthStencilAttachment = &depthAttachmentRef;
+    subpass.pResolveAttachments = &resolveAttachmentRef;
 
     VkSubpassDependency dependency{};
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -660,7 +742,9 @@ void Renderer::createRenderPass() {
     dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-    std::array<VkAttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
+    std::array<VkAttachmentDescription, 3> attachments = {
+        msaaColorAttachment, depthAttachment, resolveAttachment
+    };
 
     VkRenderPassCreateInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -675,16 +759,17 @@ void Renderer::createRenderPass() {
         throw std::runtime_error("Failed to create render pass!");
     }
 
-    std::cout << "Render pass created" << std::endl;
+    std::cout << "Render pass created (MSAA " << msaaSamples << "x)" << std::endl;
 }
 
 void Renderer::createFramebuffers() {
     swapChainFramebuffers.resize(swapChainImageViews.size());
 
     for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-        std::array<VkImageView, 2> attachments = {
-            swapChainImageViews[i],
-            depthImageView
+        std::array<VkImageView, 3> attachments = {
+            msaaColorImageView,
+            depthImageView,
+            swapChainImageViews[i]
         };
 
         VkFramebufferCreateInfo framebufferInfo{};
@@ -1400,7 +1485,8 @@ void Renderer::createGraphicsPipeline() {
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisampling.alphaToCoverageEnable = VK_TRUE;
+    multisampling.rasterizationSamples = msaaSamples;
 
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -1809,7 +1895,7 @@ void Renderer::createBenchmarkPipeline() {
 
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisampling.rasterizationSamples = msaaSamples;
 
     VkPipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -1907,6 +1993,26 @@ VKAPI_ATTR VkBool32 VKAPI_CALL Renderer::debugCallback(
     }
 
     return VK_FALSE;
+}
+
+void Renderer::recreatePipelines() {
+    // Destroy existing pipelines
+    if (graphicsPipeline != VK_NULL_HANDLE) vkDestroyPipeline(device, graphicsPipeline, nullptr);
+    if (baseMeshPipeline != VK_NULL_HANDLE) vkDestroyPipeline(device, baseMeshPipeline, nullptr);
+    if (baseMeshSolidPipeline != VK_NULL_HANDLE) vkDestroyPipeline(device, baseMeshSolidPipeline, nullptr);
+    if (pebblePipeline != VK_NULL_HANDLE) vkDestroyPipeline(device, pebblePipeline, nullptr);
+    if (pebbleCagePipeline != VK_NULL_HANDLE) vkDestroyPipeline(device, pebbleCagePipeline, nullptr);
+    if (benchmarkPipeline != VK_NULL_HANDLE) vkDestroyPipeline(device, benchmarkPipeline, nullptr);
+    graphicsPipeline = VK_NULL_HANDLE;
+    baseMeshPipeline = VK_NULL_HANDLE;
+    baseMeshSolidPipeline = VK_NULL_HANDLE;
+    pebblePipeline = VK_NULL_HANDLE;
+    pebbleCagePipeline = VK_NULL_HANDLE;
+    benchmarkPipeline = VK_NULL_HANDLE;
+
+    // Recreate all pipelines with current render pass and MSAA settings
+    createGraphicsPipeline();
+    createBenchmarkPipeline();
 }
 
 void Renderer::createSamplers() {

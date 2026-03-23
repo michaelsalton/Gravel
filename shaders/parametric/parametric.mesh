@@ -28,6 +28,7 @@ struct TaskPayload {
     uint deltaV;
     float faceColor;
     vec2 baseUV;
+    float screenAlpha;
 };
 
 taskPayloadSharedEXT TaskPayload payload;
@@ -45,6 +46,7 @@ layout(location = 2) perprimitiveEXT out PerPrimitiveData {
 
 layout(location = 3) perprimitiveEXT out vec2 outBaseUV[];
 layout(location = 4) perprimitiveEXT out vec3 outFaceNormal[];
+layout(location = 5) perprimitiveEXT out float outScreenAlpha[];
 
 layout(push_constant) uniform PushConstants {
     mat4 model;
@@ -165,5 +167,7 @@ void main() {
         vec3 faceN = normalize(mat3(push.model) * payload.normal);
         outFaceNormal[triId0] = faceN;
         outFaceNormal[triId1] = faceN;
+        outScreenAlpha[triId0] = payload.screenAlpha;
+        outScreenAlpha[triId1] = payload.screenAlpha;
     }
 }

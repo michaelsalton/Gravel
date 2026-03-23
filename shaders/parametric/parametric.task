@@ -28,6 +28,7 @@ struct TaskPayload {
     uint deltaV;        // Tile size in V direction
     float faceColor;    // Face 2-coloring (0.0 or 1.0) for chainmail
     vec2 baseUV;        // Base mesh UV (for AO/element type map sampling)
+    float screenAlpha;  // Coverage fade: 1.0 = fully opaque, 0.0 = sub-pixel fade-out
 };
 
 taskPayloadSharedEXT TaskPayload payload;
@@ -376,6 +377,18 @@ void main() {
 
     payload.resolutionM = M;
     payload.resolutionN = N;
+
+    // Coverage fade: compute screen-space size and fade to transparent when sub-pixel
+    if (resurfacingUBO.enableCoverageFade != 0u) {
+        float screenSize = getScreenSpaceSize(payload.position, payload.normal,
+            payload.area, push.userScaling, push.elementType,
+            push.torusMajorR, push.torusMinorR, push.sphereRadius, mvp);
+        float fadeStart = resurfacingUBO.coverageFadeStartUBO;
+        float fadeEnd   = resurfacingUBO.coverageFadeEndUBO;
+        payload.screenAlpha = clamp((screenSize - fadeEnd) / max(fadeStart - fadeEnd, 0.0001), 0.0, 1.0);
+    } else {
+        payload.screenAlpha = 1.0;
+    }
 
     uint deltaU, deltaV;
     getDeltaUV(M, N, deltaU, deltaV);

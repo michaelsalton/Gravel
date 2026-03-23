@@ -128,7 +128,10 @@ struct ResurfacingUBO {
     float grwmIntensityUBO;            // (offset 188)
     uint enableSpecularAA;             // geometric specular AA (offset 192)
     float specularAAStrengthUBO;       // geometric frequency scale (offset 196)
-    float pad_saa[2];                  // std140 padding
+    uint enableCoverageFade;           // dissolve sub-pixel elements (offset 200)
+    float coverageFadeStartUBO;        // NDC size to begin fading (offset 204)
+    float coverageFadeEndUBO;          // NDC size for full transparency (offset 208)
+    float pad_saa;                     // std140 padding (offset 212)
 };
 
 // ============================================================================
@@ -375,7 +378,10 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
     float grwmIntensityUBO;
     uint enableSpecularAA;
     float specularAAStrengthUBO;
-    float pad_saa[2];
+    uint enableCoverageFade;
+    float coverageFadeStartUBO;
+    float coverageFadeEndUBO;
+    float pad_saa;
 } resurfacingUBO;
 
 #endif

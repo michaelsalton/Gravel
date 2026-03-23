@@ -91,7 +91,10 @@ struct ResurfacingUBO {
     float     grwmIntensityUBO        = 1.0f;  // global GRWM intensity
     uint32_t  enableSpecularAA        = 1;     // geometric specular AA (Tokuyoshi 2021)
     float     specularAAStrengthUBO   = 0.5f; // geometric frequency scale
-    float     pad_saa[2]              = {};
+    uint32_t  enableCoverageFade      = 1;    // dissolve sub-pixel elements
+    float     coverageFadeStartUBO    = 0.01f;
+    float     coverageFadeEndUBO      = 0.002f;
+    float     pad_saa                 = 0.0f;
 };
 
 struct GlobalShadingUBO {
@@ -275,8 +278,13 @@ public:
     float cullingThreshold = 0.0f;  // Back-face dot product threshold [-1, 1]
     bool enableLod = false;
     float lodFactor = 1.0f;
-    bool enableSpecularAA = true;  // geometric specular AA (Tokuyoshi 2021)
+    bool enableSpecularAA = true;   // geometric specular AA (Tokuyoshi 2021)
     float specularAAStrength = 0.5f; // geometric frequency scale factor
+    bool enableCoverageFade = true;  // dissolve sub-pixel elements
+    float coverageFadeStart = 0.01f; // NDC size to begin fading
+    float coverageFadeEnd   = 0.002f; // NDC size for full transparency
+    int   msaaSampleCount   = 4;     // UI-facing: 1, 2, 4, or 8
+    bool  pendingMsaaChange = false;
     int baseMeshMode = 0;  // 0=off, 1=wireframe, 2=solid, 3=both  (coat base mesh)
     int dragonBaseMeshMode = 2;  // 0=off, 1=wireframe, 2=solid, 3=both  (dragon body base mesh)
     bool chainmailMode = false;
@@ -529,6 +537,8 @@ private:
     void createSwapChain();
     void createImageViews();
     void createDepthResources();
+    void createMsaaColorResources();
+    void recreatePipelines();
     void createRenderPass();
     void createFramebuffers();
     void createCommandBuffers();
@@ -685,6 +695,12 @@ private:
     VkImage depthImage = VK_NULL_HANDLE;
     VkDeviceMemory depthImageMemory = VK_NULL_HANDLE;
     VkImageView depthImageView = VK_NULL_HANDLE;
+
+    // MSAA
+    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_4_BIT;
+    VkImage msaaColorImage = VK_NULL_HANDLE;
+    VkDeviceMemory msaaColorMemory = VK_NULL_HANDLE;
+    VkImageView msaaColorImageView = VK_NULL_HANDLE;
 
     // Render pass and framebuffers
     VkRenderPass renderPass = VK_NULL_HANDLE;

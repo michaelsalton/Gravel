@@ -11,6 +11,21 @@ void AdvancedPanel::render(Renderer& r) {
         if (r.vsync != prevVsync) {
             r.pendingSwapChainRecreation = true;
         }
+        // MSAA
+        const char* msaaLabels[] = { "Off", "2x", "4x", "8x" };
+        int msaaOptions[] = { 1, 2, 4, 8 };
+        int currentMsaa = 0;
+        for (int i = 0; i < 4; i++) {
+            if (msaaOptions[i] == r.msaaSampleCount) currentMsaa = i;
+        }
+        if (ImGui::Combo("MSAA", &currentMsaa, msaaLabels, 4)) {
+            int newCount = msaaOptions[currentMsaa];
+            if (newCount != r.msaaSampleCount) {
+                r.msaaSampleCount = newCount;
+                r.pendingMsaaChange = true;
+            }
+        }
+
         ImGui::Separator();
 
         // Culling
@@ -37,6 +52,12 @@ void AdvancedPanel::render(Renderer& r) {
         ImGui::Checkbox("Specular AA", &r.enableSpecularAA);
         if (r.enableSpecularAA) {
             ImGui::SliderFloat("AA Strength", &r.specularAAStrength, 0.0f, 2.0f, "%.2f");
+        }
+
+        ImGui::Checkbox("Coverage Fade", &r.enableCoverageFade);
+        if (r.enableCoverageFade) {
+            ImGui::SliderFloat("Fade Start", &r.coverageFadeStart, 0.001f, 0.05f, "%.3f");
+            ImGui::SliderFloat("Fade End", &r.coverageFadeEnd, 0.0001f, 0.02f, "%.4f");
         }
     }
 }

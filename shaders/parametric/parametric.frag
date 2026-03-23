@@ -18,6 +18,7 @@ layout(location = 2) perprimitiveEXT in PerPrimitiveData {
 
 layout(location = 3) perprimitiveEXT in vec2 baseUV;
 layout(location = 4) perprimitiveEXT in vec3 faceNormal;
+layout(location = 5) perprimitiveEXT in float screenAlpha;
 
 // UBOs
 layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
@@ -237,5 +238,7 @@ void main() {
         }
     }
 
-    outColor = vec4(color, 1.0);
+    // Coverage fade via alpha-to-coverage (requires MSAA)
+    float alpha = (resurfacingUBO.enableCoverageFade != 0u) ? screenAlpha : 1.0;
+    outColor = vec4(color, alpha);
 }

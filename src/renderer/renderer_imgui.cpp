@@ -62,7 +62,7 @@ void Renderer::initImGui() {
 
     initInfo.RenderPass = renderPass;
     initInfo.Subpass = 0;
-    initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    initInfo.MSAASamples = msaaSamples;
 
     ImGui_ImplVulkan_Init(&initInfo);
 
