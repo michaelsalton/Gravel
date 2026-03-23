@@ -44,6 +44,7 @@
 #define BINDING_HE_CURVATURE 4
 #define BINDING_HE_FEATURES  5
 #define BINDING_HE_SLOTS     6
+#define BINDING_HE_PROXY     7
 
 struct MeshInfoUBO {
     uint nbVertices;
@@ -131,7 +132,10 @@ struct ResurfacingUBO {
     uint enableCoverageFade;           // dissolve sub-pixel elements (offset 200)
     float coverageFadeStartUBO;        // NDC size to begin fading (offset 204)
     float coverageFadeEndUBO;          // NDC size for full transparency (offset 208)
-    float pad_saa;                     // std140 padding (offset 212)
+    uint  enableProxy;                 // proxy shading for sub-pixel elements (offset 212)
+    float proxyStartThreshold;         // NDC size where blending begins (offset 216)
+    float proxyEndThreshold;           // NDC size where geometry is fully replaced (offset 220)
+    float pad_proxy;                   // std140 padding (offset 224)
 };
 
 // ============================================================================
@@ -289,6 +293,18 @@ SlotEntry getSlotEntry(uint faceId, uint slotIdx, uint slotsPerFace) {
     return heSlotsBuffer[0].data[faceId * slotsPerFace + slotIdx];
 }
 
+// --- Proxy face data (binding 7, per-face proxy flags written by task shader) ---
+struct ProxyFaceData {
+    float blend;     // 0.0 = full geometry, 1.0 = full proxy
+    uint  flags;     // bit 0 = proxy active
+    float pad0;
+    float pad1;
+};
+
+LAYOUT_STD430(SET_HALF_EDGE, BINDING_HE_PROXY) buffer HEProxyBuffer {
+    ProxyFaceData data[];
+} heProxyBuffer[1];
+
 // --- Config UBO (set 2, binding 0): per-object configuration ---
 
 #ifdef PEBBLE_PIPELINE
@@ -381,7 +397,10 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
     uint enableCoverageFade;
     float coverageFadeStartUBO;
     float coverageFadeEndUBO;
-    float pad_saa;
+    uint enableProxy;
+    float proxyStartThreshold;
+    float proxyEndThreshold;
+    float pad_proxy;
 } resurfacingUBO;
 
 #endif

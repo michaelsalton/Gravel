@@ -301,6 +301,10 @@ void main() {
     // Culling (frustum + backface)
     bool isVisible = true;
 
+    // Transform to world space for culling (model matrix includes turntable rotation)
+    vec3 cullPos = (push.model * vec4(payload.position, 1.0)).xyz;
+    vec3 cullNormal = normalize(mat3(push.model) * payload.normal);
+
     if ((push.enableCulling & 1u) != 0) {
         // Frustum culling
         float boundingRadius = computeBoundingRadius(payload.area, push.userScaling, 2.0);
@@ -308,8 +312,8 @@ void main() {
     }
 
     if (isVisible && (push.enableCulling & 2u) != 0) {
-        // Back-face culling
-        isVisible = isFrontFacing(payload.position, payload.normal,
+        // Back-face culling (in world space)
+        isVisible = isFrontFacing(cullPos, cullNormal,
                                    viewUBO.cameraPosition.xyz, push.cullingThreshold);
     }
 
@@ -399,8 +403,30 @@ void main() {
     uint numTilesU = (M + deltaU - 1) / deltaU;
     uint numTilesV = (N + deltaV - 1) / deltaV;
 
+    // Proxy shading: flag face for proxy when element is sub-pixel
+    float proxyBlend = 0.0;
+    bool useProxy = false;
+    if (resurfacingUBO.enableProxy != 0u && !isVertex) {
+        float proxyStart = resurfacingUBO.proxyStartThreshold;
+        float proxyEnd   = resurfacingUBO.proxyEndThreshold;
+        float screenSize = getScreenSpaceSize(payload.position, payload.normal,
+            payload.area, push.userScaling, push.elementType,
+            push.torusMajorR, push.torusMinorR, push.sphereRadius, mvp);
+        proxyBlend = 1.0 - clamp((screenSize - proxyEnd) / max(proxyStart - proxyEnd, 0.0001), 0.0, 1.0);
+        useProxy = (proxyBlend >= 1.0);
+
+        // Write proxy data for this face
+        heProxyBuffer[0].data[faceId].blend = proxyBlend;
+        heProxyBuffer[0].data[faceId].flags = useProxy ? 1u : 0u;
+
+        // In blend zone: reduce geometry alpha
+        if (proxyBlend > 0.0 && !useProxy) {
+            payload.screenAlpha = min(payload.screenAlpha, 1.0 - proxyBlend);
+        }
+    }
+
     // Single EmitMeshTasksEXT: fold all culling into visible flag
-    bool culled = !isVisible || elementTypeCulled || maskCulled || (push.userScaling == 0.0);
+    bool culled = !isVisible || elementTypeCulled || maskCulled || (push.userScaling == 0.0) || useProxy;
     uint visible = culled ? 0u : 1u;
     if (visible == 1u) atomicAdd(renderedElementCount, 1u);
     EmitMeshTasksEXT(numTilesU * visible, numTilesV * visible, 1);

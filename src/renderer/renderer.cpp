@@ -54,6 +54,7 @@ Renderer::Renderer(Window& window) : window(window) {
     createSamplers();
     generateGroundPlane(groundPlaneCellSize);
     loadScaleLut();
+    precomputeProxyParams();
     scanAssetMeshes();
     if (selectedMesh >= 0 && selectedMesh < static_cast<int>(assetMeshPaths.size()))
         pendingMeshLoad = assetMeshPaths[selectedMesh];
@@ -391,6 +392,18 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     // Reset query pool outside render pass (required), begin inside (begin and end must match scope)
     vkCmdResetQueryPool(cmd, statsQueryPool, currentFrame, 1);
 
+    // Clear proxy face buffer before rendering (task shader writes per-face flags)
+    if (enableProxy && proxyFlagBuffer != VK_NULL_HANDLE) {
+        vkCmdFillBuffer(cmd, proxyFlagBuffer, 0, proxyFlagSize, 0);
+        VkMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0, 1, &barrier, 0, nullptr, 0, nullptr);
+    }
+
     vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     vkCmdBeginQuery(cmd, statsQueryPool, currentFrame, 0);
@@ -539,6 +552,9 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         resurfData.enableCoverageFade = enableCoverageFade ? 1u : 0u;
         resurfData.coverageFadeStartUBO = coverageFadeStart;
         resurfData.coverageFadeEndUBO = coverageFadeEnd;
+        resurfData.enableProxyUBO = enableProxy ? 1u : 0u;
+        resurfData.proxyStartThresholdUBO = proxyStartThreshold;
+        resurfData.proxyEndThresholdUBO = proxyEndThreshold;
         memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
     }
 
@@ -607,6 +623,10 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
             float aspect = static_cast<float>(swapChainExtent.width) /
                            static_cast<float>(swapChainExtent.height);
             glm::mat4 model = thirdPersonMode ? player.getModelMatrix() : glm::mat4(1.0f);
+            if (turntableMode) {
+                model = glm::mat4_cast(objectRotation) * model;
+            }
+            glm::mat3 modelNormalMat = glm::mat3(model);  // for transforming normals
             glm::mat4 mvp = activeCamera->getProjectionMatrix(aspect) *
                             activeCamera->getViewMatrix() * model;
 
@@ -621,7 +641,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                                 || (slotK                 != lastSlotK);
             bool cameraChanged = (mvp != lastCullMVP);
 
-            if (visibleCacheDirty || settingsChanged || (doCulling && cameraChanged)) {
+            if (visibleCacheDirty || settingsChanged || cameraChanged) {
                 cachedVisibleIndices.clear();
                 cachedTotalElements = 0;
 
@@ -645,8 +665,10 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                         if (ndc.z + cr <  0.0f || ndc.z - cr > 1.0f) return false;
                     }
                     if (enableBackfaceCulling) {
-                        glm::vec3 viewDir = glm::normalize(activeCamera->getPosition() - pos);
-                        if (glm::dot(viewDir, normal) <= cullingThreshold) return false;
+                        glm::vec3 worldPos = glm::vec3(model * glm::vec4(pos, 1.0f));
+                        glm::vec3 worldNormal = glm::normalize(modelNormalMat * normal);
+                        glm::vec3 viewDir = glm::normalize(activeCamera->getPosition() - worldPos);
+                        if (glm::dot(viewDir, worldNormal) <= cullingThreshold) return false;
                     }
                     return true;
                 };
@@ -1132,6 +1154,118 @@ void Renderer::recreateSwapChain() {
 
 void Renderer::waitIdle() {
     vkDeviceWaitIdle(device);
+}
+
+// ============================================================================
+// Proxy Shading: Precompute aggregate PBR parameters per element type
+// ============================================================================
+
+void Renderer::precomputeProxyParams() {
+    constexpr int N = 32;  // sample grid resolution (N×N = 1024 samples)
+    constexpr float PI_F = 3.14159265358979323846f;
+
+    // Helper: evaluate parametric surface normal at (u,v) for a given element type
+    // Returns the local-space normal (Z = face normal direction)
+    auto evalNormal = [&](int type, float u, float v) -> glm::vec3 {
+        float theta, phi, cosU, sinU, cosV, sinV;
+        glm::vec3 pos, dpdu, dpdv;
+
+        switch (type) {
+        case 0: { // Torus (default majorR=1, minorR=0.3)
+            float majorR = 1.0f, minorR = 0.3f;
+            theta = u * 2.0f * PI_F;
+            phi = v * 2.0f * PI_F;
+            cosU = cosf(theta); sinU = sinf(theta);
+            cosV = cosf(phi); sinV = sinf(phi);
+            float tubeR = majorR + minorR * cosV;
+            dpdu = glm::vec3(-tubeR * sinU, tubeR * cosU, 0.0f);
+            dpdv = glm::vec3(-minorR * sinV * cosU, -minorR * sinV * sinU, minorR * cosV);
+            return glm::normalize(glm::cross(dpdu, dpdv));
+        }
+        case 1: { // Sphere
+            theta = u * 2.0f * PI_F;
+            phi = v * PI_F;
+            return glm::normalize(glm::vec3(
+                sinf(phi) * cosf(theta),
+                sinf(phi) * sinf(theta),
+                cosf(phi)));
+        }
+        case 2: { // Cone
+            float radius = 0.5f, height = 1.0f;
+            theta = u * 2.0f * PI_F;
+            float r = radius * (1.0f - v);
+            dpdu = glm::vec3(-r * sinf(theta), r * cosf(theta), 0.0f);
+            dpdv = glm::vec3(-radius * cosf(theta), -radius * sinf(theta), height);
+            return glm::normalize(glm::cross(dpdu, dpdv));
+        }
+        case 3: { // Cylinder
+            theta = u * 2.0f * PI_F;
+            return glm::normalize(glm::vec3(cosf(theta), sinf(theta), 0.0f));
+        }
+        case 4: { // Hemisphere
+            theta = u * 2.0f * PI_F;
+            phi = v * 0.5f * PI_F;
+            return glm::normalize(glm::vec3(
+                sinf(phi) * cosf(theta),
+                sinf(phi) * sinf(theta),
+                cosf(phi)));
+        }
+        default: // Dragon scale, straw, stud, pebble — approximate as hemisphere
+            theta = u * 2.0f * PI_F;
+            phi = v * 0.5f * PI_F;
+            return glm::normalize(glm::vec3(
+                sinf(phi) * cosf(theta),
+                sinf(phi) * sinf(theta),
+                cosf(phi)));
+        }
+    };
+
+    for (int type = 0; type < 10; type++) {
+        glm::vec3 normalAccum(0.0f);
+        float selfShadowAccum = 0.0f;
+        float varianceAccum = 0.0f;
+        int sampleCount = 0;
+
+        // Sample N×N grid across parametric UV domain
+        for (int j = 0; j < N; j++) {
+            for (int i = 0; i < N; i++) {
+                float u = (float(i) + 0.5f) / float(N);
+                float v = (float(j) + 0.5f) / float(N);
+
+                glm::vec3 n = evalNormal(type, u, v);
+                normalAccum += n;
+                // Self-shadow: how much faces upward (Z = face normal direction)
+                selfShadowAccum += std::max(n.z, 0.0f);
+                sampleCount++;
+            }
+        }
+
+        glm::vec3 meanNormal = glm::normalize(normalAccum);
+        float meanTilt = acosf(std::min(std::max(meanNormal.z, -1.0f), 1.0f));
+
+        // Normal variance: average squared deviation from mean
+        for (int j = 0; j < N; j++) {
+            for (int i = 0; i < N; i++) {
+                float u = (float(i) + 0.5f) / float(N);
+                float v = (float(j) + 0.5f) / float(N);
+                glm::vec3 n = evalNormal(type, u, v);
+                glm::vec3 diff = n - meanNormal;
+                varianceAccum += glm::dot(diff, diff);
+            }
+        }
+        float normalVariance = varianceAccum / float(sampleCount);
+
+        proxyParams[type].aggregateRoughness = sqrtf(normalVariance);
+        proxyParams[type].meanNormalTilt = meanTilt;
+        proxyParams[type].selfShadowScale = selfShadowAccum / float(sampleCount);
+        proxyParams[type].coverageFraction = 0.7f;  // approximate; depends on userScaling
+
+        std::cout << "  Proxy params [" << type << "]: roughness="
+                  << proxyParams[type].aggregateRoughness
+                  << " tilt=" << proxyParams[type].meanNormalTilt
+                  << " shadow=" << proxyParams[type].selfShadowScale
+                  << " coverage=" << proxyParams[type].coverageFraction << std::endl;
+    }
 }
 
 // ============================================================================

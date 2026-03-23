@@ -94,7 +94,10 @@ struct ResurfacingUBO {
     uint32_t  enableCoverageFade      = 1;    // dissolve sub-pixel elements
     float     coverageFadeStartUBO    = 0.01f;
     float     coverageFadeEndUBO      = 0.002f;
-    float     pad_saa                 = 0.0f;
+    uint32_t  enableProxyUBO          = 0;
+    float     proxyStartThresholdUBO  = 0.015f;
+    float     proxyEndThresholdUBO    = 0.005f;
+    float     pad_proxy               = 0.0f;
 };
 
 struct GlobalShadingUBO {
@@ -212,6 +215,14 @@ struct BenchmarkPushConstants {
     float pad[3];
 };
 
+// Aggregate PBR parameters for proxy shading (per element type)
+struct ElementProxyParams {
+    float aggregateRoughness;  // NDF width from normal distribution across surface
+    float meanNormalTilt;      // average angle (radians) between surface normal and face normal
+    float selfShadowScale;    // albedo multiplier from self-occlusion [0,1]
+    float coverageFraction;   // fraction of face area covered by element [0,1]
+};
+
 struct PreprocessHeader {
     uint32_t magic;          // 0x47525650 ("GRVP")
     uint32_t version;        // 1
@@ -278,11 +289,16 @@ public:
     float cullingThreshold = 0.0f;  // Back-face dot product threshold [-1, 1]
     bool enableLod = false;
     float lodFactor = 1.0f;
+    bool enableGlobalAA = true;     // master AA toggle
     bool enableSpecularAA = true;   // geometric specular AA (Tokuyoshi 2021)
     float specularAAStrength = 0.5f; // geometric frequency scale factor
     bool enableCoverageFade = true;  // dissolve sub-pixel elements
     float coverageFadeStart = 0.01f; // NDC size to begin fading
     float coverageFadeEnd   = 0.002f; // NDC size for full transparency
+    bool  enableProxy       = false; // proxy shading for sub-pixel elements
+    float proxyStartThreshold = 0.015f; // NDC size where blending begins
+    float proxyEndThreshold   = 0.005f; // NDC size where geometry is fully replaced
+    ElementProxyParams proxyParams[10] = {}; // precomputed per element type
     int   msaaSampleCount   = 4;     // UI-facing: 1, 2, 4, or 8
     bool  pendingMsaaChange = false;
     int baseMeshMode = 0;  // 0=off, 1=wireframe, 2=solid, 3=both  (coat base mesh)
@@ -583,6 +599,7 @@ private:
     void loadAndUploadTexture(const std::string& path, VulkanTexture& texture,
                                VkFormat format, bool& loadedFlag);
     void loadScaleLut();
+    void precomputeProxyParams();
     void cleanupScaleLut();
     void loadGrwmPreprocess(const std::string& meshPath);
     void cleanupGrwmPreprocess();
@@ -722,6 +739,10 @@ private:
     StorageBuffer heCurvatureBuffer;
     StorageBuffer heFeatureFlagsBuffer;
     StorageBuffer heSlotsBuffer;
+    StorageBuffer heProxyBuffer;  // unused, kept for compat
+    VkBuffer proxyFlagBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory proxyFlagMemory = VK_NULL_HANDLE;
+    size_t proxyFlagSize = 0;
 
     VkDescriptorSet heDescriptorSet = VK_NULL_HANDLE;
 

@@ -628,6 +628,8 @@ void Renderer::createDepthResources() {
 }
 
 void Renderer::createMsaaColorResources() {
+    if (msaaSamples == VK_SAMPLE_COUNT_1_BIT) return;  // no MSAA color image needed
+
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -679,57 +681,11 @@ void Renderer::createMsaaColorResources() {
 }
 
 void Renderer::createRenderPass() {
-    // Attachment 0: MSAA color (render target, not stored — resolved into attachment 2)
-    VkAttachmentDescription msaaColorAttachment{};
-    msaaColorAttachment.format = swapChainImageFormat;
-    msaaColorAttachment.samples = msaaSamples;
-    msaaColorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    msaaColorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    msaaColorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    msaaColorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    msaaColorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    msaaColorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    // Attachment 1: Depth (multisampled)
-    VkAttachmentDescription depthAttachment{};
-    depthAttachment.format = findDepthFormat();
-    depthAttachment.samples = msaaSamples;
-    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    // Attachment 2: Resolve target (single-sampled swap chain image)
-    VkAttachmentDescription resolveAttachment{};
-    resolveAttachment.format = swapChainImageFormat;
-    resolveAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    resolveAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    resolveAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    resolveAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    resolveAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    resolveAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    resolveAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-    VkAttachmentReference colorAttachmentRef{};
-    colorAttachmentRef.attachment = 0;
-    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference depthAttachmentRef{};
-    depthAttachmentRef.attachment = 1;
-    depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference resolveAttachmentRef{};
-    resolveAttachmentRef.attachment = 2;
-    resolveAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    bool useMsaa = (msaaSamples != VK_SAMPLE_COUNT_1_BIT);
 
     VkSubpassDescription subpass{};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colorAttachmentRef;
-    subpass.pDepthStencilAttachment = &depthAttachmentRef;
-    subpass.pResolveAttachments = &resolveAttachmentRef;
 
     VkSubpassDependency dependency{};
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -742,9 +698,73 @@ void Renderer::createRenderPass() {
     dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-    std::array<VkAttachmentDescription, 3> attachments = {
-        msaaColorAttachment, depthAttachment, resolveAttachment
-    };
+    // Depth attachment (always present, sample count matches)
+    VkAttachmentDescription depthAttachment{};
+    depthAttachment.format = findDepthFormat();
+    depthAttachment.samples = msaaSamples;
+    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference colorAttachmentRef{};
+    colorAttachmentRef.attachment = 0;
+    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference depthAttachmentRef{};
+    depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference resolveAttachmentRef{};
+    resolveAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    std::vector<VkAttachmentDescription> attachments;
+
+    if (useMsaa) {
+        // 3 attachments: MSAA color (0), depth (1), resolve (2)
+        VkAttachmentDescription msaaColorAttachment{};
+        msaaColorAttachment.format = swapChainImageFormat;
+        msaaColorAttachment.samples = msaaSamples;
+        msaaColorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        msaaColorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        msaaColorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        msaaColorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        msaaColorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        msaaColorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+        VkAttachmentDescription resolveAttachment{};
+        resolveAttachment.format = swapChainImageFormat;
+        resolveAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        resolveAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        resolveAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        resolveAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        resolveAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        resolveAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        resolveAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+        attachments = {msaaColorAttachment, depthAttachment, resolveAttachment};
+        depthAttachmentRef.attachment = 1;
+        resolveAttachmentRef.attachment = 2;
+        subpass.pResolveAttachments = &resolveAttachmentRef;
+    } else {
+        // 2 attachments: color (0), depth (1) — no resolve needed
+        VkAttachmentDescription colorAttachment{};
+        colorAttachment.format = swapChainImageFormat;
+        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+        attachments = {colorAttachment, depthAttachment};
+        depthAttachmentRef.attachment = 1;
+    }
+
+    subpass.pColorAttachments = &colorAttachmentRef;
+    subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
     VkRenderPassCreateInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -765,12 +785,14 @@ void Renderer::createRenderPass() {
 void Renderer::createFramebuffers() {
     swapChainFramebuffers.resize(swapChainImageViews.size());
 
+    bool useMsaa = (msaaSamples != VK_SAMPLE_COUNT_1_BIT);
     for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-        std::array<VkImageView, 3> attachments = {
-            msaaColorImageView,
-            depthImageView,
-            swapChainImageViews[i]
-        };
+        std::vector<VkImageView> attachments;
+        if (useMsaa) {
+            attachments = { msaaColorImageView, depthImageView, swapChainImageViews[i] };
+        } else {
+            attachments = { swapChainImageViews[i], depthImageView };
+        }
 
         VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -926,7 +948,8 @@ void Renderer::createDescriptorSetLayouts() {
     // Binding 4: curvature float[1] (GRWM, optional)
     // Binding 5: feature flags uint[1] (GRWM, optional)
     // Binding 6: slot entries SlotEntry[1] (GRWM, optional)
-    std::array<VkDescriptorSetLayoutBinding, 7> heBindings{};
+    // Binding 7: proxy face data (written by task shader, read by base mesh frag)
+    std::array<VkDescriptorSetLayoutBinding, 8> heBindings{};
     VkShaderStageFlags heStages = VK_SHADER_STAGE_TASK_BIT_EXT |
                                    VK_SHADER_STAGE_MESH_BIT_EXT |
                                    VK_SHADER_STAGE_COMPUTE_BIT;
@@ -967,7 +990,12 @@ void Renderer::createDescriptorSetLayouts() {
     heBindings[6].descriptorCount = 1;
     heBindings[6].stageFlags = heStages;
 
-    std::array<VkDescriptorBindingFlags, 7> heBindingFlags{};
+    heBindings[7].binding = 7;
+    heBindings[7].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    heBindings[7].descriptorCount = 1;
+    heBindings[7].stageFlags = heStages | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    std::array<VkDescriptorBindingFlags, 8> heBindingFlags{};
     heBindingFlags[0] = 0;
     heBindingFlags[1] = 0;
     heBindingFlags[2] = 0;
@@ -975,6 +1003,7 @@ void Renderer::createDescriptorSetLayouts() {
     heBindingFlags[4] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
     heBindingFlags[5] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
     heBindingFlags[6] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    heBindingFlags[7] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
 
     VkDescriptorSetLayoutBindingFlagsCreateInfo heBindingFlagsInfo{};
     heBindingFlagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
@@ -1231,9 +1260,9 @@ void Renderer::createDescriptorPool() {
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2 + 4);
 
-    // SSBOs: 20 HE (17+3 GRWM) + 3 skeleton + 20 secondary HE + 3 secondary skeleton + 20 ground HE + 2 visible indices (per frame) + 1 scale LUT + 2 element stats (per frame)
+    // SSBOs: 21 HE (17+3 GRWM+1 proxy) + 3 skeleton + 21 secondary HE + 3 secondary skeleton + 21 ground HE + 2 visible indices (per frame) + 1 scale LUT + 2 element stats (per frame)
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[1].descriptorCount = 20 + 3 + 20 + 3 + 20 + MAX_FRAMES_IN_FLIGHT + 1 + MAX_FRAMES_IN_FLIGHT;
+    poolSizes[1].descriptorCount = 21 + 3 + 21 + 3 + 21 + MAX_FRAMES_IN_FLIGHT + 1 + MAX_FRAMES_IN_FLIGHT;
 
     // Samplers: 2 primary + 2 secondary + 2 ground
     poolSizes[2].type = VK_DESCRIPTOR_TYPE_SAMPLER;

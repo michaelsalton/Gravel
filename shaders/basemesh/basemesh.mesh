@@ -85,8 +85,9 @@ void main() {
         }
 
         vec3 worldP = (push.model * vec4(pos, 1.0)).xyz;
+        vec3 worldN = normalize(mat3(push.model) * norm);
         gl_MeshVerticesEXT[i].gl_Position = mvp * vec4(pos, 1.0);
-        outNormal[i] = norm;
+        outNormal[i] = worldN;
         outUV[i] = getVertexTexCoord(uint(vertId));
         outWorldPos[i] = worldP;
     }

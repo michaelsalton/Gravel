@@ -144,6 +144,34 @@ void main() {
                                  shadingUBO.ambient,
                                  matEnvRefl,
                                  shadingUBO.lightIntensity);
+
+    // Proxy shading: blend with aggregate procedural appearance for sub-pixel faces
+    ProxyFaceData pd = heProxyBuffer[0].data[inFaceId];
+    if (pd.blend > 0.0) {
+        // Use the procedural element's material with widened roughness
+        vec3 procColor = shadingUBO._procBaseColor.rgb;
+        float procRoughness = clamp(shadingUBO._procRoughness + 0.3, 0.0, 1.0); // aggregate roughness boost
+        float procMetallic = shadingUBO._procMetallic;
+        float procF0 = shadingUBO._procDielectricF0;
+        float procEnvRefl = shadingUBO._procEnvReflection;
+
+        // Self-shadow darkening: procedural elements partially occlude themselves
+        procColor *= 0.7;  // approximate self-shadow scale
+
+        vec3 proxyColor = cookTorrancePBR(inWorldPos, N,
+                                           shadingUBO.lightPosition.xyz,
+                                           viewUBO.cameraPosition.xyz,
+                                           procColor,
+                                           procRoughness,
+                                           procMetallic,
+                                           procF0,
+                                           shadingUBO.ambient,
+                                           procEnvRefl,
+                                           shadingUBO.lightIntensity);
+
+        color = mix(color, proxyColor, pd.blend);
+    }
+
     color = toneMapACES(color);
 
     outColor = vec4(color, 1.0);

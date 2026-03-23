@@ -1594,6 +1594,41 @@ void Renderer::loadMesh(const std::string& path) {
     loadGrwmPreprocess(path);
     writeGrwmDescriptors(heDescriptorSet);
 
+    // Create proxy face data buffer (per-face flags written by task shader, cleared via vkCmdFillBuffer)
+    {
+        heProxyBuffer.destroy();
+        size_t proxySize = heNbFaces * 4 * sizeof(float);  // ProxyFaceData = 16 bytes
+
+        // Need TRANSFER_DST for vkCmdFillBuffer + STORAGE_BUFFER for shader access
+        VkBuffer buf; VkDeviceMemory mem;
+        createBuffer(proxySize,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            buf, mem);
+        // Wrap in StorageBuffer for cleanup tracking (hacky but works)
+        // Actually, just use raw buffer since StorageBuffer doesn't support custom usage flags
+        if (proxyFlagBuffer != VK_NULL_HANDLE) {
+            vkDestroyBuffer(device, proxyFlagBuffer, nullptr);
+            vkFreeMemory(device, proxyFlagMemory, nullptr);
+        }
+        proxyFlagBuffer = buf;
+        proxyFlagMemory = mem;
+        proxyFlagSize = proxySize;
+        // Write proxy buffer descriptor
+        VkDescriptorBufferInfo proxyInfo{};
+        proxyInfo.buffer = proxyFlagBuffer;
+        proxyInfo.offset = 0;
+        proxyInfo.range  = proxySize;
+        VkWriteDescriptorSet w{};
+        w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w.dstSet = heDescriptorSet;
+        w.dstBinding = 7;
+        w.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        w.descriptorCount = 1;
+        w.pBufferInfo = &proxyInfo;
+        vkUpdateDescriptorSets(device, 1, &w, 0, nullptr);
+    }
+
     // Auto-detect textures in the same directory as the mesh
     std::string dir = path.substr(0, path.find_last_of("/\\") + 1);
 
