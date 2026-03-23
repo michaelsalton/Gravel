@@ -370,6 +370,9 @@ public:
     float    secondaryTorusMinorR  = 0.3f;
     float    secondarySphereRadius = 0.5f;
     float    secondaryNormalPerturbation = 0.2f;
+    bool     secondaryChainmailMode = false;
+    float    secondaryChainmailTiltAngle = 0.26f;
+    float    secondaryChainmailSurfaceOffset = 0.500f;
     bool     secondaryEnableLod    = false;
     float    secondaryLodFactor    = 1.0f;
     float animationTime = 0.0f;

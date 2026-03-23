@@ -271,6 +271,13 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::Separator();
         ImGui::Text("Benchmark Mesh:");
         ImGui::Indent();
+        if (!benchmarkMeshPath.empty() && std::filesystem::exists(benchmarkMeshPath)) {
+            auto bytes = std::filesystem::file_size(benchmarkMeshPath);
+            if (bytes >= 1024 * 1024)
+                ImGui::Text("File Size: %.1f MB", bytes / (1024.0f * 1024.0f));
+            else
+                ImGui::Text("File Size: %.1f KB", bytes / 1024.0f);
+        }
         ImGui::Text("Faces:     %u", benchmarkNbFaces);
         ImGui::Text("Vertices:  %u", benchmarkNbVertices);
         ImGui::Text("Triangles: %u", benchmarkTriCount);
@@ -601,7 +608,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     ImGui::ColorEdit3("Ambient Color", &ambientColor.x);
     ImGui::SliderFloat("Ambient Intensity", &ambientIntensity, 0.0f, 1.0f);
     ImGui::Separator();
-    ImGui::Text("Procedural Mesh");
+    ImGui::Text(dualMeshActive ? "Dragon Procedural Surface" : "Procedural Mesh");
     ImGui::ColorEdit3("Base Color##proc", &procBaseColor.x);
     ImGui::SliderFloat("Roughness##proc", &roughness, 0.05f, 1.0f);
     ImGui::SliderFloat("Metallic##proc", &metallic, 0.0f, 1.0f);
@@ -610,7 +617,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     ImGui::SliderFloat("Env Reflection##proc", &envReflection, 0.0f, 1.0f);
     if (dualMeshActive) {
         ImGui::Separator();
-        ImGui::Text("Dragon Procedural Surface");
+        ImGui::Text("Coat Procedural Surface");
         ImGui::ColorEdit3("Base Color##base", &baseMeshBaseColor.x);
         ImGui::SliderFloat("Roughness##base", &baseMeshRoughness, 0.05f, 1.0f);
         ImGui::SliderFloat("Metallic##base", &baseMeshMetallic, 0.0f, 1.0f);
@@ -618,7 +625,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::SliderFloat("Dielectric F0##base", &baseMeshDielectricF0, 0.0f, 0.2f, "%.3f");
         ImGui::SliderFloat("Env Reflection##base", &baseMeshEnvReflection, 0.0f, 1.0f);
         ImGui::Separator();
-        ImGui::Text("Dragon Base Mesh");
+        ImGui::Text("Coat Base Mesh");
         ImGui::ColorEdit3("Base Color##solidSec", &secBaseMeshSolidBaseColor.x);
         ImGui::SliderFloat("Roughness##solidSec", &secBaseMeshSolidRoughness, 0.05f, 1.0f);
         ImGui::SliderFloat("Metallic##solidSec", &secBaseMeshSolidMetallic, 0.0f, 1.0f);
@@ -628,7 +635,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     }
     if (baseMeshMode > 0) {
         ImGui::Separator();
-        ImGui::Text("Base Mesh");
+        ImGui::Text(dualMeshActive ? "Dragon Base Mesh" : "Base Mesh");
         ImGui::ColorEdit3("Base Color##solid", &baseMeshSolidBaseColor.x);
         ImGui::SliderFloat("Roughness##solid", &baseMeshSolidRoughness, 0.05f, 1.0f);
         ImGui::SliderFloat("Metallic##solid", &baseMeshSolidMetallic, 0.0f, 1.0f);
@@ -715,28 +722,64 @@ void Renderer::applyPresetChainMail() {
 }
 
 void Renderer::applyPresetDragonScales() {
-    // Secondary mesh (dragon body) resurfacing
-    secondaryElementType        = 5;       // Dragon Scale
+    // Dragon procedural surface (primary): Dragon Scale
+    elementType         = 5;
+    userScaling         = 0.628f;
+    resolutionM         = 35;
+    resolutionN         = 35;
+    normalPerturbation  = 0.150f;
+    chainmailMode       = false;
+
+    // Dragon procedural surface PBR
+    procBaseColor       = glm::vec3(235.0f/255.0f, 0.0f, 0.0f);
+    roughness           = 0.198f;
+    metallic            = 0.411f;
+    ao                  = 0.697f;
+    dielectricF0        = 0.065f;
+    envReflection       = 0.572f;
+
+    // Coat (secondary): Torus with chainmail
+    secondaryElementType        = 0;       // Torus
     secondaryUserScaling        = 0.770f;
-    secondaryResolutionM        = 30;
-    secondaryResolutionN        = 30;
-    secondaryNormalPerturbation = 0.235f;
+    secondaryResolutionM        = 35;
+    secondaryResolutionN        = 35;
+    secondaryTorusMajorR        = 0.965f;
+    secondaryTorusMinorR        = 0.149f;
+    secondaryChainmailMode      = true;
+    secondaryChainmailTiltAngle = 0.28f;
+    secondaryChainmailSurfaceOffset = 0.500f;
 
-    // Secondary mesh (dragon body) PBR material
-    baseMeshBaseColor   = glm::vec3(34.0f/255.0f, 78.0f/255.0f, 28.0f/255.0f);
-    baseMeshRoughness   = 0.504f;
-    baseMeshMetallic    = 0.092f;
-    baseMeshAo          = 0.978f;
-    baseMeshDielectricF0  = 0.008f;
-    baseMeshEnvReflection = 0.368f;
+    // Coat procedural surface PBR
+    baseMeshBaseColor     = glm::vec3(48.0f/255.0f, 48.0f/255.0f, 48.0f/255.0f);
+    baseMeshRoughness     = 0.170f;
+    baseMeshMetallic      = 1.000f;
+    baseMeshAo            = 0.762f;
+    baseMeshDielectricF0  = 0.200f;
+    baseMeshEnvReflection = 0.141f;
 
-    // Dragon body solid overlay (underneath the scales)
-    secBaseMeshSolidBaseColor     = glm::vec3(34.0f/255.0f, 78.0f/255.0f, 28.0f/255.0f);
+    // Coat base mesh solid
+    secBaseMeshSolidBaseColor     = glm::vec3(0.0f, 0.0f, 0.0f);
     secBaseMeshSolidRoughness     = 0.445f;
     secBaseMeshSolidMetallic      = 0.070f;
     secBaseMeshSolidAo            = 1.0f;
     secBaseMeshSolidDielectricF0  = 0.004f;
     secBaseMeshSolidEnvReflection = 0.346f;
+
+    // Dragon base mesh solid
+    baseMeshSolidBaseColor      = glm::vec3(235.0f/255.0f, 0.0f, 0.0f);
+    baseMeshSolidRoughness      = 1.0f;
+    baseMeshSolidMetallic       = 1.0f;
+    baseMeshSolidAo             = 1.0f;
+    baseMeshSolidDielectricF0   = 0.0f;
+    baseMeshSolidEnvReflection  = 0.100f;
+
+    // Settings
+    enableFrustumCulling  = true;
+    enableBackfaceCulling = true;
+    enableLod             = true;
+    lodFactor             = 4.0f;
+    baseMeshMode          = 2;  // Solid
+    dragonBaseMeshMode    = 0;  // Coat display off
 }
 
 void Renderer::applyMaterialPreset(int index) {

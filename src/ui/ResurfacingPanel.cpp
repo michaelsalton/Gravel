@@ -195,6 +195,16 @@ void ResurfacingPanel::render(Renderer& r) {
 
                     ImGui::Separator();
 
+                    // Chainmail mode for coat
+                    ImGui::Checkbox("Chainmail Mode##sec", &r.secondaryChainmailMode);
+                    if (r.secondaryChainmailMode) {
+                        ImGui::Indent();
+                        ImGui::SliderFloat("Lean Amount##sec", &r.secondaryChainmailTiltAngle, 0.0f, 1.0f, "%.2f");
+                        ImGui::SliderFloat("Surface Offset##sec", &r.secondaryChainmailSurfaceOffset, 0.0f, 0.5f, "%.3f");
+                        ImGui::Unindent();
+                    }
+                    ImGui::Separator();
+
                     int secResM = static_cast<int>(r.secondaryResolutionM);
                     int secResN = static_cast<int>(r.secondaryResolutionN);
                     if (ImGui::SliderInt("Resolution M##sec", &secResM, 2, 64))

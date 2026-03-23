@@ -1254,7 +1254,7 @@ void Renderer::createUniformBuffers() {
 }
 
 void Renderer::createDescriptorPool() {
-    std::array<VkDescriptorPoolSize, 4> poolSizes{};
+    std::array<VkDescriptorPoolSize, 5> poolSizes{};
 
     // UBOs: 2 per scene frame + 1 ResurfacingUBO + 1 PebbleUBO + 1 secondary ResurfacingUBO + 1 groundPebbleUBO
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1272,14 +1272,18 @@ void Renderer::createDescriptorPool() {
     poolSizes[3].type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
     poolSizes[3].descriptorCount = 20;
 
+    // Combined image samplers: for ImGui (needs extra for MSAA reinit)
+    poolSizes[4].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[4].descriptorCount = 4;
+
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT
                    | VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    // scene sets + 1 HE set + 1 per-object set + 1 pebble per-object set + 1 secondary HE set + 1 secondary per-object set + 1 ground HE set + 1 ground pebble set
-    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT + 7);
+    // scene sets + 1 HE set + 1 per-object set + 1 pebble per-object set + 1 secondary HE set + 1 secondary per-object set + 1 ground HE set + 1 ground pebble set + ImGui sets
+    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT + 12);
 
     if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create descriptor pool!");

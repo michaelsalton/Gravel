@@ -902,7 +902,9 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         secPush.enableCulling  = 0;                     // no culling for secondary
         secPush.enableLod      = enableLod ? 1u : 0u;
         secPush.lodFactor      = lodFactor;
-        secPush.chainmailMode  = 0;
+        secPush.chainmailMode  = secondaryChainmailMode ? 1u : 0u;
+        secPush.chainmailTiltAngle = secondaryChainmailTiltAngle;
+        secPush.chainmailSurfaceOffset = secondaryChainmailSurfaceOffset;
         secPush.useDirectIndex = 1;                     // bypass visibleIndices lookup
 
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);

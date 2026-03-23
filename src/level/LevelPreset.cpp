@@ -87,18 +87,18 @@ const LevelPreset LEVEL_PRESETS[] = {
         .selectedMesh       = 10,
         .meshPath           = ASSETS_DIR "base_mesh/dragon/dragon.obj",
         .triangulateMesh    = false,
-        .baseMeshMode       = 0,
+        .baseMeshMode       = 2,        // Solid
 
         .renderResurfacing  = true,
-        .elementType        = 0,        // Torus
+        .elementType        = 5,        // Dragon Scale
         .torusMajorR        = 0.965f,
         .torusMinorR        = 0.149f,
         .sphereRadius       = 0.5f,
         .userScaling        = 0.628f,
-        .resolutionM        = 37,
-        .resolutionN        = 37,
+        .resolutionM        = 35,
+        .resolutionN        = 35,
 
-        .chainmailMode      = true,
+        .chainmailMode      = false,
         .chainmailTiltAngle = 0.26f,
         .chainmailSurfaceOffset = 0.500f,
 
@@ -110,10 +110,10 @@ const LevelPreset LEVEL_PRESETS[] = {
         .animationSpeed     = 1.0f,
 
         .lightPosition      = glm::vec3(5.0f, 5.0f, 5.0f),
-        .ambientColor       = glm::vec3(11.0f/255.0f, 11.0f/255.0f, 11.0f/255.0f),
+        .ambientColor       = glm::vec3(90.0f/255.0f, 90.0f/255.0f, 90.0f/255.0f),
         .ambientIntensity   = 0.311f,
         .roughness          = 0.198f,
-        .metallic           = 1.0f,
+        .metallic           = 0.411f,
         .ao                 = 0.697f,
         .dielectricF0       = 0.065f,
         .envReflection      = 0.572f,
