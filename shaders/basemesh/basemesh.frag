@@ -128,6 +128,14 @@ void main() {
     // Select primary or secondary base mesh material
     bool isSecondary = (push.useDirectIndex != 0u);
     vec3  matBaseColor = isSecondary ? shadingUBO.secBaseMeshBaseColor.rgb : shadingUBO.baseMeshBaseColor.rgb;
+
+    // Apply diffuse texture if loaded
+    if (resurfacingUBO.hasDiffuseTexture != 0u && !isSecondary) {
+        vec2 texUV = inUV;
+        texUV.y = 1.0 - texUV.y;  // Flip V (OBJ convention)
+        vec3 texColor = texture(sampler2D(textures[DIFFUSE_TEXTURE], samplers[LINEAR_SAMPLER]), texUV).rgb;
+        matBaseColor *= texColor;
+    }
     float matRoughness = isSecondary ? shadingUBO.secRoughness   : shadingUBO.roughness;
     float matMetallic  = isSecondary ? shadingUBO.secMetallic    : shadingUBO.metallic;
     float matAo        = isSecondary ? shadingUBO.secAo          : shadingUBO.ao;

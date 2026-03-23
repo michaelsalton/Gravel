@@ -1063,10 +1063,10 @@ void Renderer::createDescriptorSetLayouts() {
     objBindings[4].descriptorCount = 2;
     objBindings[4].stageFlags = taskMeshFrag;
 
-    // Binding 5: Textures [AO, element type map, mask, skin]
+    // Binding 5: Textures [AO, element type map, mask, skin, diffuse]
     objBindings[5].binding = 5;
     objBindings[5].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    objBindings[5].descriptorCount = 4;
+    objBindings[5].descriptorCount = 5;
     objBindings[5].stageFlags = taskMeshFrag;
 
     // Binding 6: Scale LUT SSBO (dragon scale control cage)
@@ -1268,9 +1268,9 @@ void Renderer::createDescriptorPool() {
     poolSizes[2].type = VK_DESCRIPTOR_TYPE_SAMPLER;
     poolSizes[2].descriptorCount = 6;
 
-    // Sampled images: 4 primary + 4 secondary
+    // Sampled images: 5 primary + 5 secondary + 5 ground + 5 pebble
     poolSizes[3].type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    poolSizes[3].descriptorCount = 8;
+    poolSizes[3].descriptorCount = 20;
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;

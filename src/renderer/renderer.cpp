@@ -555,6 +555,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         resurfData.enableProxyUBO = enableProxy ? 1u : 0u;
         resurfData.proxyStartThresholdUBO = proxyStartThreshold;
         resurfData.proxyEndThresholdUBO = proxyEndThreshold;
+        resurfData.hasDiffuseTexture = diffuseTextureLoaded ? 1u : 0u;
         memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
     }
 

@@ -60,9 +60,9 @@ void Renderer::scanAssetMeshes() {
         assetMeshPaths.push_back(std::move(path));
     }
 
-    // Default to teapot if available
+    // Default to cube if available
     for (int i = 0; i < static_cast<int>(assetMeshNames.size()); i++) {
-        if (assetMeshNames[i] == "teapot") {
+        if (assetMeshNames[i] == "cube") {
             selectedMesh = i;
             break;
         }
@@ -354,6 +354,25 @@ void Renderer::writeTextureDescriptors() {
         }
     }
 
+    // If diffuse texture is loaded, write slot 4
+    VkDescriptorImageInfo diffuseInfo{};
+    if (diffuseTextureLoaded) {
+        diffuseInfo.imageView = diffuseTexture.getImageView();
+        diffuseInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        for (auto dstSet : dstSets) {
+            VkWriteDescriptorSet texWrite{};
+            texWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            texWrite.dstSet = dstSet;
+            texWrite.dstBinding = 5;  // BINDING_TEXTURES
+            texWrite.dstArrayElement = 4;  // DIFFUSE_TEXTURE index
+            texWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            texWrite.descriptorCount = 1;
+            texWrite.pImageInfo = &diffuseInfo;
+            writes.push_back(texWrite);
+        }
+    }
+
     vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
                            writes.data(), 0, nullptr);
 }
@@ -444,10 +463,12 @@ void Renderer::cleanupMeshTextures() {
     elementTypeTexture.destroy();
     maskTexture.destroy();
     skinTexture.destroy();
+    diffuseTexture.destroy();
     aoTextureLoaded = false;
     elementTypeTextureLoaded = false;
     maskTextureLoaded = false;
     skinTextureLoaded = false;
+    diffuseTextureLoaded = false;
     dragonCoatAvailable = false;
     dragonCoatEnabled = false;
     dragonCoatPath.clear();
@@ -1665,8 +1686,29 @@ void Renderer::loadMesh(const std::string& path) {
     loadAndUploadTexture(dir + "skin.png", skinTexture,
                          VK_FORMAT_R8G8B8A8_SRGB, skinTextureLoaded);
 
+    // Diffuse texture (auto-detect common names)
+    {
+        std::string stem = std::filesystem::path(path).stem().string();
+        std::vector<std::string> candidates = {
+            dir + "diffuse.png", dir + "color.png", dir + "albedo.png",
+            dir + stem + "_diffuse.png", dir + stem + "_color.png", dir + stem + "_albedo.png",
+            dir + "diffuse.jpg", dir + "color.jpg", dir + "albedo.jpg",
+            dir + stem + "_diffuse.jpg", dir + stem + "_color.jpg", dir + stem + "_albedo.jpg",
+        };
+        for (const auto& candidate : candidates) {
+            if (std::filesystem::exists(candidate)) {
+                loadAndUploadTexture(candidate, diffuseTexture,
+                                     VK_FORMAT_R8G8B8A8_SRGB, diffuseTextureLoaded);
+                if (diffuseTextureLoaded) {
+                    std::cout << "  Loaded diffuse texture: " << candidate << std::endl;
+                    break;
+                }
+            }
+        }
+    }
+
     // Write sampler and texture descriptors if any textures were loaded
-    if (aoTextureLoaded || elementTypeTextureLoaded || maskTextureLoaded || skinTextureLoaded) {
+    if (aoTextureLoaded || elementTypeTextureLoaded || maskTextureLoaded || skinTextureLoaded || diffuseTextureLoaded) {
         writeTextureDescriptors();
     }
 

@@ -97,7 +97,7 @@ struct ResurfacingUBO {
     uint32_t  enableProxyUBO          = 0;
     float     proxyStartThresholdUBO  = 0.015f;
     float     proxyEndThresholdUBO    = 0.005f;
-    float     pad_proxy               = 0.0f;
+    uint32_t  hasDiffuseTexture       = 0;
 };
 
 struct GlobalShadingUBO {
@@ -289,17 +289,17 @@ public:
     float cullingThreshold = 0.0f;  // Back-face dot product threshold [-1, 1]
     bool enableLod = false;
     float lodFactor = 1.0f;
-    bool enableGlobalAA = true;     // master AA toggle
-    bool enableSpecularAA = true;   // geometric specular AA (Tokuyoshi 2021)
+    bool enableGlobalAA = false;    // master AA toggle
+    bool enableSpecularAA = false;  // geometric specular AA (Tokuyoshi 2021)
     float specularAAStrength = 0.5f; // geometric frequency scale factor
-    bool enableCoverageFade = true;  // dissolve sub-pixel elements
+    bool enableCoverageFade = false; // dissolve sub-pixel elements
     float coverageFadeStart = 0.01f; // NDC size to begin fading
     float coverageFadeEnd   = 0.002f; // NDC size for full transparency
-    bool  enableProxy       = false; // proxy shading for sub-pixel elements
+    bool  enableProxy       = false;  // proxy shading for sub-pixel elements
     float proxyStartThreshold = 0.015f; // NDC size where blending begins
     float proxyEndThreshold   = 0.005f; // NDC size where geometry is fully replaced
     ElementProxyParams proxyParams[10] = {}; // precomputed per element type
-    int   msaaSampleCount   = 4;     // UI-facing: 1, 2, 4, or 8
+    int   msaaSampleCount   = 1;     // UI-facing: 1, 2, 4, or 8
     bool  pendingMsaaChange = false;
     int baseMeshMode = 0;  // 0=off, 1=wireframe, 2=solid, 3=both  (coat base mesh)
     int dragonBaseMeshMode = 2;  // 0=off, 1=wireframe, 2=solid, 3=both  (dragon body base mesh)
@@ -437,7 +437,7 @@ public:
 
     // Lighting config (global)
     glm::vec3 lightPosition = glm::vec3(5.0f, 5.0f, 5.0f);
-    glm::vec3 backgroundColor = glm::vec3(0.0f, 0.0f, 0.0f);
+    glm::vec3 backgroundColor = glm::vec3(0.53f, 0.81f, 0.92f);
     glm::vec3 ambientColor = glm::vec3(0.2f, 0.2f, 0.25f);
     float ambientIntensity = 1.0f;
     float lightIntensity = 3.0f;
@@ -475,6 +475,7 @@ public:
     bool elementTypeTextureLoaded = false;
     bool maskTextureLoaded = false;
     bool skinTextureLoaded = false;
+    bool diffuseTextureLoaded = false;
     bool skeletonLoaded = false;
     bool heMeshUploaded = false;
     uint32_t heNbFaces = 0;
@@ -537,7 +538,7 @@ private:
     VkQueryPool statsQueryPool  = VK_NULL_HANDLE;
     bool        invocStatsActive = false;  // tracks current pool configuration
     static const uint32_t STATS_QUERY_COUNT = 2;  // one per frame-in-flight
-    static constexpr uint32_t VISIBLE_INDICES_MAX = 262144;  // max pre-cull elements (increased for slot placement)
+    static constexpr uint32_t VISIBLE_INDICES_MAX = 1048576;  // max pre-cull elements (4 MB)
 
     // Visible indices SSBO (per frame, host-visible, written by CPU pre-cull)
     std::vector<VkBuffer> visibleIndicesBuffers;
@@ -714,7 +715,7 @@ private:
     VkImageView depthImageView = VK_NULL_HANDLE;
 
     // MSAA
-    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_4_BIT;
+    VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
     VkImage msaaColorImage = VK_NULL_HANDLE;
     VkDeviceMemory msaaColorMemory = VK_NULL_HANDLE;
     VkImageView msaaColorImageView = VK_NULL_HANDLE;
@@ -772,6 +773,7 @@ private:
     VulkanTexture elementTypeTexture;
     VulkanTexture maskTexture;
     VulkanTexture skinTexture;
+    VulkanTexture diffuseTexture;
 
     // Skeleton buffers (loaded per-mesh)
     StorageBuffer jointIndicesBuffer;

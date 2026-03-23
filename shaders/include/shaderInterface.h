@@ -70,10 +70,11 @@ struct MeshInfoUBO {
 #define ELEMENT_TYPE_TEXTURE   1
 #define MASK_TEXTURE           2
 #define SKIN_TEXTURE           3
+#define DIFFUSE_TEXTURE        4
 #define LINEAR_SAMPLER         0
 #define NEAREST_SAMPLER        1
 #define SAMPLER_COUNT          2
-#define TEXTURE_COUNT          4
+#define TEXTURE_COUNT          5
 
 struct ResurfacingUBO {
     uint elementType;      // 0=torus, 1=sphere, 2=cone, 3=cylinder, 4=hemisphere, 5=dragon scale
@@ -135,7 +136,7 @@ struct ResurfacingUBO {
     uint  enableProxy;                 // proxy shading for sub-pixel elements (offset 212)
     float proxyStartThreshold;         // NDC size where blending begins (offset 216)
     float proxyEndThreshold;           // NDC size where geometry is fully replaced (offset 220)
-    float pad_proxy;                   // std140 padding (offset 224)
+    uint  hasDiffuseTexture;           // diffuse texture loaded (offset 224)
 };
 
 // ============================================================================
@@ -400,7 +401,7 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
     uint enableProxy;
     float proxyStartThreshold;
     float proxyEndThreshold;
-    float pad_proxy;
+    uint hasDiffuseTexture;
 } resurfacingUBO;
 
 #endif
