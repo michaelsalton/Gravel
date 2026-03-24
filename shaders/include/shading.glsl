@@ -68,6 +68,19 @@ float filterRoughnessProceduralAA(vec3 worldNormal, vec3 faceNormal, float rough
 }
 
 // ============================================================================
+// Heatmap Visualization
+// ============================================================================
+
+// Blue → Cyan → Green → Yellow → Red colormap
+vec3 heatmap(float t) {
+    t = clamp(t, 0.0, 1.0);
+    float r = smoothstep(0.5, 0.8, t);
+    float g = smoothstep(0.0, 0.5, t) - smoothstep(0.5, 1.0, t);
+    float b = 1.0 - smoothstep(0.0, 0.5, t);
+    return vec3(r, g, b);
+}
+
+// ============================================================================
 // Cook-Torrance PBR
 // ============================================================================
 

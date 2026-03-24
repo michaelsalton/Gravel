@@ -29,6 +29,8 @@ struct TaskPayload {
     float faceColor;    // Face 2-coloring (0.0 or 1.0) for chainmail
     vec2 baseUV;        // Base mesh UV (for AO/element type map sampling)
     float screenAlpha;  // Coverage fade: 1.0 = fully opaque, 0.0 = sub-pixel fade-out
+    uint faceId;        // Original face ID (for heatmap lookups)
+    float curvature;    // Average face curvature (for heatmap visualization)
 };
 
 taskPayloadSharedEXT TaskPayload payload;
@@ -255,6 +257,7 @@ void main() {
     }
 
     payload.taskId = useSlots ? (faceId * push.activeSlots + slotIdx) : globalId;
+    payload.faceId = faceId;
     payload.isVertex = isVertex ? 1u : 0u;
     payload.elementType = push.elementType;
 
@@ -367,6 +370,7 @@ void main() {
 
     // Apply with global intensity: lerp between 1.0 (no effect) and full effect
     payload.area *= mix(1.0, grwmAreaScale, intensity);
+    payload.curvature = grwmCurvature;
 
     // Resolution: adaptive LOD or fixed (uses GRWM-scaled area for correct screen-space sizing)
     uint M, N;

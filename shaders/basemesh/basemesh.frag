@@ -125,6 +125,43 @@ void main() {
         return;
     }
 
+    // Heatmap visualizations (modes 6-9)
+    if (push.debugMode == 6u) {
+        // Curvature heatmap: use first vertex of face from vertex-face index
+        float curv = 0.0;
+        if (resurfacingUBO.hasPreprocessData != 0u) {
+            int offset = getFaceOffset(inFaceId);
+            int vertId = getVertexFaceIndex(offset);
+            curv = abs(getVertexCurvature(uint(vertId))) * resurfacingUBO.preprocessCurvatureScale;
+        }
+        float NdotL = max(dot(N, normalize(shadingUBO.lightPosition.xyz - inWorldPos)), 0.0);
+        outColor = vec4(heatmap(clamp(curv, 0.0, 1.0)) * (0.3 + 0.7 * NdotL), 1.0);
+        return;
+    }
+    if (push.debugMode == 7u) {
+        // Feature edge heatmap
+        uint feat = (resurfacingUBO.hasPreprocessData != 0u) ? getFaceFeatureFlag(inFaceId) : 0u;
+        vec3 c = (feat != 0u) ? vec3(1.0, 0.2, 0.1) : vec3(0.1, 0.3, 1.0);
+        float NdotL = max(dot(N, normalize(shadingUBO.lightPosition.xyz - inWorldPos)), 0.0);
+        outColor = vec4(c * (0.3 + 0.7 * NdotL), 1.0);
+        return;
+    }
+    if (push.debugMode == 8u) {
+        // Screen size: base mesh doesn't have screen alpha, show neutral
+        outColor = vec4(vec3(0.5), 1.0);
+        return;
+    }
+    if (push.debugMode == 9u) {
+        // Proxy blend heatmap
+        float blend = 0.0;
+        if (resurfacingUBO.enableProxy != 0u) {
+            blend = heProxyBuffer[0].data[inFaceId].blend;
+        }
+        float NdotL = max(dot(N, normalize(shadingUBO.lightPosition.xyz - inWorldPos)), 0.0);
+        outColor = vec4(heatmap(blend) * (0.3 + 0.7 * NdotL), 1.0);
+        return;
+    }
+
     // Select primary or secondary base mesh material
     bool isSecondary = (push.useDirectIndex != 0u);
     vec3  matBaseColor = isSecondary ? shadingUBO.secBaseMeshBaseColor.rgb : shadingUBO.baseMeshBaseColor.rgb;

@@ -293,11 +293,13 @@ public:
     bool enableSpecularAA = false;  // geometric specular AA (Tokuyoshi 2021)
     float specularAAStrength = 0.5f; // geometric frequency scale factor
     bool enableCoverageFade = false; // dissolve sub-pixel elements
-    float coverageFadeStart = 0.01f; // NDC size to begin fading
-    float coverageFadeEnd   = 0.002f; // NDC size for full transparency
+    float coverageFadeFactor = 1.0f; // UI slider: scales fade thresholds
+    float coverageFadeStart = 0.01f; // derived from factor
+    float coverageFadeEnd   = 0.002f; // derived from factor
     bool  enableProxy       = false;  // proxy shading for sub-pixel elements
-    float proxyStartThreshold = 0.015f; // NDC size where blending begins
-    float proxyEndThreshold   = 0.005f; // NDC size where geometry is fully replaced
+    float proxyFactor       = 1.0f;   // UI slider: scales proxy thresholds
+    float proxyStartThreshold = 0.015f; // derived from factor
+    float proxyEndThreshold   = 0.005f; // derived from factor
     ElementProxyParams proxyParams[10] = {}; // precomputed per element type
     int   msaaSampleCount   = 1;     // UI-facing: 1, 2, 4, or 8
     bool  pendingMsaaChange = false;

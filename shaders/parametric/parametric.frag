@@ -19,6 +19,7 @@ layout(location = 2) perprimitiveEXT in PerPrimitiveData {
 layout(location = 3) perprimitiveEXT in vec2 baseUV;
 layout(location = 4) perprimitiveEXT in vec3 faceNormal;
 layout(location = 5) perprimitiveEXT in float screenAlpha;
+layout(location = 6) perprimitiveEXT in float inCurvature;
 
 // UBOs
 layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
@@ -80,6 +81,7 @@ void main() {
 
     uint taskId = pIn.data.x;
     uint isVertex = pIn.data.y;
+    uint faceId = pIn.data.w;
 
     // Select PBR material: secondary mesh (useDirectIndex=1) uses the secondary fields
     bool isSecondary = (push.useDirectIndex != 0u);
@@ -219,6 +221,36 @@ void main() {
             color = mix(color, vec3(1.0), wire * 0.7);
             color = mix(color, vec3(1.0, 0.9, 0.2), elemWire * 0.9);
             color = toneMapACES(color);
+            break;
+        }
+
+        case 6: {
+            // Curvature heatmap
+            float curv = inCurvature * resurfacingUBO.preprocessCurvatureScale;
+            color = heatmap(clamp(curv, 0.0, 1.0));
+            break;
+        }
+
+        case 7: {
+            // Feature edge heatmap
+            uint feat = (resurfacingUBO.hasPreprocessData != 0u) ? getFaceFeatureFlag(faceId) : 0u;
+            color = (feat != 0u) ? vec3(1.0, 0.2, 0.1) : vec3(0.1, 0.3, 1.0);
+            break;
+        }
+
+        case 8: {
+            // Screen size heatmap (green = large, red = sub-pixel)
+            color = heatmap(1.0 - screenAlpha);
+            break;
+        }
+
+        case 9: {
+            // Proxy blend heatmap
+            float blend = 0.0;
+            if (resurfacingUBO.enableProxy != 0u) {
+                blend = heProxyBuffer[0].data[faceId].blend;
+            }
+            color = heatmap(blend);
             break;
         }
 

@@ -531,10 +531,14 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
             "UV Coordinates",
             "Task ID",
             "Element Type (Face/Vertex)",
-            "Wireframe"
+            "Wireframe",
+            "Curvature Heatmap",
+            "Feature Edges",
+            "Screen Size",
+            "Proxy Blend"
         };
         int mode = static_cast<int>(debugMode);
-        if (ImGui::Combo("Debug Mode", &mode, debugModes, 6)) {
+        if (ImGui::Combo("Debug Mode", &mode, debugModes, 10)) {
             debugMode = static_cast<uint32_t>(mode);
         }
 
@@ -556,6 +560,18 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                     break;
                 case 5:
                     ImGui::TextDisabled("Triangle edges overlay on shading");
+                    break;
+                case 6:
+                    ImGui::TextDisabled("Blue = low curvature, Red = high curvature");
+                    break;
+                case 7:
+                    ImGui::TextDisabled("Red = feature edge, Blue = normal");
+                    break;
+                case 8:
+                    ImGui::TextDisabled("Blue = large on screen, Red = sub-pixel");
+                    break;
+                case 9:
+                    ImGui::TextDisabled("Blue = geometry, Red = proxy shading");
                     break;
             }
             ImGui::Unindent();
@@ -1006,11 +1022,19 @@ void Renderer::applyMaterialPreset(int index) {
         break;
 
     case 6: // Bubblegum
+        // Load icosphere
+        for (int i = 0; i < static_cast<int>(assetMeshPaths.size()); i++) {
+            if (assetMeshNames[i] == "icosphere") {
+                selectedMesh = i;
+                pendingMeshLoad = assetMeshPaths[i];
+                break;
+            }
+        }
         renderResurfacing  = true;
         renderPebbles      = false;
         baseMeshMode       = 0;       // Off
         elementType        = 4;       // Hemisphere
-        userScaling        = 0.576f;
+        userScaling        = 1.111f;
         resolutionM        = 64;
         resolutionN        = 64;
         chainmailMode      = false;
@@ -1025,6 +1049,28 @@ void Renderer::applyMaterialPreset(int index) {
         lightIntensity     = 8.243f;
         ambientColor       = glm::vec3(0.0f);
         ambientIntensity   = 1.0f;
+        // Settings
+        enableFrustumCulling  = true;
+        enableBackfaceCulling = true;
+        cullingThreshold      = -1.0f;
+        enableLod             = true;
+        lodFactor             = 5.0f;
+        // Anti-aliasing
+        enableGlobalAA        = true;
+        enableSpecularAA      = true;
+        specularAAStrength    = 2.0f;
+        enableCoverageFade    = true;
+        coverageFadeFactor    = 0.1f;
+        coverageFadeStart     = 0.01f * coverageFadeFactor;
+        coverageFadeEnd       = 0.002f * coverageFadeFactor;
+        enableProxy           = true;
+        proxyFactor           = 0.1f;
+        proxyStartThreshold   = 0.015f * proxyFactor;
+        proxyEndThreshold     = 0.005f * proxyFactor;
+        if (msaaSampleCount != 8) {
+            msaaSampleCount = 8;
+            pendingMsaaChange = true;
+        }
         break;
     }
 }

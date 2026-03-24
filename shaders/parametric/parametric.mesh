@@ -29,6 +29,8 @@ struct TaskPayload {
     float faceColor;
     vec2 baseUV;
     float screenAlpha;
+    uint faceId;
+    float curvature;
 };
 
 taskPayloadSharedEXT TaskPayload payload;
@@ -47,6 +49,7 @@ layout(location = 2) perprimitiveEXT out PerPrimitiveData {
 layout(location = 3) perprimitiveEXT out vec2 outBaseUV[];
 layout(location = 4) perprimitiveEXT out vec3 outFaceNormal[];
 layout(location = 5) perprimitiveEXT out float outScreenAlpha[];
+layout(location = 6) perprimitiveEXT out float outCurvature[];
 
 layout(push_constant) uniform PushConstants {
     mat4 model;
@@ -160,8 +163,8 @@ void main() {
         gl_PrimitiveTriangleIndicesEXT[triId0] = uvec3(v00, v10, v11);
         gl_PrimitiveTriangleIndicesEXT[triId1] = uvec3(v00, v11, v01);
 
-        pOut[triId0].data = uvec4(payload.taskId, payload.isVertex, payload.elementType, 0);
-        pOut[triId1].data = uvec4(payload.taskId, payload.isVertex, payload.elementType, 0);
+        pOut[triId0].data = uvec4(payload.taskId, payload.isVertex, payload.elementType, payload.faceId);
+        pOut[triId1].data = uvec4(payload.taskId, payload.isVertex, payload.elementType, payload.faceId);
         outBaseUV[triId0] = payload.baseUV;
         outBaseUV[triId1] = payload.baseUV;
         vec3 faceN = normalize(mat3(push.model) * payload.normal);
@@ -169,5 +172,7 @@ void main() {
         outFaceNormal[triId1] = faceN;
         outScreenAlpha[triId0] = payload.screenAlpha;
         outScreenAlpha[triId1] = payload.screenAlpha;
+        outCurvature[triId0] = payload.curvature;
+        outCurvature[triId1] = payload.curvature;
     }
 }

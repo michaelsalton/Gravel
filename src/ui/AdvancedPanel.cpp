@@ -82,8 +82,10 @@ void AdvancedPanel::render(Renderer& r) {
         // Coverage Fade
         ImGui::Checkbox("Coverage Fade", &r.enableCoverageFade);
         if (r.enableCoverageFade) {
-            ImGui::SliderFloat("Fade Start", &r.coverageFadeStart, 0.001f, 0.05f, "%.3f");
-            ImGui::SliderFloat("Fade End", &r.coverageFadeEnd, 0.0001f, 0.02f, "%.4f");
+            ImGui::SliderFloat("Fade Factor", &r.coverageFadeFactor, 0.1f, 5.0f, "%.2f");
+            ImGui::TextDisabled("< 1.0 = fade later  |  > 1.0 = fade sooner");
+            r.coverageFadeStart = 0.01f * r.coverageFadeFactor;
+            r.coverageFadeEnd = 0.002f * r.coverageFadeFactor;
         }
 
         ImGui::Separator();
@@ -91,8 +93,10 @@ void AdvancedPanel::render(Renderer& r) {
         // Proxy Shading
         ImGui::Checkbox("Proxy Shading", &r.enableProxy);
         if (r.enableProxy) {
-            ImGui::SliderFloat("Proxy Start", &r.proxyStartThreshold, 0.001f, 0.05f, "%.3f");
-            ImGui::SliderFloat("Proxy End", &r.proxyEndThreshold, 0.0001f, 0.02f, "%.4f");
+            ImGui::SliderFloat("Proxy Factor", &r.proxyFactor, 0.1f, 5.0f, "%.2f");
+            ImGui::TextDisabled("< 1.0 = proxy later  |  > 1.0 = proxy sooner");
+            r.proxyStartThreshold = 0.015f * r.proxyFactor;
+            r.proxyEndThreshold = 0.005f * r.proxyFactor;
         }
     }
 }
