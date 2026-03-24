@@ -4,6 +4,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <map>
+#include <set>
 
 NGonMesh ObjLoader::load(const std::string& filepath) {
     std::ifstream file(filepath);
@@ -229,75 +230,194 @@ float ObjLoader::computeFaceArea(
 }
 
 void ObjLoader::subdivide(NGonMesh& mesh, int levels) {
+    using Edge = std::pair<uint32_t, uint32_t>;
+    auto makeEdge = [](uint32_t a, uint32_t b) -> Edge {
+        return a < b ? Edge{a, b} : Edge{b, a};
+    };
+
     for (int lvl = 0; lvl < levels; lvl++) {
+        uint32_t nVerts = static_cast<uint32_t>(mesh.positions.size());
+        uint32_t nFaces = static_cast<uint32_t>(mesh.faces.size());
+
+        // Ensure arrays match
+        mesh.normals.resize(nVerts, glm::vec3(0, 1, 0));
+        mesh.texCoords.resize(nVerts, glm::vec2(0));
+        mesh.colors.resize(nVerts, glm::vec3(1));
+
+        // === Step 1: Build adjacency ===
+        std::map<Edge, std::vector<uint32_t>> edgeToFaces;
+        std::vector<std::vector<uint32_t>> vertexToFaces(nVerts);
+        std::vector<std::set<uint32_t>> vertexNeighbors(nVerts);
+
+        for (uint32_t fi = 0; fi < nFaces; fi++) {
+            const auto& vi = mesh.faces[fi].vertexIndices;
+            uint32_t n = mesh.faces[fi].count;
+            for (uint32_t i = 0; i < n; i++) {
+                uint32_t v0 = vi[i], v1 = vi[(i + 1) % n];
+                vertexToFaces[v0].push_back(fi);
+                vertexNeighbors[v0].insert(v1);
+                vertexNeighbors[v1].insert(v0);
+                edgeToFaces[makeEdge(v0, v1)].push_back(fi);
+            }
+        }
+
+        // === Step 2: Compute face points ===
+        std::vector<glm::vec3> facePoints(nFaces);
+        std::vector<glm::vec2> facePointUVs(nFaces);
+        std::vector<glm::vec3> facePointColors(nFaces);
+
+        for (uint32_t fi = 0; fi < nFaces; fi++) {
+            const auto& vi = mesh.faces[fi].vertexIndices;
+            uint32_t n = mesh.faces[fi].count;
+            glm::vec3 p(0), c(0); glm::vec2 uv(0);
+            for (uint32_t i = 0; i < n; i++) {
+                p += mesh.positions[vi[i]];
+                uv += mesh.texCoords[vi[i]];
+                c += mesh.colors[vi[i]];
+            }
+            float inv = 1.0f / float(n);
+            facePoints[fi] = p * inv;
+            facePointUVs[fi] = uv * inv;
+            facePointColors[fi] = c * inv;
+        }
+
+        // === Step 3: Compute edge points ===
+        std::map<Edge, glm::vec3> edgePointPos;
+        std::map<Edge, glm::vec2> edgePointUV;
+        std::map<Edge, glm::vec3> edgePointCol;
+        std::map<Edge, bool> edgeIsBoundary;
+
+        for (auto& [edge, faces] : edgeToFaces) {
+            glm::vec3 v0 = mesh.positions[edge.first];
+            glm::vec3 v1 = mesh.positions[edge.second];
+            glm::vec2 uv0 = mesh.texCoords[edge.first];
+            glm::vec2 uv1 = mesh.texCoords[edge.second];
+            glm::vec3 c0 = mesh.colors[edge.first];
+            glm::vec3 c1 = mesh.colors[edge.second];
+
+            if (faces.size() == 2) {
+                // Interior edge: average of endpoints + adjacent face points
+                glm::vec3 fp = facePoints[faces[0]] + facePoints[faces[1]];
+                edgePointPos[edge] = (v0 + v1 + fp) * 0.25f;
+                edgePointUV[edge] = (uv0 + uv1 + facePointUVs[faces[0]] + facePointUVs[faces[1]]) * 0.25f;
+                edgePointCol[edge] = (c0 + c1 + facePointColors[faces[0]] + facePointColors[faces[1]]) * 0.25f;
+                edgeIsBoundary[edge] = false;
+            } else {
+                // Boundary edge: simple midpoint
+                edgePointPos[edge] = (v0 + v1) * 0.5f;
+                edgePointUV[edge] = (uv0 + uv1) * 0.5f;
+                edgePointCol[edge] = (c0 + c1) * 0.5f;
+                edgeIsBoundary[edge] = true;
+            }
+        }
+
+        // === Step 4: Compute smoothed vertex positions ===
+        std::vector<glm::vec3> smoothedPos(nVerts);
+        std::vector<glm::vec2> smoothedUV(nVerts);
+        std::vector<glm::vec3> smoothedCol(nVerts);
+
+        for (uint32_t vi = 0; vi < nVerts; vi++) {
+            uint32_t n = static_cast<uint32_t>(vertexNeighbors[vi].size());
+            if (n == 0) {
+                smoothedPos[vi] = mesh.positions[vi];
+                smoothedUV[vi] = mesh.texCoords[vi];
+                smoothedCol[vi] = mesh.colors[vi];
+                continue;
+            }
+
+            // Check if boundary vertex
+            bool isBoundary = false;
+            std::vector<uint32_t> boundaryNeighbors;
+            for (uint32_t nb : vertexNeighbors[vi]) {
+                Edge e = makeEdge(vi, nb);
+                if (edgeToFaces[e].size() == 1) {
+                    isBoundary = true;
+                    boundaryNeighbors.push_back(nb);
+                }
+            }
+
+            if (isBoundary && boundaryNeighbors.size() == 2) {
+                // Boundary vertex: (left + 6*V + right) / 8
+                smoothedPos[vi] = (mesh.positions[boundaryNeighbors[0]] +
+                                   6.0f * mesh.positions[vi] +
+                                   mesh.positions[boundaryNeighbors[1]]) / 8.0f;
+                smoothedUV[vi] = (mesh.texCoords[boundaryNeighbors[0]] +
+                                  6.0f * mesh.texCoords[vi] +
+                                  mesh.texCoords[boundaryNeighbors[1]]) / 8.0f;
+                smoothedCol[vi] = (mesh.colors[boundaryNeighbors[0]] +
+                                   6.0f * mesh.colors[vi] +
+                                   mesh.colors[boundaryNeighbors[1]]) / 8.0f;
+            } else {
+                // Interior vertex: Q/n + 2R/n + (n-3)*V/n
+                glm::vec3 Q(0); glm::vec2 Quv(0); glm::vec3 Qc(0);
+                for (uint32_t fi : vertexToFaces[vi]) {
+                    Q += facePoints[fi];
+                    Quv += facePointUVs[fi];
+                    Qc += facePointColors[fi];
+                }
+                float nf = float(vertexToFaces[vi].size());
+                Q /= nf; Quv /= nf; Qc /= nf;
+
+                glm::vec3 R(0); glm::vec2 Ruv(0); glm::vec3 Rc(0);
+                for (uint32_t nb : vertexNeighbors[vi]) {
+                    R += (mesh.positions[vi] + mesh.positions[nb]) * 0.5f;
+                    Ruv += (mesh.texCoords[vi] + mesh.texCoords[nb]) * 0.5f;
+                    Rc += (mesh.colors[vi] + mesh.colors[nb]) * 0.5f;
+                }
+                float ne = float(n);
+                R /= ne; Ruv /= ne; Rc /= ne;
+
+                smoothedPos[vi] = Q / ne + 2.0f * R / ne + (ne - 3.0f) * mesh.positions[vi] / ne;
+                smoothedUV[vi] = Quv / ne + 2.0f * Ruv / ne + (ne - 3.0f) * mesh.texCoords[vi] / ne;
+                smoothedCol[vi] = Qc / ne + 2.0f * Rc / ne + (ne - 3.0f) * mesh.colors[vi] / ne;
+            }
+        }
+
+        // === Step 5: Build output mesh ===
         NGonMesh result;
-        result.positions = mesh.positions;
-        result.normals   = mesh.normals;
-        result.texCoords = mesh.texCoords;
-        result.colors    = mesh.colors;
 
-        // Ensure normals/texCoords/colors arrays match positions size
-        result.normals.resize(result.positions.size(), glm::vec3(0, 1, 0));
-        result.texCoords.resize(result.positions.size(), glm::vec2(0));
-        result.colors.resize(result.positions.size(), glm::vec3(1));
+        // Add smoothed original vertices
+        for (uint32_t i = 0; i < nVerts; i++) {
+            result.positions.push_back(smoothedPos[i]);
+            result.normals.push_back(mesh.normals[i]);  // recomputed later
+            result.texCoords.push_back(smoothedUV[i]);
+            result.colors.push_back(smoothedCol[i]);
+        }
 
-        // Edge midpoint cache: sorted(v0,v1) -> new vertex index
-        std::map<std::pair<uint32_t, uint32_t>, uint32_t> edgeMidpoints;
+        // Add face point vertices
+        std::vector<uint32_t> facePointIdx(nFaces);
+        for (uint32_t fi = 0; fi < nFaces; fi++) {
+            facePointIdx[fi] = static_cast<uint32_t>(result.positions.size());
+            result.positions.push_back(facePoints[fi]);
+            result.normals.push_back(glm::vec3(0, 1, 0));
+            result.texCoords.push_back(facePointUVs[fi]);
+            result.colors.push_back(facePointColors[fi]);
+        }
 
-        auto getEdgeMidpoint = [&](uint32_t a, uint32_t b) -> uint32_t {
-            auto key = (a < b) ? std::make_pair(a, b) : std::make_pair(b, a);
-            auto it = edgeMidpoints.find(key);
-            if (it != edgeMidpoints.end()) return it->second;
+        // Add edge point vertices
+        std::map<Edge, uint32_t> edgePointIdx;
+        for (auto& [edge, pos] : edgePointPos) {
+            edgePointIdx[edge] = static_cast<uint32_t>(result.positions.size());
+            result.positions.push_back(pos);
+            result.normals.push_back(glm::vec3(0, 1, 0));
+            result.texCoords.push_back(edgePointUV[edge]);
+            result.colors.push_back(edgePointCol[edge]);
+        }
 
-            uint32_t idx = static_cast<uint32_t>(result.positions.size());
-            result.positions.push_back((result.positions[a] + result.positions[b]) * 0.5f);
-            result.normals.push_back(glm::normalize(result.normals[a] + result.normals[b]));
-            result.texCoords.push_back((result.texCoords[a] + result.texCoords[b]) * 0.5f);
-            result.colors.push_back((result.colors[a] + result.colors[b]) * 0.5f);
-            edgeMidpoints[key] = idx;
-            return idx;
-        };
-
+        // Create quads
         uint32_t offset = 0;
-        for (const auto& face : mesh.faces) {
-            uint32_t n = face.count;
-            const auto& vi = face.vertexIndices;
+        for (uint32_t fi = 0; fi < nFaces; fi++) {
+            const auto& vi = mesh.faces[fi].vertexIndices;
+            uint32_t n = mesh.faces[fi].count;
+            uint32_t fp = facePointIdx[fi];
 
-            // Compute face centroid vertex
-            glm::vec3 centerPos(0), centerNrm(0), centerCol(0);
-            glm::vec2 centerUV(0);
             for (uint32_t i = 0; i < n; i++) {
-                centerPos += result.positions[vi[i]];
-                centerNrm += result.normals[vi[i]];
-                centerUV  += result.texCoords[vi[i]];
-                centerCol += result.colors[vi[i]];
-            }
-            float inv = 1.0f / static_cast<float>(n);
-            centerPos *= inv;
-            centerNrm = glm::normalize(centerNrm);
-            centerUV  *= inv;
-            centerCol *= inv;
-
-            uint32_t centerIdx = static_cast<uint32_t>(result.positions.size());
-            result.positions.push_back(centerPos);
-            result.normals.push_back(centerNrm);
-            result.texCoords.push_back(centerUV);
-            result.colors.push_back(centerCol);
-
-            // Compute edge midpoints for this face
-            std::vector<uint32_t> edgeMids(n);
-            for (uint32_t i = 0; i < n; i++) {
-                edgeMids[i] = getEdgeMidpoint(vi[i], vi[(i + 1) % n]);
-            }
-
-            // Create n quads: (corner_i, edgeMid_i, center, edgeMid_{i-1})
-            for (uint32_t i = 0; i < n; i++) {
-                uint32_t prevEdge = edgeMids[(i + n - 1) % n];
-                uint32_t corner   = vi[i];
-                uint32_t nextEdge = edgeMids[i];
+                uint32_t corner = vi[i];
+                uint32_t ep_next = edgePointIdx[makeEdge(vi[i], vi[(i + 1) % n])];
+                uint32_t ep_prev = edgePointIdx[makeEdge(vi[(i + n - 1) % n], vi[i])];
 
                 NGonFace quad;
-                quad.vertexIndices = { corner, nextEdge, centerIdx, prevEdge };
+                quad.vertexIndices = { corner, ep_next, fp, ep_prev };
                 quad.count = 4;
                 quad.offset = offset;
                 quad.normal = glm::vec4(computeFaceNormal(result.positions, quad.vertexIndices), 0.0f);
@@ -312,12 +432,26 @@ void ObjLoader::subdivide(NGonMesh& mesh, int levels) {
             }
         }
 
-        result.nbVertices = static_cast<uint32_t>(result.positions.size());
+        // Recompute vertex normals from face normals
+        uint32_t totalVerts = static_cast<uint32_t>(result.positions.size());
+        std::vector<glm::vec3> normalAccum(totalVerts, glm::vec3(0));
+        for (const auto& face : result.faces) {
+            glm::vec3 fn = glm::vec3(face.normal);
+            for (uint32_t idx : face.vertexIndices) {
+                normalAccum[idx] += fn;
+            }
+        }
+        for (uint32_t i = 0; i < totalVerts; i++) {
+            float len = glm::length(normalAccum[i]);
+            result.normals[i] = (len > 0.0001f) ? normalAccum[i] / len : glm::vec3(0, 1, 0);
+        }
+
+        result.nbVertices = totalVerts;
         result.nbFaces    = static_cast<uint32_t>(result.faces.size());
 
         mesh = std::move(result);
 
-        std::cout << "Subdivided (level " << (lvl + 1) << "): "
+        std::cout << "Catmull-Clark subdivided (level " << (lvl + 1) << "): "
                   << mesh.nbFaces << " faces, "
                   << mesh.nbVertices << " vertices" << std::endl;
     }
