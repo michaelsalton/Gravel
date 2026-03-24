@@ -90,6 +90,25 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
                 window.toggleFullscreen();
             }
             ImGui::ColorEdit3("Background", &backgroundColor.x, ImGuiColorEditFlags_NoInputs);
+            ImGui::Checkbox("Skybox", &showSkybox);
+            if (showSkybox && !skyboxNames.empty()) {
+                const char* preview = (selectedSkybox >= 0 && selectedSkybox < static_cast<int>(skyboxNames.size()))
+                    ? skyboxNames[selectedSkybox].c_str() : "None";
+                if (ImGui::BeginCombo("HDR Map", preview)) {
+                    for (int i = 0; i < static_cast<int>(skyboxNames.size()); i++) {
+                        bool isSelected = (selectedSkybox == i);
+                        if (ImGui::Selectable(skyboxNames[i].c_str(), isSelected)) {
+                            if (i != selectedSkybox) {
+                                selectedSkybox = i;
+                                pendingSkyboxLoad = skyboxPaths[i];
+                            }
+                        }
+                        if (isSelected) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::SliderFloat("Exposure", &skyboxExposure, 0.1f, 5.0f, "%.2f");
+            }
             if (ImGui::MenuItem("Reset Layout")) {
                 resetLayout = true;
             }
@@ -380,6 +399,9 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         if (maskTextureLoaded) modeCount = 5;
         if (skinTextureLoaded) modeCount = 6;
         modeCount = std::max(modeCount, 7);  // Colored Faces always available
+        // Reset to safe mode if current mode requires a texture that isn't loaded
+        if (baseMeshMode == 4 && !maskTextureLoaded) baseMeshMode = 2;
+        if (baseMeshMode == 5 && !skinTextureLoaded) baseMeshMode = 2;
         ImGui::Combo("Display", &baseMeshMode, baseMeshModes, modeCount);
         if (dragonCoatAvailable) {
             bool prevCoat = dragonCoatEnabled;

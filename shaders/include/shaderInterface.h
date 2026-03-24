@@ -64,6 +64,7 @@ struct MeshInfoUBO {
 #define BINDING_SAMPLERS       4
 #define BINDING_TEXTURES       5
 #define BINDING_SCALE_LUT      6
+#define BINDING_ENV_MAP        7
 
 // Texture/sampler array indices
 #define AO_TEXTURE             0
@@ -136,7 +137,8 @@ struct ResurfacingUBO {
     uint  enableProxy;                 // proxy shading for sub-pixel elements (offset 212)
     float proxyStartThreshold;         // NDC size where blending begins (offset 216)
     float proxyEndThreshold;           // NDC size where geometry is fully replaced (offset 220)
-    uint  hasDiffuseTexture;           // diffuse texture loaded (offset 224)
+    uint  hasDiffuseTexture;
+    uint  hasEnvMap;           // diffuse texture loaded (offset 224)
 };
 
 // ============================================================================
@@ -402,6 +404,7 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
     float proxyStartThreshold;
     float proxyEndThreshold;
     uint hasDiffuseTexture;
+    uint hasEnvMap;
 } resurfacingUBO;
 
 #endif
@@ -435,6 +438,10 @@ layout(set = SET_PER_OBJECT, binding = BINDING_SCALE_LUT, std430)
 vec3 getScaleLutPoint(uvec2 idx, uvec2 gridSize) {
     return lutVertices[idx.y * gridSize.x + idx.x].xyz;
 }
+
+// --- Environment map (set 2, binding 7) ---
+#define HAS_ENV_MAP_BINDING
+layout(set = SET_PER_OBJECT, binding = BINDING_ENV_MAP) uniform sampler2D envMap;
 
 // --- Constants ---
 

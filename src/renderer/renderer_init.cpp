@@ -285,9 +285,14 @@ void Renderer::createLogicalDevice() {
     meshShaderFeatures.meshShader = VK_TRUE;
     meshShaderFeatures.meshShaderQueries = VK_TRUE;
 
+    VkPhysicalDeviceVulkan12Features vulkan12Features{};
+    vulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    vulkan12Features.pNext = &meshShaderFeatures;
+    vulkan12Features.hostQueryReset = VK_TRUE;
+
     VkPhysicalDeviceFeatures2 deviceFeatures2{};
     deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    deviceFeatures2.pNext = &meshShaderFeatures;
+    deviceFeatures2.pNext = &vulkan12Features;
     deviceFeatures2.features.fillModeNonSolid = VK_TRUE;  // wireframe rendering
     deviceFeatures2.features.pipelineStatisticsQuery = VK_TRUE;
 
@@ -979,12 +984,12 @@ void Renderer::createDescriptorSetLayouts() {
     heBindings[4].binding = 4;
     heBindings[4].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     heBindings[4].descriptorCount = 1;
-    heBindings[4].stageFlags = heStages;
+    heBindings[4].stageFlags = heStages | VK_SHADER_STAGE_FRAGMENT_BIT;
 
     heBindings[5].binding = 5;
     heBindings[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     heBindings[5].descriptorCount = 1;
-    heBindings[5].stageFlags = heStages;
+    heBindings[5].stageFlags = heStages | VK_SHADER_STAGE_FRAGMENT_BIT;
 
     heBindings[6].binding = 6;
     heBindings[6].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -1032,7 +1037,7 @@ void Renderer::createDescriptorSetLayouts() {
                                    VK_SHADER_STAGE_MESH_BIT_EXT |
                                    VK_SHADER_STAGE_COMPUTE_BIT;
 
-    std::array<VkDescriptorSetLayoutBinding, 7> objBindings{};
+    std::array<VkDescriptorSetLayoutBinding, 8> objBindings{};
 
     // Binding 0: ResurfacingUBO
     objBindings[0].binding = 0;
@@ -1076,8 +1081,14 @@ void Renderer::createDescriptorSetLayouts() {
     objBindings[6].descriptorCount = 1;
     objBindings[6].stageFlags = taskMesh;
 
-    // Partial binding: bindings 1-6 may remain unwritten for non-dragon meshes
-    std::array<VkDescriptorBindingFlags, 7> bindingFlags{};
+    // Binding 7: Environment map (combined image sampler)
+    objBindings[7].binding = 7;
+    objBindings[7].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    objBindings[7].descriptorCount = 1;
+    objBindings[7].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    // Partial binding: bindings 1-7 may remain unwritten
+    std::array<VkDescriptorBindingFlags, 8> bindingFlags{};
     bindingFlags[0] = 0;  // binding 0 (UBO) always written
     bindingFlags[1] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
     bindingFlags[2] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
@@ -1085,6 +1096,7 @@ void Renderer::createDescriptorSetLayouts() {
     bindingFlags[4] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
     bindingFlags[5] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
     bindingFlags[6] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+    bindingFlags[7] = VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
 
     VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo{};
     bindingFlagsInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
@@ -1259,7 +1271,7 @@ void Renderer::createDescriptorPool() {
 
     // UBOs: 2 per scene frame + 1 ResurfacingUBO + 1 PebbleUBO + 1 secondary ResurfacingUBO + 1 groundPebbleUBO
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2 + 4);
+    poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2 + 5);
 
     // SSBOs: 21 HE (17+3 GRWM+1 proxy) + 3 skeleton + 21 secondary HE + 3 secondary skeleton + 21 ground HE + 2 visible indices (per frame) + 1 scale LUT + 2 element stats (per frame)
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -1273,9 +1285,9 @@ void Renderer::createDescriptorPool() {
     poolSizes[3].type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
     poolSizes[3].descriptorCount = 20;
 
-    // Combined image samplers: for ImGui (needs extra for MSAA reinit)
+    // Combined image samplers: for ImGui + skybox
     poolSizes[4].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[4].descriptorCount = 4;
+    poolSizes[4].descriptorCount = 16;
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1284,7 +1296,7 @@ void Renderer::createDescriptorPool() {
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
     // scene sets + 1 HE set + 1 per-object set + 1 pebble per-object set + 1 secondary HE set + 1 secondary per-object set + 1 ground HE set + 1 ground pebble set + ImGui sets
-    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT + 12);
+    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT + 16);
 
     if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create descriptor pool!");
@@ -2047,6 +2059,13 @@ void Renderer::recreatePipelines() {
     // Recreate all pipelines with current render pass and MSAA settings
     createGraphicsPipeline();
     createBenchmarkPipeline();
+    if (skyboxLoaded) {
+        if (skyboxPipeline != VK_NULL_HANDLE) vkDestroyPipeline(device, skyboxPipeline, nullptr);
+        if (skyboxPipelineLayout != VK_NULL_HANDLE) vkDestroyPipelineLayout(device, skyboxPipelineLayout, nullptr);
+        skyboxPipeline = VK_NULL_HANDLE;
+        skyboxPipelineLayout = VK_NULL_HANDLE;
+        createSkyboxPipeline();
+    }
 }
 
 void Renderer::createSamplers() {

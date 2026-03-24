@@ -178,6 +178,7 @@ void main() {
     float matAo        = isSecondary ? shadingUBO.secAo          : shadingUBO.ao;
     float matF0        = isSecondary ? shadingUBO.secDielectricF0 : shadingUBO.dielectricF0;
     float matEnvRefl   = isSecondary ? shadingUBO.secEnvReflection : shadingUBO.envReflection;
+    bool useEnvMap = (resurfacingUBO.hasEnvMap != 0u);
 
     vec3 color = cookTorrancePBR(inWorldPos, N,
                                  shadingUBO.lightPosition.xyz,
@@ -188,7 +189,8 @@ void main() {
                                  matF0,
                                  shadingUBO.ambient,
                                  matEnvRefl,
-                                 shadingUBO.lightIntensity);
+                                 shadingUBO.lightIntensity,
+                                 useEnvMap);
 
     // Proxy shading: blend with aggregate procedural appearance for sub-pixel faces
     ProxyFaceData pd = heProxyBuffer[0].data[inFaceId];
@@ -212,7 +214,8 @@ void main() {
                                            procF0,
                                            shadingUBO.ambient,
                                            procEnvRefl,
-                                           shadingUBO.lightIntensity);
+                                           shadingUBO.lightIntensity,
+                                           useEnvMap);
 
         color = mix(color, proxyColor, pd.blend);
     }

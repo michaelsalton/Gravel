@@ -1729,7 +1729,10 @@ void Renderer::loadMesh(const std::string& path) {
     }
     std::cout << "  glTF path check: " << gltfPath
               << " exists=" << std::filesystem::exists(gltfPath) << std::endl;
-    if (std::filesystem::exists(gltfPath)) {
+    if (std::filesystem::exists(gltfPath) && subdivideLevel > 0) {
+        std::cout << "  Skipping glTF skeleton (subdivided mesh)" << std::endl;
+    }
+    if (std::filesystem::exists(gltfPath) && subdivideLevel == 0) {
         std::cout << "  Loading glTF skeleton: " << gltfPath << std::endl;
         try {
             tinygltf::Model gltfModel = GltfLoader::loadModel(gltfPath);

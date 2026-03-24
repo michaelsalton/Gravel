@@ -98,6 +98,7 @@ struct ResurfacingUBO {
     float     proxyStartThresholdUBO  = 0.015f;
     float     proxyEndThresholdUBO    = 0.005f;
     uint32_t  hasDiffuseTexture       = 0;
+    uint32_t  hasEnvMap               = 0;
 };
 
 struct GlobalShadingUBO {
@@ -443,6 +444,12 @@ public:
     // Lighting config (global)
     glm::vec3 lightPosition = glm::vec3(5.0f, 5.0f, 5.0f);
     glm::vec3 backgroundColor = glm::vec3(0.53f, 0.81f, 0.92f);
+    bool showSkybox = true;
+    float skyboxExposure = 1.0f;
+    std::vector<std::string> skyboxNames;
+    std::vector<std::string> skyboxPaths;
+    int selectedSkybox = -1;
+    std::string pendingSkyboxLoad;
     glm::vec3 ambientColor = glm::vec3(0.2f, 0.2f, 0.25f);
     float ambientIntensity = 1.0f;
     float lightIntensity = 3.0f;
@@ -605,6 +612,10 @@ private:
     void loadAndUploadTexture(const std::string& path, VulkanTexture& texture,
                                VkFormat format, bool& loadedFlag);
     void loadScaleLut();
+    void scanSkyboxes();
+    void loadSkybox(const std::string& path);
+    void cleanupSkyboxTexture();
+    void createSkyboxPipeline();
     void precomputeProxyParams();
     void cleanupScaleLut();
     void loadGrwmPreprocess(const std::string& meshPath);
@@ -779,6 +790,20 @@ private:
     VulkanTexture maskTexture;
     VulkanTexture skinTexture;
     VulkanTexture diffuseTexture;
+
+    // Skybox
+    VkImage skyboxImage = VK_NULL_HANDLE;
+    VkDeviceMemory skyboxMemory = VK_NULL_HANDLE;
+    VkImageView skyboxImageView = VK_NULL_HANDLE;
+    VkSampler skyboxSampler = VK_NULL_HANDLE;
+    VkPipeline skyboxPipeline = VK_NULL_HANDLE;
+    VkPipelineLayout skyboxPipelineLayout = VK_NULL_HANDLE;
+    VkDescriptorSetLayout skyboxDescriptorSetLayout = VK_NULL_HANDLE;
+    VkDescriptorSet skyboxDescriptorSet = VK_NULL_HANDLE;
+    bool skyboxLoaded = false;
+    VkBuffer skyboxUBOBuffer = VK_NULL_HANDLE;
+    VkDeviceMemory skyboxUBOMemory = VK_NULL_HANDLE;
+    void* skyboxUBOMapped = nullptr;
 
     // Skeleton buffers (loaded per-mesh)
     StorageBuffer jointIndicesBuffer;

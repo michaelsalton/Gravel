@@ -101,6 +101,7 @@ void main() {
         aaDebugValue = matRoughness - oldRoughness;  // how much roughness was added
     }
 
+    bool useEnvMap = (resurfacingUBO.hasEnvMap != 0u);
     vec3 color;
 
     switch (push.debugMode) {
@@ -115,7 +116,8 @@ void main() {
                                         matF0,
                                         shadingUBO.ambient,
                                         matEnvRefl,
-                                        shadingUBO.lightIntensity);
+                                        shadingUBO.lightIntensity,
+                                        useEnvMap);
                 color *= matAo;
 
                 // --- Chainmail-specific AO modifiers ---
@@ -153,7 +155,8 @@ void main() {
                                         matF0,
                                         shadingUBO.ambient,
                                         matEnvRefl,
-                                        shadingUBO.lightIntensity);
+                                        shadingUBO.lightIntensity,
+                                        useEnvMap);
                 color *= matAo;
             }
 

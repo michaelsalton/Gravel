@@ -109,19 +109,53 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
-// Fake sky/ground environment reflection — roughness widens the blend band
-vec3 fakeEnvReflection(vec3 R, float roughness) {
+// Sample HDR environment map using equirectangular mapping
+#ifdef HAS_ENV_MAP_BINDING
+vec3 sampleEnvMap(vec3 R) {
+    float phi = atan(R.z, R.x);
+    float theta = asin(clamp(R.y, -1.0, 1.0));
+    vec2 uv = vec2(phi / (2.0 * PI) + 0.5, 0.5 - theta / PI);
+    return texture(envMap, uv).rgb;
+}
+
+// Environment reflection — uses HDR map if available, otherwise fake sky/ground
+vec3 envReflectionColor(vec3 R, float roughness, bool useEnvMap) {
+    if (useEnvMap) {
+        // Approximate roughness blur by sampling at a mip-like offset
+        // (no actual mips, so rough surfaces get a simple blend with average)
+        vec3 sharp = sampleEnvMap(R);
+        if (roughness > 0.3) {
+            // Rough: blend toward average of several samples for cheap blur
+            vec3 avg = (sampleEnvMap(vec3(1,0,0)) + sampleEnvMap(vec3(-1,0,0)) +
+                        sampleEnvMap(vec3(0,1,0)) + sampleEnvMap(vec3(0,-1,0)) +
+                        sampleEnvMap(vec3(0,0,1)) + sampleEnvMap(vec3(0,0,-1))) / 6.0;
+            float t = smoothstep(0.3, 1.0, roughness);
+            return mix(sharp, avg, t);
+        }
+        return sharp;
+    }
+    // Fallback: fake sky/ground
     vec3 skyColor    = vec3(0.4, 0.45, 0.55);
     vec3 groundColor = vec3(0.15, 0.12, 0.1);
     float blend = smoothstep(-0.5 * (1.0 - roughness), 0.5 * (1.0 - roughness), R.y);
     return mix(groundColor, skyColor, blend);
 }
+#else
+// No env map binding available — always use fake
+vec3 envReflectionColor(vec3 R, float roughness, bool useEnvMap) {
+    vec3 skyColor    = vec3(0.4, 0.45, 0.55);
+    vec3 groundColor = vec3(0.15, 0.12, 0.1);
+    float blend = smoothstep(-0.5 * (1.0 - roughness), 0.5 * (1.0 - roughness), R.y);
+    return mix(groundColor, skyColor, blend);
+}
+#endif
 
-// Cook-Torrance microfacet BRDF — drop-in replacement for blinnPhong()
+// Cook-Torrance microfacet BRDF
 vec3 cookTorrancePBR(vec3 worldPos, vec3 N, vec3 lightPos, vec3 cameraPos,
                      vec3 albedo, float roughness, float metallic,
                      float dielectricF0, vec4 ambient,
-                     float envReflection, float lightIntensity) {
+                     float envReflection, float lightIntensity,
+                     bool useEnvMap) {
     vec3 V = normalize(cameraPos - worldPos);
     vec3 L = normalize(lightPos - worldPos);
     vec3 H = normalize(V + L);
@@ -156,9 +190,18 @@ vec3 cookTorrancePBR(vec3 worldPos, vec3 N, vec3 lightPos, vec3 cameraPos,
 
     // Environment reflection
     vec3 envF = fresnelSchlick(NdotV, F0);
-    vec3 env  = envF * fakeEnvReflection(R, roughness) * envReflection;
+    vec3 env  = envF * envReflectionColor(R, roughness, useEnvMap) * envReflection;
 
     return ambientColor + Lo + env;
+}
+
+// Overload without envMap flag (defaults to no env map)
+vec3 cookTorrancePBR(vec3 worldPos, vec3 N, vec3 lightPos, vec3 cameraPos,
+                     vec3 albedo, float roughness, float metallic,
+                     float dielectricF0, vec4 ambient,
+                     float envReflection, float lightIntensity) {
+    return cookTorrancePBR(worldPos, N, lightPos, cameraPos, albedo, roughness, metallic,
+                           dielectricF0, ambient, envReflection, lightIntensity, false);
 }
 
 // ACES filmic tone mapping
