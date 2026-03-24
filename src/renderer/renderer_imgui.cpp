@@ -914,6 +914,14 @@ void Renderer::applyMaterialPreset(int index) {
         break;
 
     case 3: // Playdough
+        // Load icosphere
+        for (int i = 0; i < static_cast<int>(assetMeshPaths.size()); i++) {
+            if (assetMeshNames[i] == "icosphere") {
+                selectedMesh = i;
+                pendingMeshLoad = assetMeshPaths[i];
+                break;
+            }
+        }
         renderResurfacing  = false;
         renderPebbles      = true;
         baseMeshMode       = 2;       // Solid
@@ -924,8 +932,8 @@ void Renderer::applyMaterialPreset(int index) {
         pebbleUBO.extrusionVariation = 0.0f;
         pebbleUBO.roundness          = 0.56f;
         pebbleUBO.doNoise            = 1;
-        pebbleUBO.noiseAmplitude     = 0.062f;
-        pebbleUBO.noiseFrequency     = 8.5f;
+        pebbleUBO.noiseAmplitude     = 0.020f;
+        pebbleUBO.noiseFrequency     = 1.6f;
         pebbleUBO.normalOffset       = 0.32f;
         pebbleUBO.useCulling         = 1;
         pebbleUBO.cullingThreshold   = 0.32f;

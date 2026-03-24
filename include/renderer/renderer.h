@@ -284,10 +284,10 @@ public:
     uint32_t resolutionM = 45;
     uint32_t resolutionN = 45;
     uint32_t debugMode = 0;         // 0=shading, 1=normals, 2=UV, 3=taskID, 4=element type (face/vertex)
-    bool enableFrustumCulling = false;
-    bool enableBackfaceCulling = false;
+    bool enableFrustumCulling = true;
+    bool enableBackfaceCulling = true;
     float cullingThreshold = 0.0f;  // Back-face dot product threshold [-1, 1]
-    bool enableLod = false;
+    bool enableLod = true;
     float lodFactor = 1.0f;
     bool enableGlobalAA = false;    // master AA toggle
     bool enableSpecularAA = false;  // geometric specular AA (Tokuyoshi 2021)
