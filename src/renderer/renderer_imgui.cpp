@@ -241,9 +241,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         ImGui::Text("Procedural:");
         ImGui::Indent();
 
-        uint32_t visibleElements = static_cast<uint32_t>(cachedVisibleIndices.size());
         uint32_t totalElements   = cachedTotalElements;
-        uint32_t culledElements  = totalElements - visibleElements;
 
         uint64_t baseMeshTris = (baseMeshMode > 0 ? baseMeshTriCount : 0u)
                               + (dualMeshActive && dragonBaseMeshMode > 0 ? secondaryHeNbFaces * 2 : 0u)
@@ -315,7 +313,6 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
     }
     ImGui::Unindent();
 
-    float perfH = ImGui::GetWindowSize().y;
     ImGui::End();
 
     // ===================== Mode Tabs (centered at top) =====================
@@ -477,7 +474,6 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         resurfacingPanel.renderPathway(*this);
     }
 
-    float resurfPanelH = ImGui::GetWindowSize().y;
     ImGui::End();
 
     // ===================== Presets Panel (bottom-right) =====================

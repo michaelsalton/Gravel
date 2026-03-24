@@ -327,10 +327,10 @@ public:
     uint32_t scaleLutNx        = 0;
     uint32_t scaleLutNy        = 0;
     bool     preprocessLoaded  = false;
-    bool     enablePreprocess  = true;   // use GRWM data when available
+    bool     enablePreprocess  = false;  // use GRWM data when available
     float    grwmIntensity    = 1.0f;   // global GRWM effect strength [0,1]
-    bool     enableCurvatureDensity = true;  // curvature-aware LOD density
-    bool     enableFeatureEdges     = true;  // feature edge resolution enforcement
+    bool     enableCurvatureDensity = false; // curvature-aware LOD density
+    bool     enableFeatureEdges     = false; // feature edge resolution enforcement
     float    featureEdgeBoost       = 1.5f;  // scale multiplier for feature edge faces
     bool     enableSlotPlacement   = false;  // use GRWM slots for multi-element placement
     int      activeSlotCount       = 8;      // 1-64, how many top-priority slots per face

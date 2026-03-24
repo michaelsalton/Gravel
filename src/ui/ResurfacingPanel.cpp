@@ -122,29 +122,6 @@ void ResurfacingPanel::render(Renderer& r) {
 
             ImGui::Separator();
 
-            // Chainmail mode
-            {
-                bool prev = r.chainmailMode;
-                ImGui::Checkbox("Chainmail Mode", &r.chainmailMode);
-                if (r.chainmailMode && !prev) {
-                    r.applyPresetChainMail();
-                    if (r.triangulateMesh && r.selectedMesh >= 0 &&
-                        r.selectedMesh < static_cast<int>(r.assetMeshPaths.size())) {
-                        r.triangulateMesh = false;
-                        r.pendingMeshLoad = r.assetMeshPaths[r.selectedMesh];
-                    }
-                }
-            }
-
-            if (r.chainmailMode) {
-                ImGui::Indent();
-                ImGui::SliderFloat("Lean Amount", &r.chainmailTiltAngle, 0.0f, 1.0f, "%.2f");
-                ImGui::SameLine();
-                ImGui::Text("(0=flat, 1=full)");
-                ImGui::SliderFloat("Surface Offset", &r.chainmailSurfaceOffset, 0.0f, 0.5f, "%.3f");
-                ImGui::Unindent();
-            }
-
             // Dragon Scales preset (available when dragon mesh is loaded)
             if (r.dragonCoatAvailable) {
                 ImGui::Separator();
@@ -193,16 +170,6 @@ void ResurfacingPanel::render(Renderer& r) {
                         ImGui::SliderFloat("Radius##sec", &r.secondarySphereRadius, 0.1f, 2.0f);
                     }
 
-                    ImGui::Separator();
-
-                    // Chainmail mode for coat
-                    ImGui::Checkbox("Chainmail Mode##sec", &r.secondaryChainmailMode);
-                    if (r.secondaryChainmailMode) {
-                        ImGui::Indent();
-                        ImGui::SliderFloat("Lean Amount##sec", &r.secondaryChainmailTiltAngle, 0.0f, 1.0f, "%.2f");
-                        ImGui::SliderFloat("Surface Offset##sec", &r.secondaryChainmailSurfaceOffset, 0.0f, 0.5f, "%.3f");
-                        ImGui::Unindent();
-                    }
                     ImGui::Separator();
 
                     int secResM = static_cast<int>(r.secondaryResolutionM);

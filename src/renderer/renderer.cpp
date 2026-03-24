@@ -42,6 +42,7 @@ Renderer::Renderer(Window& window) : window(window) {
         if (vkCreateQueryPool(device, &queryPoolInfo, nullptr, &statsQueryPool) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create statistics query pool!");
         }
+        vkResetQueryPool(device, statsQueryPool, 0, STATS_QUERY_COUNT);
     }
 
     createDescriptorSetLayouts();
@@ -117,6 +118,18 @@ Renderer::~Renderer() {
     if (pebbleUBOBuffer != VK_NULL_HANDLE) {
         vkDestroyBuffer(device, pebbleUBOBuffer, nullptr);
         vkFreeMemory(device, pebbleUBOMemory, nullptr);
+    }
+
+    if (proxyFlagBuffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, proxyFlagBuffer, nullptr);
+        vkFreeMemory(device, proxyFlagMemory, nullptr);
+    }
+
+    for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        if (i < static_cast<int>(elementStatsBuffers.size()) && elementStatsBuffers[i] != VK_NULL_HANDLE) {
+            vkDestroyBuffer(device, elementStatsBuffers[i], nullptr);
+            vkFreeMemory(device, elementStatsMemory[i], nullptr);
+        }
     }
 
     if (linearSampler != VK_NULL_HANDLE) {
@@ -1171,7 +1184,7 @@ void Renderer::precomputeProxyParams() {
     // Returns the local-space normal (Z = face normal direction)
     auto evalNormal = [&](int type, float u, float v) -> glm::vec3 {
         float theta, phi, cosU, sinU, cosV, sinV;
-        glm::vec3 pos, dpdu, dpdv;
+        glm::vec3 dpdu, dpdv;
 
         switch (type) {
         case 0: { // Torus (default majorR=1, minorR=0.3)

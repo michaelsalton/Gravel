@@ -289,6 +289,7 @@ void Renderer::createLogicalDevice() {
     deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
     deviceFeatures2.pNext = &meshShaderFeatures;
     deviceFeatures2.features.fillModeNonSolid = VK_TRUE;  // wireframe rendering
+    deviceFeatures2.features.pipelineStatisticsQuery = VK_TRUE;
 
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -962,12 +963,12 @@ void Renderer::createDescriptorSetLayouts() {
     heBindings[1].binding = 1;
     heBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     heBindings[1].descriptorCount = 1;
-    heBindings[1].stageFlags = heStages;
+    heBindings[1].stageFlags = heStages | VK_SHADER_STAGE_FRAGMENT_BIT;
 
     heBindings[2].binding = 2;
     heBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     heBindings[2].descriptorCount = 10;
-    heBindings[2].stageFlags = heStages;
+    heBindings[2].stageFlags = heStages | VK_SHADER_STAGE_FRAGMENT_BIT;
 
     heBindings[3].binding = 3;
     heBindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
