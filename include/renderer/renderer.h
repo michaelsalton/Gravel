@@ -99,6 +99,8 @@ struct ResurfacingUBO {
     float     proxyEndThresholdUBO    = 0.005f;
     uint32_t  hasDiffuseTexture       = 0;
     uint32_t  hasEnvMap               = 0;
+    uint32_t  hasNormalTexture        = 0;
+    uint32_t  hasOrmTexture           = 0;
 };
 
 struct GlobalShadingUBO {
@@ -490,6 +492,8 @@ public:
     bool maskTextureLoaded = false;
     bool skinTextureLoaded = false;
     bool diffuseTextureLoaded = false;
+    bool normalTextureLoaded = false;
+    bool ormTextureLoaded = false;
     bool skeletonLoaded = false;
     bool heMeshUploaded = false;
     uint32_t heNbFaces = 0;
@@ -792,6 +796,8 @@ private:
     VulkanTexture maskTexture;
     VulkanTexture skinTexture;
     VulkanTexture diffuseTexture;
+    VulkanTexture normalTexture;
+    VulkanTexture ormTexture;
 
     // Skybox
     VkImage skyboxImage = VK_NULL_HANDLE;

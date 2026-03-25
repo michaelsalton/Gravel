@@ -620,6 +620,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         resurfData.proxyEndThresholdUBO = proxyEndThreshold;
         resurfData.hasDiffuseTexture = diffuseTextureLoaded ? 1u : 0u;
         resurfData.hasEnvMap = (skyboxLoaded && showSkybox) ? 1u : 0u;
+        resurfData.hasNormalTexture = normalTextureLoaded ? 1u : 0u;
+        resurfData.hasOrmTexture = ormTextureLoaded ? 1u : 0u;
         memcpy(resurfacingUBOMapped, &resurfData, sizeof(ResurfacingUBO));
     }
 

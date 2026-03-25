@@ -373,6 +373,44 @@ void Renderer::writeTextureDescriptors() {
         }
     }
 
+    // If normal texture is loaded, write slot 5
+    VkDescriptorImageInfo normalInfo{};
+    if (normalTextureLoaded) {
+        normalInfo.imageView = normalTexture.getImageView();
+        normalInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        for (auto dstSet : dstSets) {
+            VkWriteDescriptorSet texWrite{};
+            texWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            texWrite.dstSet = dstSet;
+            texWrite.dstBinding = 5;  // BINDING_TEXTURES
+            texWrite.dstArrayElement = 5;  // NORMAL_TEXTURE index
+            texWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            texWrite.descriptorCount = 1;
+            texWrite.pImageInfo = &normalInfo;
+            writes.push_back(texWrite);
+        }
+    }
+
+    // If ORM texture is loaded, write slot 6
+    VkDescriptorImageInfo ormInfo{};
+    if (ormTextureLoaded) {
+        ormInfo.imageView = ormTexture.getImageView();
+        ormInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        for (auto dstSet : dstSets) {
+            VkWriteDescriptorSet texWrite{};
+            texWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            texWrite.dstSet = dstSet;
+            texWrite.dstBinding = 5;  // BINDING_TEXTURES
+            texWrite.dstArrayElement = 6;  // ORM_TEXTURE index
+            texWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            texWrite.descriptorCount = 1;
+            texWrite.pImageInfo = &ormInfo;
+            writes.push_back(texWrite);
+        }
+    }
+
     vkUpdateDescriptorSets(device, static_cast<uint32_t>(writes.size()),
                            writes.data(), 0, nullptr);
 }
@@ -464,11 +502,15 @@ void Renderer::cleanupMeshTextures() {
     maskTexture.destroy();
     skinTexture.destroy();
     diffuseTexture.destroy();
+    normalTexture.destroy();
+    ormTexture.destroy();
     aoTextureLoaded = false;
     elementTypeTextureLoaded = false;
     maskTextureLoaded = false;
     skinTextureLoaded = false;
     diffuseTextureLoaded = false;
+    normalTextureLoaded = false;
+    ormTextureLoaded = false;
     dragonCoatAvailable = false;
     dragonCoatEnabled = false;
     dragonCoatPath.clear();
@@ -1710,8 +1752,51 @@ void Renderer::loadMesh(const std::string& path) {
         }
     }
 
+    // Normal map (auto-detect common names)
+    {
+        std::string stem = std::filesystem::path(path).stem().string();
+        std::vector<std::string> candidates = {
+            dir + "normal.png", dir + "normals.png",
+            dir + stem + "_normal.png", dir + stem + "_normals.png",
+            dir + "normal.jpg", dir + "normals.jpg",
+            dir + stem + "_normal.jpg", dir + stem + "_normals.jpg",
+        };
+        for (const auto& candidate : candidates) {
+            if (std::filesystem::exists(candidate)) {
+                loadAndUploadTexture(candidate, normalTexture,
+                                     VK_FORMAT_R8G8B8A8_UNORM, normalTextureLoaded);
+                if (normalTextureLoaded) {
+                    std::cout << "  Loaded normal texture: " << candidate << std::endl;
+                    break;
+                }
+            }
+        }
+    }
+
+    // ORM texture (Occlusion/Roughness/Metallic packed in R/G/B)
+    {
+        std::string stem = std::filesystem::path(path).stem().string();
+        std::vector<std::string> candidates = {
+            dir + "orm.png", dir + "ORM.png",
+            dir + stem + "_orm.png", dir + stem + "_ORM.png",
+            dir + "orm.jpg", dir + "ORM.jpg",
+            dir + stem + "_orm.jpg", dir + stem + "_ORM.jpg",
+        };
+        for (const auto& candidate : candidates) {
+            if (std::filesystem::exists(candidate)) {
+                loadAndUploadTexture(candidate, ormTexture,
+                                     VK_FORMAT_R8G8B8A8_UNORM, ormTextureLoaded);
+                if (ormTextureLoaded) {
+                    std::cout << "  Loaded ORM texture: " << candidate << std::endl;
+                    break;
+                }
+            }
+        }
+    }
+
     // Write sampler and texture descriptors if any textures were loaded
-    if (aoTextureLoaded || elementTypeTextureLoaded || maskTextureLoaded || skinTextureLoaded || diffuseTextureLoaded) {
+    if (aoTextureLoaded || elementTypeTextureLoaded || maskTextureLoaded || skinTextureLoaded
+        || diffuseTextureLoaded || normalTextureLoaded || ormTextureLoaded) {
         writeTextureDescriptors();
     }
 

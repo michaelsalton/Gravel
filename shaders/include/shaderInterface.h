@@ -72,10 +72,12 @@ struct MeshInfoUBO {
 #define MASK_TEXTURE           2
 #define SKIN_TEXTURE           3
 #define DIFFUSE_TEXTURE        4
+#define NORMAL_TEXTURE         5
+#define ORM_TEXTURE            6
 #define LINEAR_SAMPLER         0
 #define NEAREST_SAMPLER        1
 #define SAMPLER_COUNT          2
-#define TEXTURE_COUNT          5
+#define TEXTURE_COUNT          7
 
 struct ResurfacingUBO {
     uint elementType;      // 0=torus, 1=sphere, 2=cone, 3=cylinder, 4=hemisphere, 5=dragon scale
@@ -139,6 +141,8 @@ struct ResurfacingUBO {
     float proxyEndThreshold;           // NDC size where geometry is fully replaced (offset 220)
     uint  hasDiffuseTexture;
     uint  hasEnvMap;
+    uint  hasNormalTexture;
+    uint  hasOrmTexture;
 };
 
 // ============================================================================
@@ -405,6 +409,8 @@ LAYOUT_STD140(SET_PER_OBJECT, BINDING_CONFIG_UBO) uniform ResurfacingUBOBlock {
     float proxyEndThreshold;
     uint hasDiffuseTexture;
     uint hasEnvMap;
+    uint hasNormalTexture;
+    uint hasOrmTexture;
 } resurfacingUBO;
 
 #endif

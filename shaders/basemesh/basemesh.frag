@@ -173,11 +173,44 @@ void main() {
         vec3 texColor = texture(sampler2D(textures[DIFFUSE_TEXTURE], samplers[LINEAR_SAMPLER]), texUV).rgb;
         matBaseColor *= texColor;
     }
+    // Normal mapping: construct tangent frame from screen-space derivatives
+    if (resurfacingUBO.hasNormalTexture != 0u && !isSecondary) {
+        vec2 texUV = inUV;
+        texUV.y = 1.0 - texUV.y;
+        vec3 tangentNormal = texture(sampler2D(textures[NORMAL_TEXTURE], samplers[LINEAR_SAMPLER]), texUV).rgb;
+        tangentNormal = tangentNormal * 2.0 - 1.0;
+
+        vec3 dPdx = dFdx(inWorldPos);
+        vec3 dPdy = dFdy(inWorldPos);
+        vec2 dUVdx = dFdx(texUV);
+        vec2 dUVdy = dFdy(texUV);
+
+        float invDet = 1.0 / (dUVdx.x * dUVdy.y - dUVdx.y * dUVdy.x + 1e-8);
+        vec3 T = (dPdx * dUVdy.y - dPdy * dUVdx.y) * invDet;
+        vec3 B = (dPdy * dUVdx.x - dPdx * dUVdy.x) * invDet;
+
+        T = normalize(T - N * dot(N, T));
+        B = cross(N, T);
+
+        N = normalize(T * tangentNormal.x + B * tangentNormal.y + N * tangentNormal.z);
+    }
+
     float matRoughness = isSecondary ? shadingUBO.secRoughness   : shadingUBO.roughness;
     float matMetallic  = isSecondary ? shadingUBO.secMetallic    : shadingUBO.metallic;
     float matAo        = isSecondary ? shadingUBO.secAo          : shadingUBO.ao;
     float matF0        = isSecondary ? shadingUBO.secDielectricF0 : shadingUBO.dielectricF0;
     float matEnvRefl   = isSecondary ? shadingUBO.secEnvReflection : shadingUBO.envReflection;
+
+    // ORM texture: R=occlusion, G=roughness, B=metallic
+    if (resurfacingUBO.hasOrmTexture != 0u && !isSecondary) {
+        vec2 texUV = inUV;
+        texUV.y = 1.0 - texUV.y;
+        vec3 orm = texture(sampler2D(textures[ORM_TEXTURE], samplers[LINEAR_SAMPLER]), texUV).rgb;
+        matAo *= orm.r;
+        matRoughness = orm.g;
+        matMetallic = orm.b;
+    }
+
     bool useEnvMap = (resurfacingUBO.hasEnvMap != 0u);
 
     vec3 color = cookTorrancePBR(inWorldPos, N,
