@@ -229,6 +229,104 @@ float ObjLoader::computeFaceArea(
     return totalArea;
 }
 
+void ObjLoader::subdivideFlat(NGonMesh& mesh, int levels) {
+    using Edge = std::pair<uint32_t, uint32_t>;
+    auto makeEdge = [](uint32_t a, uint32_t b) -> Edge {
+        return a < b ? Edge{a, b} : Edge{b, a};
+    };
+
+    for (int lvl = 0; lvl < levels; lvl++) {
+        uint32_t nVerts = static_cast<uint32_t>(mesh.positions.size());
+        uint32_t nFaces = static_cast<uint32_t>(mesh.faces.size());
+
+        mesh.normals.resize(nVerts, glm::vec3(0, 1, 0));
+        mesh.texCoords.resize(nVerts, glm::vec2(0));
+        mesh.colors.resize(nVerts, glm::vec3(1));
+
+        NGonMesh result;
+
+        // Copy original vertices unchanged
+        result.positions = mesh.positions;
+        result.normals   = mesh.normals;
+        result.texCoords = mesh.texCoords;
+        result.colors    = mesh.colors;
+
+        // Add face center vertices
+        std::vector<uint32_t> facePointIdx(nFaces);
+        for (uint32_t fi = 0; fi < nFaces; fi++) {
+            const auto& vi = mesh.faces[fi].vertexIndices;
+            uint32_t n = mesh.faces[fi].count;
+            glm::vec3 p(0), c(0), nm(0); glm::vec2 uv(0);
+            for (uint32_t i = 0; i < n; i++) {
+                p  += mesh.positions[vi[i]];
+                uv += mesh.texCoords[vi[i]];
+                c  += mesh.colors[vi[i]];
+                nm += mesh.normals[vi[i]];
+            }
+            float inv = 1.0f / float(n);
+            facePointIdx[fi] = static_cast<uint32_t>(result.positions.size());
+            result.positions.push_back(p * inv);
+            result.normals.push_back(glm::normalize(nm * inv));
+            result.texCoords.push_back(uv * inv);
+            result.colors.push_back(c * inv);
+        }
+
+        // Add edge midpoint vertices
+        std::map<Edge, uint32_t> edgePointIdx;
+        for (uint32_t fi = 0; fi < nFaces; fi++) {
+            const auto& vi = mesh.faces[fi].vertexIndices;
+            uint32_t n = mesh.faces[fi].count;
+            for (uint32_t i = 0; i < n; i++) {
+                Edge e = makeEdge(vi[i], vi[(i + 1) % n]);
+                if (edgePointIdx.count(e)) continue;
+                uint32_t a = e.first, b = e.second;
+                edgePointIdx[e] = static_cast<uint32_t>(result.positions.size());
+                result.positions.push_back((mesh.positions[a] + mesh.positions[b]) * 0.5f);
+                result.normals.push_back(glm::normalize(mesh.normals[a] + mesh.normals[b]));
+                result.texCoords.push_back((mesh.texCoords[a] + mesh.texCoords[b]) * 0.5f);
+                result.colors.push_back((mesh.colors[a] + mesh.colors[b]) * 0.5f);
+            }
+        }
+
+        // Create quads: corner, edge_next, face_center, edge_prev
+        uint32_t offset = 0;
+        for (uint32_t fi = 0; fi < nFaces; fi++) {
+            const auto& vi = mesh.faces[fi].vertexIndices;
+            uint32_t n = mesh.faces[fi].count;
+            uint32_t fp = facePointIdx[fi];
+
+            for (uint32_t i = 0; i < n; i++) {
+                uint32_t corner  = vi[i];
+                uint32_t ep_next = edgePointIdx[makeEdge(vi[i], vi[(i + 1) % n])];
+                uint32_t ep_prev = edgePointIdx[makeEdge(vi[(i + n - 1) % n], vi[i])];
+
+                NGonFace quad;
+                quad.vertexIndices = { corner, ep_next, fp, ep_prev };
+                quad.count = 4;
+                quad.offset = offset;
+                quad.normal = glm::vec4(computeFaceNormal(result.positions, quad.vertexIndices), 0.0f);
+                quad.center = glm::vec4(computeFaceCentroid(result.positions, quad.vertexIndices), 1.0f);
+                quad.area   = computeFaceArea(result.positions, quad.vertexIndices);
+
+                for (uint32_t idx : quad.vertexIndices)
+                    result.faceVertexIndices.push_back(idx);
+                offset += 4;
+
+                result.faces.push_back(std::move(quad));
+            }
+        }
+
+        result.nbVertices = static_cast<uint32_t>(result.positions.size());
+        result.nbFaces    = static_cast<uint32_t>(result.faces.size());
+
+        mesh = std::move(result);
+
+        std::cout << "Flat subdivided (level " << (lvl + 1) << "): "
+                  << mesh.nbFaces << " faces, "
+                  << mesh.nbVertices << " vertices" << std::endl;
+    }
+}
+
 void ObjLoader::subdivide(NGonMesh& mesh, int levels) {
     using Edge = std::pair<uint32_t, uint32_t>;
     auto makeEdge = [](uint32_t a, uint32_t b) -> Edge {

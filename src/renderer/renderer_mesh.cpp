@@ -1606,6 +1606,9 @@ void Renderer::loadMesh(const std::string& path) {
     if (subdivideLevel > 0) {
         ObjLoader::subdivide(ngon, subdivideLevel);
     }
+    if (subdivideFlatLevel > 0) {
+        ObjLoader::subdivideFlat(ngon, subdivideFlatLevel);
+    }
 
     HalfEdgeMesh heMesh = HalfEdgeBuilder::build(ngon);
     computeFace2Coloring(heMesh);

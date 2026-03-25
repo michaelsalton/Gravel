@@ -311,6 +311,7 @@ public:
     float chainmailSurfaceOffset = 0.1f;      // Normal lift to avoid mesh intersection
     bool triangulateMesh = false;
     int subdivideLevel = 0;  // 0=none, 1=4x, 2=16x, 3=64x faces
+    int subdivideFlatLevel = 0;  // 0=none, flat subdivision (no smoothing)
     bool useElementTypeTexture = false;
     bool useAOTexture = false;
     bool useMaskTexture = false;
