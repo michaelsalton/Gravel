@@ -387,6 +387,7 @@ public:
     bool resetLayout = false;
     std::string pendingMeshLoad;  // deferred mesh load (set by ImGui, processed between frames)
     std::string loadedMeshPath;   // path of the currently loaded mesh (for export)
+    bool materialPresetUseCurrentMesh = false;  // apply material presets to current mesh instead of icosphere
     const LevelPreset* pendingPreset = nullptr;  // post-load state to apply after mesh load
 
     // Loading overlay

@@ -527,6 +527,7 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         if (ImGui::Combo("Material", &selectedMaterial, materials, 7)) {
             applyMaterialPreset(selectedMaterial);
         }
+        ImGui::Checkbox("Apply to current mesh", &materialPresetUseCurrentMesh);
     }
     ImGui::End();
 
@@ -817,12 +818,13 @@ void Renderer::applyPresetDragonScales() {
 }
 
 void Renderer::applyMaterialPreset(int index) {
-    // All material presets use the icosphere
-    pendingMeshLoad = std::string(ASSETS_DIR) + "base_mesh/shapes/icosphere.obj";
-    for (int i = 0; i < static_cast<int>(assetMeshPaths.size()); i++) {
-        if (assetMeshPaths[i].find("icosphere") != std::string::npos) {
-            selectedMesh = i;
-            break;
+    if (!materialPresetUseCurrentMesh) {
+        pendingMeshLoad = std::string(ASSETS_DIR) + "base_mesh/shapes/icosphere.obj";
+        for (int i = 0; i < static_cast<int>(assetMeshPaths.size()); i++) {
+            if (assetMeshPaths[i].find("icosphere") != std::string::npos) {
+                selectedMesh = i;
+                break;
+            }
         }
     }
     triangulateMesh = false;

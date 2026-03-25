@@ -138,7 +138,7 @@ struct ResurfacingUBO {
     float proxyStartThreshold;         // NDC size where blending begins (offset 216)
     float proxyEndThreshold;           // NDC size where geometry is fully replaced (offset 220)
     uint  hasDiffuseTexture;
-    uint  hasEnvMap;           // diffuse texture loaded (offset 224)
+    uint  hasEnvMap;
 };
 
 // ============================================================================
