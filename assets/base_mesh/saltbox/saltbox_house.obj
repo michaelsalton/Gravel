@@ -1,7 +1,7 @@
 # Blender 5.0.1
 # www.blender.org
 mtllib saltbox_house.mtl
-o SM_saltbox_house_01
+o House
 v -3.817163 1.477489 2.655111
 v -3.817163 1.477489 3.688155
 v -3.817163 2.469211 3.688155
@@ -5662,7 +5662,7 @@ vt 0.357998 0.574325
 vt 0.448060 0.548793
 vt 0.358823 0.548793
 s 1
-usemtl lambert1
+usemtl M_House
 f 3/1/1 4/2/1 1/3/1
 f 3/1/1 1/3/1 2/4/1
 f 1811/1/1 1812/2/1 1809/3/1
