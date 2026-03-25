@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <map>
 #include <set>
+#include <unordered_map>
 
 NGonMesh ObjLoader::load(const std::string& filepath) {
     std::ifstream file(filepath);
@@ -93,23 +94,64 @@ NGonMesh ObjLoader::load(const std::string& filepath) {
         }
     }
 
-    // Remap normals and texcoords from OBJ indices to per-vertex arrays
-    // OBJ can have different counts for v/vn/vt, indexed independently per face
+    // Remap from OBJ's independent v/vt/vn indexing to unified per-vertex arrays.
+    // Vertices at UV or normal seams are split (duplicated) so each unique
+    // (position, texcoord, normal) combination gets its own vertex.
+    std::vector<glm::vec3> rawPositions = std::move(mesh.positions);
     std::vector<glm::vec3> rawNormals = std::move(mesh.normals);
     std::vector<glm::vec2> rawTexCoords = std::move(mesh.texCoords);
-    mesh.normals.resize(mesh.positions.size(), glm::vec3(0.0f, 0.0f, 1.0f));
-    mesh.texCoords.resize(mesh.positions.size(), glm::vec2(0.0f));
+    mesh.positions.clear();
+    mesh.normals.clear();
+    mesh.texCoords.clear();
 
-    for (const auto& face : mesh.faces) {
-        for (uint32_t i = 0; i < face.vertexIndices.size(); ++i) {
-            uint32_t vIdx = face.vertexIndices[i];
-            if (i < face.normalIndices.size() && face.normalIndices[i] < rawNormals.size()) {
-                mesh.normals[vIdx] = rawNormals[face.normalIndices[i]];
-            }
-            if (i < face.texCoordIndices.size() && face.texCoordIndices[i] < rawTexCoords.size()) {
-                mesh.texCoords[vIdx] = rawTexCoords[face.texCoordIndices[i]];
-            }
+    struct VertexKey {
+        uint32_t v, vt, vn;
+        bool operator==(const VertexKey& o) const { return v == o.v && vt == o.vt && vn == o.vn; }
+    };
+    struct VertexKeyHash {
+        size_t operator()(const VertexKey& k) const {
+            size_t h = std::hash<uint32_t>()(k.v);
+            h ^= std::hash<uint32_t>()(k.vt) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            h ^= std::hash<uint32_t>()(k.vn) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            return h;
         }
+    };
+    std::unordered_map<VertexKey, uint32_t, VertexKeyHash> vertexMap;
+
+    // Rebuild face vertex indices and faceVertexIndices with split vertices
+    mesh.faceVertexIndices.clear();
+    uint32_t newOffset = 0;
+    for (auto& face : mesh.faces) {
+        std::vector<uint32_t> newIndices;
+        for (uint32_t i = 0; i < face.vertexIndices.size(); ++i) {
+            uint32_t vi = face.vertexIndices[i];
+            uint32_t ti = (i < face.texCoordIndices.size()) ? face.texCoordIndices[i] + 1 : 0;
+            uint32_t ni = (i < face.normalIndices.size()) ? face.normalIndices[i] + 1 : 0;
+            VertexKey key{vi, ti, ni};
+
+            auto it = vertexMap.find(key);
+            uint32_t idx;
+            if (it != vertexMap.end()) {
+                idx = it->second;
+            } else {
+                idx = static_cast<uint32_t>(mesh.positions.size());
+                vertexMap[key] = idx;
+                mesh.positions.push_back(rawPositions[vi]);
+                mesh.normals.push_back((ni > 0 && (ni - 1) < rawNormals.size())
+                    ? rawNormals[ni - 1] : glm::vec3(0.0f, 0.0f, 1.0f));
+                mesh.texCoords.push_back((ti > 0 && (ti - 1) < rawTexCoords.size())
+                    ? rawTexCoords[ti - 1] : glm::vec2(0.0f));
+            }
+            newIndices.push_back(idx);
+        }
+        face.vertexIndices = newIndices;
+        face.offset = newOffset;
+        for (uint32_t idx : newIndices)
+            mesh.faceVertexIndices.push_back(idx);
+        newOffset += face.count;
+        // Normal/texcoord indices no longer needed after remapping
+        face.normalIndices.clear();
+        face.texCoordIndices.clear();
     }
     mesh.colors.resize(mesh.positions.size(), glm::vec3(1.0f));
 

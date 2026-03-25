@@ -4,10 +4,9 @@
 newmtl M_House
 Ns 250.000000
 Ka 1.000000 1.000000 1.000000
-Kd 0.500000 0.500000 0.500000
 Ks 0.500000 0.500000 0.500000
 Ke 0.000000 0.000000 0.000000
 Ni 1.000000
 d 1.000000
 illum 2
-map_Bump -bm 6.200000 C:/Users/msalt/Downloads/Texture Maps-20260325T020712Z-3-001/Texture Maps/SM_saltbox_house_01_N.png
+map_Kd diffuse.png
