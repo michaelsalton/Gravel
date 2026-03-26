@@ -25,6 +25,11 @@ struct NGonMesh {
     std::vector<NGonFace> faces;
     std::vector<uint32_t> faceVertexIndices;
 
+    // Maps each (possibly split) vertex back to its original OBJ position index.
+    // Used to remap per-vertex data from external tools (e.g. GRWM curvature).
+    std::vector<uint32_t> originalVertexIndices;
+    uint32_t originalVertexCount = 0;
+
     uint32_t nbVertices = 0;
     uint32_t nbFaces = 0;
 };

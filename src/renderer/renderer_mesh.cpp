@@ -1434,7 +1434,12 @@ void Renderer::loadGrwmPreprocess(const std::string& meshPath) {
         return;
     }
 
-    if (curvHdr.vertex_count != heNbVertices) {
+    // Check if we need vertex remapping (split vertices from UV/normal seams)
+    bool needsVertexRemap = (curvHdr.vertex_count != heNbVertices)
+                            && !cpuOriginalVertexIndices.empty()
+                            && curvHdr.vertex_count == cpuOriginalVertexCount;
+
+    if (curvHdr.vertex_count != heNbVertices && !needsVertexRemap) {
         std::cerr << "  Warning: curvature.bin vertex count (" << curvHdr.vertex_count
                   << ") != mesh (" << heNbVertices << ")" << std::endl;
         return;
@@ -1463,12 +1468,24 @@ void Renderer::loadGrwmPreprocess(const std::string& meshPath) {
                   << heNbFaces << " original faces" << std::endl;
     }
 
-    // --- Curvature (per-vertex, no remapping needed) ---
+    // --- Curvature (per-vertex, remap if vertices were split at UV/normal seams) ---
     {
-        std::vector<float> curvature(curvHdr.vertex_count);
+        std::vector<float> rawCurvature(curvHdr.vertex_count);
         std::ifstream f(curvPath, std::ios::binary);
         f.seekg(sizeof(PreprocessHeader));
-        f.read(reinterpret_cast<char*>(curvature.data()), curvature.size() * sizeof(float));
+        f.read(reinterpret_cast<char*>(rawCurvature.data()), rawCurvature.size() * sizeof(float));
+
+        std::vector<float> curvature;
+        if (needsVertexRemap) {
+            curvature.resize(heNbVertices);
+            for (uint32_t i = 0; i < heNbVertices; i++)
+                curvature[i] = rawCurvature[cpuOriginalVertexIndices[i]];
+            std::cout << "  Remapping curvature: " << curvHdr.vertex_count
+                      << " original -> " << heNbVertices << " split vertices" << std::endl;
+        } else {
+            curvature = std::move(rawCurvature);
+        }
+
         heCurvatureBuffer.create(device, physicalDevice,
             curvature.size() * sizeof(float), curvature.data());
 
@@ -1651,6 +1668,10 @@ void Renderer::loadMesh(const std::string& path) {
     if (subdivideFlatLevel > 0) {
         ObjLoader::subdivideFlat(ngon, subdivideFlatLevel);
     }
+
+    // Save vertex split mapping before building half-edge (for GRWM curvature remapping)
+    cpuOriginalVertexIndices = ngon.originalVertexIndices;
+    cpuOriginalVertexCount = ngon.originalVertexCount;
 
     HalfEdgeMesh heMesh = HalfEdgeBuilder::build(ngon);
     computeFace2Coloring(heMesh);

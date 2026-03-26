@@ -103,6 +103,8 @@ NGonMesh ObjLoader::load(const std::string& filepath) {
     mesh.positions.clear();
     mesh.normals.clear();
     mesh.texCoords.clear();
+    mesh.originalVertexCount = static_cast<uint32_t>(rawPositions.size());
+    mesh.originalVertexIndices.clear();
 
     struct VertexKey {
         uint32_t v, vt, vn;
@@ -141,6 +143,7 @@ NGonMesh ObjLoader::load(const std::string& filepath) {
                     ? rawNormals[ni - 1] : glm::vec3(0.0f, 0.0f, 1.0f));
                 mesh.texCoords.push_back((ti > 0 && (ti - 1) < rawTexCoords.size())
                     ? rawTexCoords[ti - 1] : glm::vec2(0.0f));
+                mesh.originalVertexIndices.push_back(vi);
             }
             newIndices.push_back(idx);
         }

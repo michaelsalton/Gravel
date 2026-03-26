@@ -517,6 +517,8 @@ public:
     std::vector<float>     cpuVertexFaceAreas;  // area of adjacent face, for bounding radius
     std::vector<glm::vec2> cpuFaceUVs;          // base UV per face element (first vertex texcoord)
     std::vector<int>       cpuFaceVertCounts;   // polygon vertex count per face (for pebble export)
+    std::vector<uint32_t>  cpuOriginalVertexIndices; // maps split vertex -> original OBJ position index
+    uint32_t               cpuOriginalVertexCount = 0;
     std::vector<glm::vec2> cpuVertexUVs;        // base UV per vertex element (vertex texcoord)
     std::vector<uint8_t>   cpuMaskPixels;       // mask texture R channel on CPU
     uint32_t cpuMaskWidth = 0, cpuMaskHeight = 0;
