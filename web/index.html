@@ -1,0 +1,1991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gravel — Real-Time Procedural Resurfacing</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0a0a;
+      --surface:   #111111;
+      --border:    #1f1f1f;
+      --muted:     #444;
+      --text-dim:  #888;
+      --text:      #c8c8c8;
+      --text-hi:   #f0f0f0;
+      --accent:    #e0d4b0;
+      --font:      'Inter', system-ui, -apple-system, sans-serif;
+      --mono:      'JetBrains Mono', 'Fira Mono', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 15px;
+      line-height: 1.7;
+      min-height: 100vh;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Layout ─────────────────────────────── */
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 2rem;
+    }
+
+    section { padding: 4rem 0; border-top: 1px solid var(--border); }
+    section:first-of-type { border-top: none; }
+
+    /* ── Nav ─────────────────────────────────── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(10,10,10,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    nav .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 52px;
+    }
+
+    .nav-brand {
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: var(--text-hi);
+      letter-spacing: 0.05em;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 1.8rem;
+      list-style: none;
+    }
+
+    .nav-links a {
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .nav-links a:hover { color: var(--text-hi); text-decoration: none; }
+
+    /* ── Hero ────────────────────────────────── */
+    #hero {
+      padding: 7rem 0 5rem;
+      border-top: none;
+    }
+
+    .hero-eyebrow {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 1.4rem;
+    }
+
+    h1 {
+      font-size: clamp(2.6rem, 6vw, 4.2rem);
+      font-weight: 700;
+      color: var(--text-hi);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      margin-bottom: 1.2rem;
+    }
+
+    .hero-sub {
+      font-size: 1rem;
+      color: var(--text-dim);
+      max-width: 560px;
+      margin-bottom: 2.4rem;
+    }
+
+    .hero-cta {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.6rem 1.3rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: all 0.15s;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #0a0a0a;
+    }
+
+    .btn-primary:hover {
+      background: #f0e8c8;
+      text-decoration: none;
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-outline:hover {
+      border-color: var(--muted);
+      color: var(--text-hi);
+      text-decoration: none;
+    }
+
+    /* ── Section headings ────────────────────── */
+    .section-label {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.6rem;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--text-hi);
+      margin-bottom: 1.4rem;
+    }
+
+    /* ── About ───────────────────────────────── */
+    #about h2 + h2,
+    #about .about-body ~ h2,
+    #about .features-grid ~ h2,
+    #about .pipeline ~ h2 {
+      margin-top: 4rem;
+    }
+
+    .about-body {
+      max-width: 640px;
+      color: var(--text);
+    }
+
+    .about-body p + p { margin-top: 1rem; }
+
+    .paper-cite {
+      margin-top: 1.6rem;
+      padding: 1rem 1.2rem;
+      background: var(--surface);
+      border-left: 2px solid var(--accent);
+      border-radius: 0 6px 6px 0;
+      font-size: 0.82rem;
+      color: var(--text-dim);
+      font-style: italic;
+    }
+
+    /* ── Features ────────────────────────────── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .feature-card {
+      background: var(--surface);
+      padding: 1.4rem 1.6rem;
+    }
+
+    .feature-icon {
+      font-size: 1.1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .feature-title {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--text-hi);
+      margin-bottom: 0.3rem;
+    }
+
+    .feature-desc {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+
+    /* ── Pipeline ────────────────────────────── */
+    .pipeline {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+      flex-wrap: wrap;
+    }
+
+    .pipeline-stage {
+      flex: 1;
+      min-width: 160px;
+      padding: 1.2rem 1.4rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      position: relative;
+    }
+
+    .pipeline-stage:not(:first-child) { border-left: none; }
+    .pipeline-stage:first-child { border-radius: 6px 0 0 6px; }
+    .pipeline-stage:last-child { border-radius: 0 6px 6px 0; }
+
+    .stage-num {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      margin-bottom: 0.4rem;
+    }
+
+    .stage-name {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 0.3rem;
+    }
+
+    .stage-desc {
+      font-size: 0.77rem;
+      color: var(--text-dim);
+      line-height: 1.45;
+    }
+
+    /* Arrow between stages */
+    .pipeline-arrow {
+      display: flex;
+      align-items: center;
+      padding: 0 0.4rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+      flex-shrink: 0;
+    }
+
+    /* ── Tech stack ──────────────────────────── */
+    .stack-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    .stack-table th {
+      text-align: left;
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 0 1rem 0.6rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .stack-table td {
+      padding: 0.65rem 1rem 0.65rem 0;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    .stack-table tr:last-child td { border-bottom: none; }
+
+    .stack-table td:first-child {
+      color: var(--text-dim);
+      white-space: nowrap;
+      min-width: 160px;
+    }
+
+    .stack-table td:last-child {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--text);
+    }
+
+    /* ── Requirements ────────────────────────── */
+    .req-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    .req-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.4rem 1.6rem;
+    }
+
+    .req-box h3 {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-hi);
+      margin-bottom: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+
+    .req-box ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .req-box li {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--text-dim);
+      padding-left: 1rem;
+      position: relative;
+    }
+
+    .req-box li::before {
+      content: '·';
+      position: absolute;
+      left: 0;
+      color: var(--accent);
+    }
+
+    /* ── Footer ──────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2.5rem 0;
+    }
+
+    footer .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .footer-left {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 1.4rem;
+    }
+
+    .footer-links a {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+    }
+
+    .footer-links a:hover { color: var(--text-hi); text-decoration: none; }
+
+    /* ── Biography / Read-Along ──────────────── */
+    .bio-chapter {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2.5rem;
+      align-items: center;
+      padding: 3rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .bio-chapter:last-child { border-bottom: none; }
+
+    .bio-chapter.reverse .bio-text { order: 2; }
+    .bio-chapter.reverse .bio-media { order: 1; }
+
+    .bio-chapter-num {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .bio-chapter-num::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .bio-title {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--text-hi);
+      margin-bottom: 0.8rem;
+      line-height: 1.3;
+    }
+
+    .bio-body {
+      font-size: 0.88rem;
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    .bio-body p + p { margin-top: 0.8rem; }
+
+    .bio-body strong { color: var(--text-hi); font-weight: 600; }
+
+    .bio-detail {
+      margin-top: 1rem;
+      padding: 0.8rem 1rem;
+      background: var(--surface);
+      border-left: 2px solid var(--accent);
+      border-radius: 0 4px 4px 0;
+      font-family: var(--mono);
+      font-size: 0.76rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+
+    .bio-media {
+      display: grid;
+      gap: 6px;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .bio-media.grid-1 { grid-template-columns: 1fr; }
+    .bio-media.grid-2 { grid-template-columns: 1fr 1fr; }
+    .bio-media.grid-3 { grid-template-columns: 1fr 1fr; }
+    .bio-media.grid-4 { grid-template-columns: 1fr 1fr; }
+
+    .bio-media-item {
+      position: relative;
+      border-radius: 6px;
+    }
+
+    .bio-media-item img,
+    .bio-media-item video {
+      width: 100%;
+      display: block;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      transition: transform 0.3s ease, filter 0.3s ease;
+      cursor: pointer;
+    }
+
+    .bio-media-item .img-caption {
+      display: none;
+    }
+
+    .bio-media-item .item-desc {
+      padding: 0.75rem 0.9rem;
+      font-size: 0.82rem;
+      line-height: 1.55;
+      color: var(--text-lo);
+      background: rgba(255,255,255,0.03);
+      border-top: 1px solid var(--border);
+      border-radius: 0 0 6px 6px;
+    }
+
+    .bio-media.grid-3 .bio-media-item:first-child {
+      grid-column: 1 / -1;
+    }
+
+    @media (max-width: 768px) {
+      .bio-chapter {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+      }
+      .bio-chapter.reverse .bio-text { order: 1; }
+      .bio-chapter.reverse .bio-media { order: 2; }
+    }
+
+    /* ── Gallery ─────────────────────────────── */
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .gallery-item {
+      border-radius: 6px;
+      overflow: hidden;
+      position: relative;
+      aspect-ratio: 1 / 1;
+      cursor: pointer;
+      line-height: 0;
+    }
+
+    .gallery-item img,
+    .gallery-item video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.3s ease, filter 0.3s ease;
+      border-radius: 6px;
+    }
+
+    .gallery-item::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 40%);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+      border-radius: 6px;
+    }
+
+    .gallery-item:hover img,
+    .gallery-item:hover video {
+      transform: scale(1.03);
+      filter: brightness(1.1);
+    }
+
+    .gallery-item:hover::after {
+      opacity: 1;
+    }
+
+    .gallery-item .img-caption {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 0.8rem 1rem;
+      font-size: 0.75rem;
+      color: var(--text-hi);
+      font-family: var(--mono);
+      letter-spacing: 0.03em;
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      z-index: 2;
+      line-height: 1.4;
+    }
+
+    .gallery-item:hover .img-caption {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Lightbox */
+    .lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(0,0,0,0.92);
+      backdrop-filter: blur(20px);
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      cursor: zoom-out;
+    }
+
+    .lightbox.active {
+      display: flex;
+    }
+
+    .lightbox-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      max-width: 90vw;
+      max-height: 92vh;
+      cursor: default;
+    }
+
+    .lightbox-content img,
+    .lightbox-content video {
+      max-width: 90vw;
+      max-height: 78vh;
+      border-radius: 8px 8px 0 0;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    }
+
+    .lightbox-content video.lb-hidden,
+    .lightbox-content img.lb-hidden {
+      display: none;
+    }
+
+    .lightbox-caption {
+      width: 100%;
+      max-width: 90vw;
+      padding: 0.8rem 1.2rem;
+      font-size: 0.85rem;
+      line-height: 1.55;
+      color: var(--text-lo);
+      background: rgba(17,17,17,0.85);
+      border-radius: 0 0 8px 8px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+      text-align: center;
+    }
+
+    .lightbox-caption:empty {
+      display: none;
+    }
+
+    .lightbox-close {
+      position: absolute;
+      top: 1.2rem;
+      right: 1.5rem;
+      font-size: 1.4rem;
+      color: var(--text-dim);
+      cursor: pointer;
+      background: none;
+      border: none;
+      font-family: var(--mono);
+      transition: color 0.15s;
+      z-index: 1001;
+    }
+
+    .lightbox-close:hover { color: var(--text-hi); }
+
+    .lightbox-nav {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 1.6rem;
+      color: var(--text-dim);
+      cursor: pointer;
+      background: rgba(17,17,17,0.6);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      transition: color 0.15s, border-color 0.15s;
+      z-index: 1001;
+    }
+
+    .lightbox-nav:hover { color: var(--text-hi); border-color: var(--muted); }
+    .lightbox-prev { left: 1.5rem; }
+    .lightbox-next { right: 1.5rem; }
+
+    .lightbox-counter {
+      position: absolute;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+    }
+
+    /* Gallery filters */
+    .gallery-filters {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.6rem;
+    }
+
+    .filter-btn {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      padding: 0.35rem 0.9rem;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .filter-btn:hover { border-color: var(--muted); color: var(--text); }
+    .filter-btn.active { background: var(--accent); color: #0a0a0a; border-color: var(--accent); }
+
+    /* ── Responsive ──────────────────────────── */
+    @media (max-width: 900px) {
+      .gallery-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 600px) {
+      .gallery-grid { grid-template-columns: 1fr; }
+      .req-cols { grid-template-columns: 1fr; }
+      .pipeline { flex-direction: column; }
+      .pipeline-stage { border-radius: 0 !important; border-left: 1px solid var(--border) !important; border-top: none; }
+      .pipeline-stage:first-child { border-top: 1px solid var(--border) !important; border-radius: 6px 6px 0 0 !important; }
+      .pipeline-stage:last-child { border-radius: 0 0 6px 6px !important; }
+      .pipeline-arrow { display: none; }
+      .lightbox-nav { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav>
+    <div class="container">
+      <span class="nav-brand">gravel &nbsp;·&nbsp; Michael Salton</span>
+      <ul class="nav-links">
+        <li><a href="#about">About</a></li>
+        <li><a href="#demo">Demo</a></li>
+        <li><a href="#deep-dive">Deep Dive</a></li>
+        <li><a href="#gallery">Gallery</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section id="hero">
+    <div class="container">
+      <p class="hero-eyebrow">Michael Salton</p>
+      <h1>Real-Time Procedural<br>Resurfacing</h1>
+      <p class="hero-sub">
+        A from-scratch C++/Vulkan implementation of GPU mesh shader-based procedural
+        resurfacing — generating complex geometry entirely on-chip at real-time frame rates.
+      </p>
+      <div class="hero-cta">
+      </div>
+    </div>
+  </section>
+
+  <!-- About -->
+  <section id="about">
+    <div class="container">
+      <p class="section-label">Overview</p>
+      <h2>What is Gravel?</h2>
+      <div class="about-body">
+        <p>
+          Gravel is a real-time procedural resurfacing framework built on Vulkan's mesh shader
+          pipeline. It takes a base mesh and dynamically generates new geometric surfaces on every
+          face — including parametric shapes, B-spline control cages, and procedural pebbles —
+          without relying on traditional vertex input assembly.
+        </p>
+        <p>
+          All geometry originates from storage buffers and is synthesized entirely on-chip inside
+          the task and mesh shader stages. This allows for hardware-accelerated amplification of
+          geometry with adaptive LOD, frustum culling, and back-face culling all happening at the
+          GPU level.
+        </p>
+        <div class="paper-cite">
+          Based on: "Real-time procedural resurfacing using GPU mesh shader" — Raad et al.,
+          <em>Computer Graphics Forum</em> 44(2), Eurographics 2025.
+        </div>
+      </div>
+
+      <h2>Features</h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">⬡</div>
+          <div class="feature-title">Parametric Surfaces</div>
+          <div class="feature-desc">Torus, sphere, cone, cylinder, and hemisphere.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">◈</div>
+          <div class="feature-title">B-Spline Control Cages</div>
+          <div class="feature-desc">Bicubic B-spline and Bézier surfaces with configurable polynomial degree.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">○</div>
+          <div class="feature-title">Procedural Pebbles</div>
+          <div class="feature-desc">On-the-fly control cage construction with noise perturbation.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">◫</div>
+          <div class="feature-title">Screen-Space LOD</div>
+          <div class="feature-desc">Adaptive level-of-detail driven by per-element screen coverage.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">◁</div>
+          <div class="feature-title">Frustum &amp; Back-Face Culling</div>
+          <div class="feature-desc">GPU-side culling in the task shader stage before any geometry is emitted.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">▦</div>
+          <div class="feature-title">Control Maps</div>
+          <div class="feature-desc">Per-face element type selection via texture — mix surface types across a mesh.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">⊹</div>
+          <div class="feature-title">Mesh Amplification</div>
+          <div class="feature-desc">Hardware-aware workgroup dispatch scales with visible geometry complexity.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">⚙</div>
+          <div class="feature-title">ImGui Debug UI</div>
+          <div class="feature-desc">Real-time parameter tweaking with a Vulkan-backend ImGui overlay.</div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">◉</div>
+          <div class="feature-title">PBR Pipeline</div>
+          <div class="feature-desc">Physically-based rendering with metallic-roughness materials and environment lighting.</div>
+        </div>
+      </div>
+
+      <h2>GPU Pipeline</h2>
+      <div class="pipeline">
+        <div class="pipeline-stage">
+          <div class="stage-num">STAGE 01</div>
+          <div class="stage-name">Task Shader</div>
+          <div class="stage-desc">Frustum culling, back-face culling, LOD selection, and workgroup amplification.</div>
+        </div>
+        <div class="pipeline-stage">
+          <div class="stage-num">STAGE 02</div>
+          <div class="stage-name">Mesh Shader</div>
+          <div class="stage-desc">On-chip geometry generation from storage buffers — no vertex input assembly.</div>
+        </div>
+        <div class="pipeline-stage">
+          <div class="stage-num">STAGE 03</div>
+          <div class="stage-name">Fragment Shader</div>
+          <div class="stage-desc">Material shading and lighting evaluation on the generated surfaces.</div>
+        </div>
+      </div>
+
+      <h2>Stack</h2>
+      <table class="stack-table">
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th>Technology</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Language (host)</td><td>C++17</td></tr>
+          <tr><td>Language (shaders)</td><td>GLSL · GL_EXT_mesh_shader</td></tr>
+          <tr><td>Graphics API</td><td>Vulkan 1.3 · VK_EXT_mesh_shader</td></tr>
+          <tr><td>Shader compilation</td><td>glslangValidator → SPIR-V</td></tr>
+          <tr><td>Windowing</td><td>GLFW</td></tr>
+          <tr><td>Math</td><td>GLM</td></tr>
+          <tr><td>UI</td><td>ImGui (Vulkan backend)</td></tr>
+          <tr><td>Mesh loading</td><td>OBJ / GLTF</td></tr>
+          <tr><td>Build system</td><td>CMake 3.20+</td></tr>
+        </tbody>
+      </table>
+
+      <br>
+
+      <div class="req-cols">
+        <div class="req-box">
+          <h3>Hardware</h3>
+          <ul>
+            <li>NVIDIA GPU with mesh shader support</li>
+            <li>Tested on RTX 3080 (Ampere)</li>
+            <li>Driver 535+</li>
+          </ul>
+        </div>
+        <div class="req-box">
+          <h3>Software</h3>
+          <ul>
+            <li>Vulkan SDK 1.3+</li>
+            <li>CMake 3.20+</li>
+            <li>C++17 compiler</li>
+            <li>glslangValidator</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Demo -->
+  <section id="demo">
+    <div class="container">
+      <p class="section-label">Demo</p>
+      <h2>Demo</h2>
+      <div class="gallery-grid">
+        <div class="gallery-item">
+          <img src="assets/images/chainmail_shirt.png" alt="Chainmail shirt" loading="lazy">
+          <span class="img-caption">Chainmail shirt</span>
+        </div>
+        <div class="gallery-item">
+          <img src="assets/images/chainmail_closeup.png" alt="Chainmail close-up" loading="lazy">
+          <span class="img-caption">Chainmail — close-up</span>
+        </div>
+        <div class="gallery-item">
+          <img src="assets/images/chainmail_PBR_environment_reflect_close_up.png" alt="Chainmail PBR reflection — close-up" loading="lazy">
+          <span class="img-caption">Chainmail reflection — close-up</span>
+        </div>
+        <div class="gallery-item">
+          <img src="assets/images/chainmail_PBR_environment_reflect_medium_close_up.png" alt="Chainmail PBR reflection — medium" loading="lazy">
+          <span class="img-caption">Chainmail reflection — medium</span>
+        </div>
+        <div class="gallery-item">
+          <img src="assets/images/chainmail_PBR_environment_reflect_patch.png" alt="Chainmail PBR reflection — patch" loading="lazy">
+          <span class="img-caption">Chainmail reflection — patch</span>
+        </div>
+        <div class="gallery-item">
+          <img src="assets/images/material_chainmail.png" alt="Chainmail material" loading="lazy">
+          <span class="img-caption">Chainmail material</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Deep Dive / Biography -->
+  <section id="deep-dive">
+    <div class="container">
+      <p class="section-label">Deep Dive</p>
+      <h2>Project Biography</h2>
+
+      <!-- Chapter 1: The Problem -->
+      <div class="bio-chapter">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 01</div>
+          <div class="bio-title">The Problem: Static Geometry in a Dynamic World</div>
+          <div class="bio-body">
+            <p>Traditional rendering pipelines store every vertex of every surface in memory before a single pixel is drawn. For complex scenes — a gravel road, a cobblestone wall, a field of pebbles — that means millions of pre-computed vertices eating GPU memory and bandwidth.</p>
+            <p><strong>Procedural resurfacing</strong> flips the script. Instead of storing geometry, we <em>generate</em> it on-the-fly. Start with a simple base mesh — like a cube — and let the GPU synthesize detailed surfaces on every face at render time, entirely on-chip.</p>
+            <div class="bio-detail">Based on: "Real-time procedural resurfacing using GPU mesh shader" — Raad et al., Eurographics 2025</div>
+          </div>
+        </div>
+        <div class="bio-media grid-1">
+          <div class="bio-media-item" data-desc="The raw wireframe of the base mesh before any procedural resurfacing. Each edge represents a face boundary that will later host a procedural element — spheres, scales, pebbles, or hair strands.">
+            <img src="assets/images/base_mesh_wireframe.png" alt="Base mesh wireframe" loading="lazy">
+            <span class="img-caption">Base mesh — wireframe</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 2: The Base Mesh -->
+      <div class="bio-chapter reverse">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 02</div>
+          <div class="bio-title">Starting Point: The Base Mesh</div>
+          <div class="bio-body">
+            <p>Everything begins with a simple base mesh stored as a set of faces, vertices, and connectivity data in GPU storage buffers. The wireframe shows the raw structure, while per-face coloring reveals how each face becomes a distinct <strong>resurfacing site</strong>.</p>
+            <p>Triangulating the faces prepares the mesh for the GPU pipeline — each triangle becomes an input primitive that the task shader can cull, classify, and dispatch to the mesh shader for geometry generation.</p>
+          </div>
+        </div>
+        <div class="bio-media grid-2">
+          <div class="bio-media-item" data-desc="Each face is assigned a unique colour, making it easy to verify that the task shader correctly identifies and dispatches individual faces for procedural element generation.">
+            <img src="assets/images/base_mesh_facees.png" alt="Base mesh with per-face coloring" loading="lazy">
+            <span class="img-caption">Base mesh — per-face coloring</span>
+          </div>
+          <div class="bio-media-item" data-desc="The mesh after triangulation — every quad is split into two triangles. This is the input geometry that the mesh shader reads to compute face normals, tangents, and UVs for element placement.">
+            <img src="assets/images/base_mesh_triangulated.png" alt="Triangulated base mesh" loading="lazy">
+            <span class="img-caption">Base mesh — triangulated</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 3: Mesh Amplification -->
+      <div class="bio-chapter">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 03</div>
+          <div class="bio-title">Mesh Amplification: From 6 Faces to Thousands</div>
+          <div class="bio-body">
+            <p>The mesh shader pipeline's superpower is <strong>amplification</strong> — the ability to take a single input primitive and emit many output primitives. Each face of the base mesh is subdivided, and for every sub-face, a new geometric element is generated.</p>
+            <p>At moderate subdivision, each cube face spawns dozens of colored patches. Crank the subdivision higher and the cube becomes densely tessellated — all dispatched as hardware workgroups with zero vertex buffer overhead. The per-face coloring shows exactly which sub-patch belongs to which original face.</p>
+            <div class="bio-detail">Workgroup dispatch is hardware-aware: the task shader calculates how many mesh shader workgroups to emit based on visible geometry complexity.</div>
+          </div>
+        </div>
+        <div class="bio-media grid-2">
+          <div class="bio-media-item" data-desc="One level of subdivision increases the face count, giving the procedural elements a smoother, denser coverage. More faces means more elements, and each element is smaller relative to the surface.">
+            <img src="assets/images/base_mesh_subdivided.png" alt="Subdivided base mesh" loading="lazy">
+            <span class="img-caption">Base mesh — subdivided</span>
+          </div>
+          <div class="bio-media-item" data-desc="At high subdivision the mesh has thousands of tiny faces. Procedural elements become very dense, approaching a continuous surface appearance — at the cost of higher mesh shader workgroup counts.">
+            <img src="assets/images/base_mesh_subdivided_even_more.png" alt="Highly subdivided base mesh" loading="lazy">
+            <span class="img-caption">Base mesh — high subdivision</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 4: The GPU Pipeline -->
+      <div class="bio-chapter reverse">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 04</div>
+          <div class="bio-title">The Three-Stage Pipeline</div>
+          <div class="bio-body">
+            <p>Gravel replaces the traditional vertex pipeline with Vulkan's <strong>mesh shader pipeline</strong>, built on the <code>VK_EXT_mesh_shader</code> extension.</p>
+            <p>The <strong>task shader</strong> runs first — performing frustum culling, back-face culling, and LOD selection. The task ID visualization shows how workgroups are distributed across the mesh. The <strong>element type</strong> map shows per-face surface type selection — each color represents a different procedural element assigned to that face.</p>
+            <p>The <strong>mesh shader</strong> then reads base mesh data from storage buffers and emits fully-formed triangles. The <strong>fragment shader</strong> handles material shading and lighting.</p>
+          </div>
+        </div>
+        <div class="bio-media grid-4">
+          <div class="bio-media-item" data-desc="Each colour represents a unique task shader workgroup. This debug view confirms that workgroups are correctly distributed across the mesh, with each group responsible for generating one procedural element.">
+            <img src="assets/images/task_id.png" alt="Task shader workgroup ID visualization" loading="lazy">
+            <span class="img-caption">Task shader — workgroup IDs</span>
+          </div>
+          <div class="bio-media-item" data-desc="Faces are colour-coded by which procedural element type they will spawn — sphere, torus, cone, pebble, scale, or hair. This per-face selection is driven by a user-configurable element assignment map.">
+            <img src="assets/images/element_type.png" alt="Per-face element type selection" loading="lazy">
+            <span class="img-caption">Element type — per-face selection</span>
+          </div>
+          <div class="bio-media-item" data-desc="RGB-encoded surface normals — red is the X axis, green is Y, and blue is Z. This debug view verifies that normals are correctly computed and will orient procedural elements outward from the surface.">
+            <img src="assets/images/normals.png" alt="Surface normal visualization" loading="lazy">
+            <span class="img-caption">Surface normals — RGB debug view</span>
+          </div>
+          <div class="bio-media-item" data-desc="UV coordinates visualised as colour gradients across the mesh. These coordinates drive texture mapping on procedural elements and are used to position slot-based element placements within each face.">
+            <img src="assets/images/uvs.png" alt="UV coordinate visualization" loading="lazy">
+            <span class="img-caption">UV coordinates — texture mapping</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 5: Parametric Surfaces -->
+      <div class="bio-chapter">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 05</div>
+          <div class="bio-title">Parametric Surfaces</div>
+          <div class="bio-body">
+            <p>The first family of surfaces computed on-chip are <strong>analytical parametric shapes</strong> — defined purely by mathematical equations evaluated in the mesh shader.</p>
+            <p>Spheres and hemispheres emerge from each face of the base mesh, generated entirely from parametric equations. The parametric surface library extends further: <strong>torus</strong> shapes are computed by sweeping a circle along a circular path, <strong>cylinders</strong> produce a riveted, industrial texture, and <strong>cones</strong> create a studded, spiky surface. Each shape is defined by a compact set of parameters — no geometry is stored, only equations.</p>
+            <div class="bio-detail">Supported shapes: torus, sphere, cone, cylinder, hemisphere, Möbius strip, Klein bottle, hyperbolic paraboloid, helicoid, and egg.</div>
+          </div>
+        </div>
+        <div class="bio-media grid-3">
+          <div class="bio-media-item" data-desc="Each face spawns a sphere computed from sin/cos evaluations in the mesh shader. The sphere is centred at the face midpoint and oriented along the face normal, with radius scaled by face area.">
+            <img src="assets/images/procedural_element_parametric_sphere.png" alt="Parametric sphere resurfacing" loading="lazy">
+            <span class="img-caption">Parametric sphere</span>
+          </div>
+          <div class="bio-media-item" data-desc="A torus per face, generated by revolving a circle around an offset axis. Torus elements are the building blocks for chainmail — each ring in a chainmail mesh is one of these toruses.">
+            <img src="assets/images/procedural_element_parametric_torus.png" alt="Parametric torus resurfacing" loading="lazy">
+            <span class="img-caption">Parametric torus</span>
+          </div>
+          <div class="bio-media-item" data-desc="Cones taper from a circular base to a point along the face normal. Adjusting the apex ratio and height produces shapes ranging from flat discs to tall spikes, useful for scales or spike-like effects.">
+            <img src="assets/images/procedural_element_parametric_cone.png" alt="Parametric cone resurfacing" loading="lazy">
+            <span class="img-caption">Parametric cone</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 6: B-Spline Cage Pebbles -->
+      <div class="bio-chapter reverse">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 06</div>
+          <div class="bio-title">B-Spline Cage Pebbles</div>
+          <div class="bio-body">
+            <p>Not all procedural elements come from analytical equations. <strong>B-spline cage pebbles</strong> use a 4&times;4 control-point cage constructed on-the-fly in the mesh shader and evaluated as a bicubic tensor-product surface — producing smooth, organic stone shapes entirely on-chip.</p>
+            <p>Each face of the base mesh spawns a pebble by building a <strong>16-vertex control cage</strong> in shared memory. The cage is organized into four rows: the base face boundary, an inner fill ring, a rounded extrusion ring, and a fully extruded top. The mesh shader uses the <strong>uniform cubic B-spline basis matrix</strong> to evaluate the surface — first along rows (u direction), then interpolating those results along columns (v direction). Because cubic B-splines approximate rather than interpolate their control points, an <strong>interpolation compensation</strong> step adjusts vertex positions so the surface passes through the actual face vertices.</p>
+            <p>Per-face variation comes from a <strong>PCG random number generator</strong> seeded by face ID, randomizing extrusion height and proportion. On top of the B-spline surface, <strong>3D Perlin noise with analytical gradients</strong> displaces each vertex along its surface normal, perturbing both position and shading normal simultaneously. The noise is sampled in world space to avoid seams at patch boundaries, producing natural, irregular pebble shapes that never repeat.</p>
+            <div class="bio-detail">Tessellation is a power-of-two grid (up to 9&times;9 = 81 vertices per workgroup). For higher subdivision, hierarchical multi-workgroup tiling kicks in — each sub-workgroup evaluates a 9&times;9 region of the surface with edge stitching to prevent T-junctions.</div>
+          </div>
+        </div>
+        <div class="bio-media grid-1">
+          <div class="bio-media-item" data-desc="A single pebble generated from a 4×4 B-spline control cage built on-the-fly in the mesh shader. Perlin noise displacement along surface normals gives each pebble a unique, organic stone shape.">
+            <img src="assets/images/procedural_element_pebble.png" alt="Procedural pebble element" loading="lazy">
+            <span class="img-caption">B-spline cage pebble</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 7: Dragon Scales -->
+      <div class="bio-chapter">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 07</div>
+          <div class="bio-title">Dragon Scales</div>
+          <div class="bio-body">
+            <p>Unlike the analytically defined parametric shapes, dragon scales are driven by an <strong>artist-authored 11&times;11 B-spline control cage</strong> (121 control points) loaded from an OBJ file into a GPU SSBO at startup — zero per-frame CPU overhead. The mesh shader evaluates this as a bicubic tensor-product surface, mapping UV patch indices to 4&times;4 subsets of the control grid and computing position via the uniform cubic B-spline basis matrix.</p>
+            <p>Normals are computed by <strong>central finite differences</strong> — offsetting UV by a small epsilon in each direction and taking the cross product of the resulting tangent vectors. The evaluated geometry is normalized into unit space using a precomputed AABB, then axis-remapped so the scale's curvature aligns outward along the face normal via <code>offsetVertex()</code>.</p>
+            <p>Scale overlap is a natural result of sizing each element by <strong>sqrt(faceArea) &times; userScaling</strong> — scaling elements larger than their host face causes adjacent scales to layer over each other. To break visual uniformity, the task shader applies <strong>Rodrigues' rotation formula</strong> to the edge tangent around the face normal, using a golden-ratio hash (<code>fract(faceID &times; 0.618...)</code>) to distribute rotation angles with low discrepancy. The result is a dense, shingled surface where no two adjacent scales face exactly the same direction.</p>
+            <div class="bio-detail">The scale LUT is sorted into V-major grid order by UV coordinate at load time, uploaded as a vec4 SSBO at binding 6, and shared across all mesh and task shader invocations.</div>
+          </div>
+        </div>
+        <div class="bio-media grid-1">
+          <div class="bio-media-item" data-desc="An artist-authored 11×11 B-spline control cage (121 points) loaded from an OBJ file. The mesh shader evaluates this as a bicubic tensor-product surface — sizing and rotating each scale per face using golden-ratio hashing.">
+            <img src="assets/images/procedural_element_dragon_scale.png" alt="Procedural dragon scale element" loading="lazy">
+            <span class="img-caption">Dragon scale</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 8: Procedural Fur -->
+      <div class="bio-chapter reverse">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 08</div>
+          <div class="bio-title">Procedural Fur</div>
+          <div class="bio-body">
+            <p><strong>Parametric hair</strong> pushes cone aspect ratios to the extreme — thousands of thin strands generated entirely on-chip, reading as procedural fur. Each strand follows the surface normal of its parent face, with slight randomization in length and direction to produce a natural, organic look.</p>
+            <p>The technique scales from character bodies to arbitrary meshes. The <strong>dragon hair animation</strong> shows fur reacting to skeletal motion in real time, while the <strong>hairy man</strong> demonstrates full-body fur coverage — all generated per-frame in the mesh shader with zero pre-authored strand data.</p>
+          </div>
+        </div>
+        <div class="bio-media grid-1">
+          <div class="bio-media-item" data-desc="Close-up of procedural fur strands reacting to skeletal animation in real time. Each strand is a thin cone generated per-frame in the mesh shader — no pre-authored strand data is used.">
+            <video autoplay loop muted playsinline>
+              <source src="assets/videos/close_up_dragon_hair_animation.webm" type="video/webm">
+            </video>
+            <span class="img-caption">Dragon hair — animated</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 9: LOD -->
+      <div class="bio-chapter">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 09</div>
+          <div class="bio-title">Screen-Space Level of Detail</div>
+          <div class="bio-body">
+            <p>Generating thousands of high-tessellation elements per frame is expensive. The <strong>screen-space LOD system</strong> solves this by adapting each element's geometric detail based on its projected pixel coverage, computed in the task shader before any geometry is emitted.</p>
+            <p>The comparison is striking: at <strong>low geometry</strong>, each procedural element uses minimal triangles — fast to render but visibly faceted. At <strong>high geometry</strong>, the same elements are densely tessellated and smooth. The LOD system transitions between these levels per-element, so nearby faces run at high detail while distant ones stay cheap.</p>
+            <div class="bio-detail">LOD transitions happen per-element, not per-object — nearby faces of the same mesh can run at different detail levels simultaneously.</div>
+          </div>
+        </div>
+        <div class="bio-media grid-2">
+          <div class="bio-media-item" data-desc="At low LOD the mesh shader reduces tessellation to just a few triangles per element. Distant objects use this mode to save GPU budget while maintaining the overall surface silhouette.">
+            <img src="assets/images/procedural_element_low_geometry.png" alt="Low geometry LOD" loading="lazy">
+            <span class="img-caption">LOD — low geometry</span>
+          </div>
+          <div class="bio-media-item" data-desc="At high LOD each element is tessellated to full resolution — smooth, round surfaces with no visible faceting. Close-up objects get this treatment for maximum visual fidelity.">
+            <img src="assets/images/procedural_element_high_geometry.png" alt="High geometry LOD" loading="lazy">
+            <span class="img-caption">LOD — high geometry</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 10: GRWM -->
+      <div class="bio-chapter reverse">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 10</div>
+          <div class="bio-title">GRWM: Geometry Resampling and Weighting for Meshes</div>
+          <div class="bio-body">
+            <p><strong>GRWM</strong> is a standalone CUDA-based GPU preprocessing pipeline that analyses a mesh before rendering and produces three binary buffers consumed by Gravel at load time: <strong>per-vertex mean curvature</strong> (via cotangent Laplacian and cuSPARSE), <strong>per-face feature edge flags</strong> (via dihedral angle detection), and <strong>priority-sorted slot grids</strong> for multi-element spawning per face.</p>
+            <p>At render time, the task shader uses these buffers for <strong>curvature-aware density modulation</strong> — scaling element size based on local surface curvature so high-curvature regions get denser, more detailed coverage. <strong>Feature edge enforcement</strong> boosts elements on detected feature edges while shrinking non-feature faces, preserving important silhouette detail. Both effects blend with a global intensity slider.</p>
+            <p><strong>Slot placement</strong> enables multiple procedural elements per face. Each face gets up to 64 priority-sorted UV positions generated via Murmur3 hashing, with priority scores combining distance-from-center, local curvature, and a jitter term. The task shader dispatches compound indices encoding face ID and slot index, interpolating position and normal at each slot's barycentric coordinates. CUB segmented sort ensures the highest-priority slots are always spawned first.</p>
+            <div class="bio-detail">GRWM runs as a background process — the render loop continues while preprocessing completes. On finish, buffers are hot-loaded into GPU SSBOs the next frame with zero pipeline stalls.</div>
+          </div>
+        </div>
+        <div class="bio-media grid-3">
+          <div class="bio-media-item" data-desc="Baseline placement: one element per face with uniform sizing. Every face gets the same treatment regardless of surface curvature, producing even but unoptimised coverage across the bunny.">
+            <img src="assets/images/bunny_uniform_element_placement.png" alt="Bunny — uniform element placement" loading="lazy">
+            <span class="img-caption">Uniform element placement</span>
+          </div>
+          <div class="bio-media-item" data-desc="GRWM's curvature buffer drives density modulation — high-curvature regions like ears, paws, and creases receive more and smaller elements while flat areas stay sparser, concentrating detail where it matters most.">
+            <img src="assets/images/bunny_curvature_aware_placement.png" alt="Bunny — curvature-aware placement" loading="lazy">
+            <span class="img-caption">Curvature-aware placement</span>
+          </div>
+          <div class="bio-media-item" data-desc="A heatmap of per-vertex mean curvature computed via the cotangent Laplacian. Warm colours indicate high curvature (edges, tips) and cool colours show flat regions — this data drives the adaptive density system.">
+            <img src="assets/images/bunny_curvature_uniform_placement.png" alt="Bunny — curvature uniform placement heatmap" loading="lazy">
+            <span class="img-caption">Curvature heatmap</span>
+          </div>
+          <div class="bio-media-item" data-desc="Feature edges detected by dihedral angle thresholding are highlighted in orange. The task shader uses these flags to boost element density along sharp creases, preserving important silhouette detail.">
+            <img src="assets/images/bunny_feature_edge.png" alt="Bunny — feature edge detection" loading="lazy">
+            <span class="img-caption">Feature-edge detection</span>
+          </div>
+          <div class="bio-media-item" data-desc="A single slot per face — each face spawns exactly one procedural element at its centroid. This is the simplest slot configuration and the starting point for multi-element placement.">
+            <img src="assets/images/bunny_slot_placement_single.png" alt="Bunny — single slot placement" loading="lazy">
+            <span class="img-caption">Slot placement — single</span>
+          </div>
+          <div class="bio-media-item" data-desc="With 64 priority-sorted slots per face, each face can spawn up to 64 elements at Murmur3-hashed UV positions. CUB segmented sort ensures the highest-priority slots are always rendered first.">
+            <img src="assets/images/bunny_slot_placment_64.png" alt="Bunny — 64-slot placement" loading="lazy">
+            <span class="img-caption">Slot placement — 64 slots</span>
+          </div>
+          <div class="bio-media-item" data-desc="Curvature-aware placement at maximum density — combining per-vertex curvature modulation with multi-slot spawning to pack elements tightly in high-curvature regions for the most detailed coverage.">
+            <img src="assets/images/bunny_curvature_curvature_aware_placement.png" alt="Bunny — dense curvature-aware placement" loading="lazy">
+            <span class="img-caption">Dense curvature-aware placement</span>
+          </div>
+          <div class="bio-media-item" data-desc="Animated curvature visualisation sweeping across the bunny surface. The colour gradient updates in real time as the curvature analysis buffer is hot-loaded from GRWM into the rendering pipeline.">
+            <video autoplay loop muted playsinline>
+              <source src="assets/videos/bunny_curvature.webm" type="video/webm">
+            </video>
+            <span class="img-caption">Bunny — curvature visualisation</span>
+          </div>
+          <div class="bio-media-item" data-desc="Curvature-awareness in action — element density dynamically adjusts based on local surface bending. Watch how elements concentrate around the ears and paws where curvature is highest.">
+            <video autoplay loop muted playsinline>
+              <source src="assets/videos/bunny_curvature_awareness.webm" type="video/webm">
+            </video>
+            <span class="img-caption">Bunny — curvature awareness</span>
+          </div>
+          <div class="bio-media-item" data-desc="Slot-based placement updating each frame — the structured grid of UV positions fills in as the priority sort determines which slots to render, demonstrating the multi-element spawning system.">
+            <video autoplay loop muted playsinline>
+              <source src="assets/videos/bunny_curvature_slot_placement.webm" type="video/webm">
+            </video>
+            <span class="img-caption">Bunny — slot placement animation</span>
+          </div>
+          <div class="bio-media-item" data-desc="Proxy shading replaces full geometry with analytically-derived shading parameters when elements are too small to resolve. The bunny appears solid despite emitting zero procedural triangles.">
+            <video autoplay loop muted playsinline>
+              <source src="assets/videos/bunny_proxy_shading.webm" type="video/webm">
+            </video>
+            <span class="img-caption">Bunny — proxy shading</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 11: PBR Rendering -->
+      <div class="bio-chapter">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 11</div>
+          <div class="bio-title">Physically-Based Rendering</div>
+          <div class="bio-body">
+            <p>Procedural geometry only looks convincing under proper lighting. Gravel implements a <strong>Cook-Torrance microfacet BRDF</strong> shared across all four rendering pipelines (parametric, pebble, base mesh, and benchmark), centralizing PBR into a single shader library (<code>shading.glsl</code>).</p>
+            <p>The specular lobe uses the <strong>GGX/Trowbridge-Reitz normal distribution function</strong> for microfacet highlights, <strong>Smith-Schlick geometry attenuation</strong> for masking and shadowing between microfacets, and the <strong>Schlick Fresnel approximation</strong> for angle-dependent reflectance. F0 is computed as <code>mix(dielectricF0, albedo, metallic)</code> — dielectrics get a fixed base reflectance (typically 0.04), while metals reflect their own albedo color. Energy conservation ensures diffuse contribution is scaled by <code>(1 - F) &times; (1 - metallic)</code>, with Lambertian diffuse divided by &pi;.</p>
+            <p>Environment reflections use either an <strong>equirectangular HDR map</strong> (with a cheap roughness-based blur that blends the sharp sample toward a 6-axis average) or a <strong>fake sky/ground fallback</strong> that blends sky and ground colors via smoothstep on the reflection direction's Y component. All specular values are brought into displayable range through <strong>ACES filmic tone mapping</strong> in the fragment shader before writing to the sRGB swap chain — no HDR framebuffer required.</p>
+            <div class="bio-detail">The Cook-Torrance BRDF adds only ~5-10 ALU ops per fragment over the previous Blinn-Phong — negligible in a mesh shader pipeline where the bottleneck is vertex generation, not shading.</div>
+          </div>
+        </div>
+        <div class="bio-media grid-4">
+          <div class="bio-media-item" data-desc="The base mesh rendered with Cook-Torrance PBR shading — metallic-roughness workflow with GGX normal distribution, Schlick-GGX geometry term, and Fresnel-Schlick reflectance.">
+            <img src="assets/images/pbr_base_mesh.png" alt="PBR-lit base mesh" loading="lazy">
+            <span class="img-caption">PBR — base mesh</span>
+          </div>
+          <div class="bio-media-item" data-desc="B-spline pebbles under PBR lighting. The noise-displaced surfaces create subtle self-shadowing and specular variation that sells the illusion of real stone under directional light.">
+            <img src="assets/images/pbr_pebble.png" alt="PBR pebble rendering" loading="lazy">
+            <span class="img-caption">PBR — pebble surface</span>
+          </div>
+          <div class="bio-media-item" data-desc="Parametric spheres with a pink dielectric material. The smooth curvature makes Fresnel rim lighting and specular highlights especially prominent — a good stress test for the BRDF implementation.">
+            <img src="assets/images/pbr_pink_sphere.png" alt="PBR pink sphere" loading="lazy">
+            <span class="img-caption">PBR — pink sphere</span>
+          </div>
+          <div class="bio-media-item" data-desc="Red pebble elements with rougher PBR parameters — wider specular lobes and softer highlights compared to the smooth spheres, demonstrating the roughness slider's effect on the same geometry.">
+            <img src="assets/images/pbr_red_pebble.png" alt="PBR red pebble" loading="lazy">
+            <span class="img-caption">PBR — red pebble</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 12: Final Materials -->
+      <div class="bio-chapter reverse">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 12</div>
+          <div class="bio-title">Material Results: The Full Picture</div>
+          <div class="bio-body">
+            <p>Bringing everything together — parametric surfaces, procedural generation, LOD, culling, and PBR shading — Gravel produces a range of compelling <strong>material results</strong> from a single framework.</p>
+            <p><strong>Chainmail</strong> uses torus resurfacing to create interlocking metal rings. <strong>Dragon scales</strong> tile flattened B-spline patches with overlapping offsets. <strong>Grass</strong> amplifies thin cones into a dense fur-like field. <strong>Rock</strong> applies noise-perturbed pebble generation for an organic, irregular gravel surface — the project's namesake material, generated entirely on-chip at real-time frame rates.</p>
+          </div>
+        </div>
+        <div class="bio-media grid-4">
+          <div class="bio-media-item" data-desc="Interlocking torus rings form a chainmail mesh. Each ring is a separate procedural element with metallic PBR properties — the inter-ring reflections and self-shadowing create a convincing metal weave.">
+            <img src="assets/images/material_chainmail.png" alt="Chainmail material" loading="lazy">
+            <span class="img-caption">Material — chainmail</span>
+          </div>
+          <div class="bio-media-item" data-desc="Overlapping dragon scales driven by the B-spline control cage. Golden-ratio rotation per face creates natural variation in scale orientation, while the shingled overlap comes from sizing elements larger than their host face.">
+            <img src="assets/images/material_dragon.png" alt="Dragon scale material" loading="lazy">
+            <span class="img-caption">Material — dragon scales</span>
+          </div>
+          <div class="bio-media-item" data-desc="Parametric hair strands with green colouring simulate a grass-like surface. Thousands of thin cones sprout from each face, following surface normals with slight randomised splay.">
+            <img src="assets/images/material_grass.png" alt="Procedural grass material" loading="lazy">
+            <span class="img-caption">Material — procedural grass</span>
+          </div>
+          <div class="bio-media-item" data-desc="Noise-displaced B-spline pebbles packed densely to create a gravel-like rock surface. Each pebble's shape is unique thanks to PCG random seeds per face driving extrusion height and Perlin noise displacement.">
+            <img src="assets/images/material_rock.png" alt="Rock / gravel material" loading="lazy">
+            <span class="img-caption">Material — rock / gravel</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 13: Environment Reflections -->
+      <div class="bio-chapter">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 13</div>
+          <div class="bio-title">Environment Reflections</div>
+          <div class="bio-body">
+            <p>Realistic reflections ground procedural geometry in a believable world. Gravel's PBR pipeline supports <strong>image-based lighting</strong> (IBL) using HDR environment maps — the same technique used in film and AAA games to capture real-world lighting.</p>
+            <p>Each environment map produces dramatically different reflection characteristics. An open <strong>field</strong> yields soft, warm reflections. A <strong>studio</strong> setup gives controlled, even highlights. A <strong>house</strong> interior produces intimate, warm-toned bounces. A <strong>city</strong> skyline creates sharp, high-contrast reflections on metallic surfaces.</p>
+            <div class="bio-detail">Environment maps are sampled per-fragment using the reflected view vector, with roughness controlling mip-level selection for glossy-to-rough material transitions.</div>
+          </div>
+        </div>
+        <div class="bio-media grid-4">
+          <div class="bio-media-item" data-desc="An open field HDR environment map reflected across metallic procedural spheres. The wide, even lighting reveals subtle surface detail and Fresnel gradients across each element.">
+            <img src="assets/images/PBR_reflective_environment_field.png" alt="PBR reflective environment — field" loading="lazy">
+            <span class="img-caption">Environment — field</span>
+          </div>
+          <div class="bio-media-item" data-desc="A controlled studio environment with soft area lights. The even illumination and neutral background make this ideal for evaluating material properties and specular response.">
+            <img src="assets/images/PBR_reflective_environment_studio.png" alt="PBR reflective environment — studio" loading="lazy">
+            <span class="img-caption">Environment — studio</span>
+          </div>
+          <div class="bio-media-item" data-desc="An indoor house environment reflected in the procedural surface. Interior lighting creates warm, complex reflections that test the environment sampling across many curved surfaces simultaneously.">
+            <img src="assets/images/PBR_reflective_environment_house.png" alt="PBR reflective environment — house" loading="lazy">
+            <span class="img-caption">Environment — house</span>
+          </div>
+          <div class="bio-media-item" data-desc="A city skyline HDR environment map with strong directional lighting from buildings and sky. The high-contrast reflections stress-test specular response and highlight the per-element normal variation.">
+            <img src="assets/images/PBR_reflective_environment_city.png" alt="PBR reflective environment — city" loading="lazy">
+            <span class="img-caption">Environment — city</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 14: Subdivision & Environment Detail -->
+      <div class="bio-chapter reverse">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 14</div>
+          <div class="bio-title">Subdivision vs. Reflection Quality</div>
+          <div class="bio-body">
+            <p>Subdivision level directly impacts how faithfully environment reflections are captured on procedural surfaces. At <strong>low subdivision</strong>, reflections appear faceted — the surface normals change abruptly between triangles, producing blocky highlights.</p>
+            <p>At <strong>medium subdivision</strong>, the reflection smooths out noticeably. Switching between <strong>large</strong> and <strong>small spheres</strong> demonstrates how element scale interacts with reflection quality — smaller elements pack more surface variation per pixel, requiring higher subdivision to resolve clean reflections.</p>
+            <div class="bio-detail">The adaptive LOD system automatically increases subdivision for close-up elements where faceted reflections would be most visible.</div>
+          </div>
+        </div>
+        <div class="bio-media grid-4">
+          <div class="bio-media-item" data-desc="City environment at low subdivision — fewer, larger elements with visible gaps between them. Each sphere reflects the skyline clearly because of its large surface area.">
+            <img src="assets/images/PBR_reflective_environment_city_low_subdivision.png" alt="City environment — low subdivision" loading="lazy">
+            <span class="img-caption">City reflection — low subdivision</span>
+          </div>
+          <div class="bio-media-item" data-desc="Medium subdivision increases face count, producing smaller, denser spheres. The surface starts to read as a continuous material rather than individual elements.">
+            <img src="assets/images/PBR_reflective_environment_city_medium_subdivision.png" alt="City environment — medium subdivision" loading="lazy">
+            <span class="img-caption">City reflection — medium subdivision</span>
+          </div>
+          <div class="bio-media-item" data-desc="User-scaled large spheres that overlap adjacent faces, creating a bubbly, clustered surface. Reflections vary between neighbouring elements due to differing normal orientations.">
+            <img src="assets/images/PBR_reflective_environment_city_large_spheres.png" alt="City environment — large spheres" loading="lazy">
+            <span class="img-caption">City reflection — large spheres</span>
+          </div>
+          <div class="bio-media-item" data-desc="Small spheres at high density — the surface approaches a fine granular texture. Individual reflections are tiny but collectively form a coherent, sparkling metallic appearance.">
+            <img src="assets/images/PBR_reflective_environment_city_small_spheres.png" alt="City environment — small spheres" loading="lazy">
+            <span class="img-caption">City reflection — small spheres</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 15: Anti-Aliasing -->
+      <div class="bio-chapter">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 15</div>
+          <div class="bio-title">Anti-Aliasing</div>
+          <div class="bio-body">
+            <p>Procedural geometry with high-frequency detail is especially prone to <strong>aliasing artifacts</strong>. Gravel tackles this with a multi-layered anti-aliasing strategy, each method targeting a different source of visual noise.</p>
+            <p><strong>MSAA</strong> (4x multisample) handles geometric edge aliasing at the rasterization level. <strong>Alpha-to-coverage</strong> and <strong>coverage fading</strong> replace hard on/off element visibility with smooth sub-pixel fade-out — the task shader computes screen-space element size and outputs a smooth alpha, which MSAA hardware resolves into partial coverage instead of flickering dithered discards.</p>
+            <p><strong>Specular anti-aliasing</strong> eliminates bright firefly artifacts from sub-pixel normal variation using projected-space NDF filtering (Tokuyoshi &amp; Kaplanyan 2021). Screen-space normal derivatives widen the GGX roughness parameter, and a procedural extension measures angular divergence between the interpolated and flat face normals to capture cross-element variation that per-triangle derivatives miss.</p>
+            <p><strong>Proxy shading</strong> is the final layer: when elements shrink below a threshold, geometry emission is skipped entirely and replaced with analytically-derived shading parameters — aggregate roughness, mean normal tilt, self-shadow scale, and coverage fraction — precomputed from the parametric surface. The result looks like the geometry because it <em>is</em> derived from the geometry, just without emitting any triangles.</p>
+          </div>
+        </div>
+        <div class="bio-media grid-3">
+          <div class="bio-media-item" data-desc="Dragon scales with all anti-aliasing disabled — visible flickering, harsh edges, and specular fireflies from sub-pixel normal variation. This is the worst-case baseline.">
+            <img src="assets/images/scales_AA_off.png" alt="Dragon scales with anti-aliasing off" loading="lazy">
+            <span class="img-caption">Scales — AA off</span>
+          </div>
+          <div class="bio-media-item" data-desc="Full anti-aliasing stack enabled: MSAA, alpha-to-coverage, specular AA via NDF filtering, and proxy shading. Edges are smooth, specular highlights are stable, and the surface reads as a coherent material.">
+            <img src="assets/images/scales_full_AA.png" alt="Dragon scales with full anti-aliasing" loading="lazy">
+            <span class="img-caption">Scales — full AA</span>
+          </div>
+          <div class="bio-media-item" data-desc="Animated rotation with AA off — watch the scales flicker and shimmer as they move through sub-pixel sizes. The aliasing is especially visible on the scale edges and specular highlights.">
+            <video autoplay loop muted playsinline>
+              <source src="assets/videos/scales_AA_off.webm" type="video/webm">
+            </video>
+            <span class="img-caption">Scales — AA off (animated)</span>
+          </div>
+          <div class="bio-media-item" data-desc="Same animation with the full AA stack — alpha-to-coverage smoothly fades elements at sub-pixel sizes, and NDF filtering eliminates specular fireflies. The difference from AA-off is dramatic.">
+            <video autoplay loop muted playsinline>
+              <source src="assets/videos/scales_full_AA.webm" type="video/webm">
+            </video>
+            <span class="img-caption">Scales — full AA (animated)</span>
+          </div>
+          <div class="bio-media-item" data-desc="Proxy shading with LOD transitions — as the camera pulls back, elements smoothly transition from full geometry to proxy shading, demonstrating seamless LOD blending without visible popping.">
+            <video autoplay loop muted playsinline>
+              <source src="assets/videos/proxy_shading_lod_blue_monkey.webm" type="video/webm">
+            </video>
+            <span class="img-caption">Proxy shading LOD — blue monkey</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 16: Gold Bunny -->
+      <div class="bio-chapter reverse">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 16</div>
+          <div class="bio-title">Gold Bunny: Complex Mesh Showcase</div>
+          <div class="bio-body">
+            <p>The Stanford Bunny is a classic test mesh — and a perfect stress test for procedural resurfacing on complex, organic topology. A <strong>gold PBR material</strong> with environment reflections makes every surface detail visible.</p>
+            <p>At <strong>high subdivision</strong>, the bunny's surface is densely resurfaced while maintaining smooth silhouettes. The <strong>fur variant</strong> applies parametric hair generation across the entire mesh — thousands of thin strands following the surface normal of each face. The <strong>rocky variant</strong> uses noise-perturbed pebble generation, turning the bunny into a stone sculpture entirely through on-chip procedural geometry.</p>
+          </div>
+        </div>
+        <div class="bio-media grid-3">
+          <div class="bio-media-item" data-desc="The Stanford Bunny at high subdivision with gold metallic PBR — densely packed procedural spheres create a smooth, jewellery-like surface. Environment reflections reveal every subtle curvature change.">
+            <img src="assets/images/gold_bunny_PBR_reflective_field_high_subdivision.png" alt="Gold bunny — high subdivision" loading="lazy">
+            <span class="img-caption">Gold bunny — high subdivision</span>
+          </div>
+          <div class="bio-media-item" data-desc="Procedural fur variant — thousands of parametric hair strands follow each face normal across the bunny. The gold material makes individual strand reflections visible against the field environment.">
+            <img src="assets/images/gold_bunny_PBR_reflective_field_fur.png" alt="Gold bunny — procedural fur" loading="lazy">
+            <span class="img-caption">Gold bunny — procedural fur</span>
+          </div>
+          <div class="bio-media-item" data-desc="Noise-perturbed pebble generation turns the bunny into a stone sculpture. Each pebble's unique shape comes from Perlin noise displacement — the gold material emphasises every surface irregularity.">
+            <img src="assets/images/gold_bunny_PBR_reflective_field_rocky.png" alt="Gold bunny — rocky surface" loading="lazy">
+            <span class="img-caption">Gold bunny — rocky surface</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 17: Chainmail Environment Reflections -->
+      <div class="bio-chapter">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 17</div>
+          <div class="bio-title">Chainmail Up Close: Environment Reflections</div>
+          <div class="bio-body">
+            <p>Chainmail is one of the most demanding materials for real-time rendering — each ring is a separate torus, and the interplay of <strong>self-shadowing, specular highlights, and inter-ring reflections</strong> creates a rich visual surface.</p>
+            <p>At <strong>close-up</strong>, individual ring geometry and reflection detail is clearly visible. Pulling back to a <strong>medium shot</strong> reveals how the LOD system maintains visual coherence across distance. The <strong>patch view</strong> shows a section of the chainmail surface with full PBR environment reflections — each torus ring reflecting the surrounding environment map.</p>
+          </div>
+        </div>
+        <div class="bio-media grid-3">
+          <div class="bio-media-item" data-desc="Close-up of individual chainmail torus rings with environment reflections — self-shadowing between rings and specular highlights on each ring surface are clearly visible at this distance.">
+            <img src="assets/images/chainmail_PBR_environment_reflect_close_up.png" alt="Chainmail PBR environment reflection — close up" loading="lazy">
+            <span class="img-caption">Chainmail reflection — close-up</span>
+          </div>
+          <div class="bio-media-item" data-desc="Pulling back to medium distance — the LOD system reduces tessellation per ring while maintaining visual coherence. The weave pattern still reads clearly despite lower geometric detail.">
+            <img src="assets/images/chainmail_PBR_environment_reflect_medium_close_up.png" alt="Chainmail PBR environment reflection — medium" loading="lazy">
+            <span class="img-caption">Chainmail reflection — medium shot</span>
+          </div>
+          <div class="bio-media-item" data-desc="A patch of chainmail surface with full PBR environment reflections — each torus ring reflects the surrounding environment map, creating a rich interplay of light across the woven metal surface.">
+            <img src="assets/images/chainmail_PBR_environment_reflect_patch.png" alt="Chainmail PBR environment reflection — patch" loading="lazy">
+            <span class="img-caption">Chainmail reflection — patch view</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chapter 18: Dancing Dragon -->
+      <div class="bio-chapter reverse">
+        <div class="bio-text">
+          <div class="bio-chapter-num">Chapter 18</div>
+          <div class="bio-title">Dancing Dragon: Animated Resurfacing</div>
+          <div class="bio-body">
+            <p>The ultimate stress test for real-time procedural resurfacing: a <strong>fully animated dragon</strong> with procedural surfaces regenerated every frame. As the skeleton drives the base mesh through a dance animation, the mesh shader continuously synthesizes new surface detail.</p>
+            <p>Variations include the dragon with <strong>orange hair and coat</strong>, <strong>orange hair without coat</strong>, and the <strong>base dancing dragon</strong> — each demonstrating different element combinations applied to the same animated mesh in real time.</p>
+          </div>
+        </div>
+        <div class="bio-media grid-3">
+          <div class="bio-media-item" data-desc="The base dancing dragon with procedural surface detail regenerated every frame. As the skeleton drives the dance animation, the mesh shader continuously synthesises new geometry matching the deformed base mesh.">
+            <video autoplay loop muted playsinline>
+              <source src="assets/videos/dancing_dragon.webm" type="video/webm">
+            </video>
+            <span class="img-caption">Dancing dragon</span>
+          </div>
+          <div class="bio-media-item" data-desc="Orange procedural hair with a coat layer — two different element types combined on the same animated mesh. The hair strands follow skeletal motion while the coat provides a base surface underneath.">
+            <video autoplay loop muted playsinline>
+              <source src="assets/videos/drancing_dragon_orange_hair.webm" type="video/webm">
+            </video>
+            <span class="img-caption">Dancing dragon — orange hair</span>
+          </div>
+          <div class="bio-media-item" data-desc="Orange hair without the coat layer — just the bare hair strands on the animated mesh. This isolates the fur generation, showing how each strand tracks the underlying face normal frame by frame.">
+            <video autoplay loop muted playsinline>
+              <source src="assets/videos/dancing_dragon_orange_hair_no_coat.webm" type="video/webm">
+            </video>
+            <span class="img-caption">Dancing dragon — hair, no coat</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Gallery -->
+  <section id="gallery">
+    <div class="container">
+      <p class="section-label">Results</p>
+      <h2>Gallery</h2>
+
+      <div class="gallery-filters">
+        <button class="filter-btn active" data-filter="all">All</button>
+        <button class="filter-btn" data-filter="base">Base Mesh</button>
+        <button class="filter-btn" data-filter="element">Procedural Elements</button>
+        <button class="filter-btn" data-filter="pbr">PBR Rendering</button>
+        <button class="filter-btn" data-filter="environment">Environment</button>
+        <button class="filter-btn" data-filter="material">Materials</button>
+        <button class="filter-btn" data-filter="showcase">Showcase</button>
+      </div>
+
+      <div class="gallery-grid">
+        <div class="gallery-item" data-category="base">
+          <img src="assets/images/base_mesh_wireframe.png" alt="Base mesh wireframe" loading="lazy">
+          <span class="img-caption">Base mesh — wireframe</span>
+        </div>
+        <div class="gallery-item" data-category="base">
+          <img src="assets/images/base_mesh_facees.png" alt="Base mesh with per-face coloring" loading="lazy">
+          <span class="img-caption">Base mesh — per-face coloring</span>
+        </div>
+        <div class="gallery-item" data-category="base">
+          <img src="assets/images/base_mesh_triangulated.png" alt="Triangulated base mesh" loading="lazy">
+          <span class="img-caption">Base mesh — triangulated</span>
+        </div>
+        <div class="gallery-item" data-category="base">
+          <img src="assets/images/base_mesh_subdivided.png" alt="Subdivided base mesh" loading="lazy">
+          <span class="img-caption">Base mesh — subdivided</span>
+        </div>
+        <div class="gallery-item" data-category="base">
+          <img src="assets/images/base_mesh_subdivided_even_more.png" alt="Highly subdivided base mesh" loading="lazy">
+          <span class="img-caption">Base mesh — high subdivision</span>
+        </div>
+        <div class="gallery-item" data-category="base">
+          <img src="assets/images/task_id.png" alt="Task shader ID visualization" loading="lazy">
+          <span class="img-caption">Task shader — workgroup IDs</span>
+        </div>
+        <div class="gallery-item" data-category="base">
+          <img src="assets/images/element_type.png" alt="Per-face element type selection" loading="lazy">
+          <span class="img-caption">Element type — per-face selection</span>
+        </div>
+        <div class="gallery-item" data-category="base">
+          <img src="assets/images/normals.png" alt="Surface normal visualization" loading="lazy">
+          <span class="img-caption">Surface normals — RGB debug view</span>
+        </div>
+        <div class="gallery-item" data-category="base">
+          <img src="assets/images/uvs.png" alt="UV coordinate visualization" loading="lazy">
+          <span class="img-caption">UV coordinates — texture mapping</span>
+        </div>
+        <div class="gallery-item" data-category="element">
+          <img src="assets/images/procedural_element_parametric_sphere.png" alt="Parametric sphere resurfacing" loading="lazy">
+          <span class="img-caption">Parametric sphere</span>
+        </div>
+        <div class="gallery-item" data-category="element">
+          <img src="assets/images/procedural_element_parametric_hemisphere.png" alt="Parametric hemisphere resurfacing" loading="lazy">
+          <span class="img-caption">Parametric hemisphere</span>
+        </div>
+        <div class="gallery-item" data-category="element">
+          <img src="assets/images/procedural_element_parametric_torus.png" alt="Parametric torus resurfacing" loading="lazy">
+          <span class="img-caption">Parametric torus</span>
+        </div>
+        <div class="gallery-item" data-category="element">
+          <img src="assets/images/procedural_element_parametric_cylinder.png" alt="Parametric cylinder resurfacing" loading="lazy">
+          <span class="img-caption">Parametric cylinder</span>
+        </div>
+        <div class="gallery-item" data-category="element">
+          <img src="assets/images/procedural_element_parametric_cone.png" alt="Parametric cone resurfacing" loading="lazy">
+          <span class="img-caption">Parametric cone</span>
+        </div>
+        <div class="gallery-item" data-category="element">
+          <img src="assets/images/procedural_element_parametric_hair.png" alt="Parametric hair / procedural fur" loading="lazy">
+          <span class="img-caption">Parametric hair — procedural fur</span>
+        </div>
+        <div class="gallery-item" data-category="element">
+          <img src="assets/images/procedural_element_dragon_scale.png" alt="Procedural dragon scale" loading="lazy">
+          <span class="img-caption">Procedural dragon scale</span>
+        </div>
+        <div class="gallery-item" data-category="element">
+          <img src="assets/images/procedural_element_pebble.png" alt="Procedural pebble element" loading="lazy">
+          <span class="img-caption">Procedural pebble</span>
+        </div>
+        <div class="gallery-item" data-category="element">
+          <img src="assets/images/procedural_element_low_geometry.png" alt="Low geometry LOD" loading="lazy">
+          <span class="img-caption">LOD — low geometry</span>
+        </div>
+        <div class="gallery-item" data-category="element">
+          <img src="assets/images/procedural_element_high_geometry.png" alt="High geometry LOD" loading="lazy">
+          <span class="img-caption">LOD — high geometry</span>
+        </div>
+        <div class="gallery-item" data-category="pbr">
+          <img src="assets/images/pbr_base_mesh.png" alt="PBR-lit base mesh" loading="lazy">
+          <span class="img-caption">PBR — base mesh</span>
+        </div>
+        <div class="gallery-item" data-category="pbr">
+          <img src="assets/images/pbr_pebble.png" alt="PBR pebble rendering" loading="lazy">
+          <span class="img-caption">PBR — pebble surface</span>
+        </div>
+        <div class="gallery-item" data-category="pbr">
+          <img src="assets/images/pbr_pink_sphere.png" alt="PBR pink sphere" loading="lazy">
+          <span class="img-caption">PBR — pink sphere</span>
+        </div>
+        <div class="gallery-item" data-category="pbr">
+          <img src="assets/images/pbr_red_pebble.png" alt="PBR red pebble" loading="lazy">
+          <span class="img-caption">PBR — red pebble</span>
+        </div>
+        <div class="gallery-item" data-category="material">
+          <img src="assets/images/material_chainmail.png" alt="Chainmail material" loading="lazy">
+          <span class="img-caption">Material — chainmail</span>
+        </div>
+        <div class="gallery-item" data-category="material">
+          <img src="assets/images/material_dragon.png" alt="Dragon scale material" loading="lazy">
+          <span class="img-caption">Material — dragon scales</span>
+        </div>
+        <div class="gallery-item" data-category="material">
+          <img src="assets/images/material_grass.png" alt="Procedural grass material" loading="lazy">
+          <span class="img-caption">Material — procedural grass</span>
+        </div>
+        <div class="gallery-item" data-category="material">
+          <img src="assets/images/material_rock.png" alt="Rock / gravel material" loading="lazy">
+          <span class="img-caption">Material — rock / gravel</span>
+        </div>
+        <div class="gallery-item" data-category="environment">
+          <img src="assets/images/PBR_reflective_environment_field.png" alt="PBR reflective environment — field" loading="lazy">
+          <span class="img-caption">Environment — field</span>
+        </div>
+        <div class="gallery-item" data-category="environment">
+          <img src="assets/images/PBR_reflective_environment_studio.png" alt="PBR reflective environment — studio" loading="lazy">
+          <span class="img-caption">Environment — studio</span>
+        </div>
+        <div class="gallery-item" data-category="environment">
+          <img src="assets/images/PBR_reflective_environment_house.png" alt="PBR reflective environment — house" loading="lazy">
+          <span class="img-caption">Environment — house</span>
+        </div>
+        <div class="gallery-item" data-category="environment">
+          <img src="assets/images/PBR_reflective_environment_city.png" alt="PBR reflective environment — city" loading="lazy">
+          <span class="img-caption">Environment — city</span>
+        </div>
+        <div class="gallery-item" data-category="environment">
+          <img src="assets/images/PBR_reflective_environment_city_low_subdivision.png" alt="City environment — low subdivision" loading="lazy">
+          <span class="img-caption">City reflection — low subdivision</span>
+        </div>
+        <div class="gallery-item" data-category="environment">
+          <img src="assets/images/PBR_reflective_environment_city_medium_subdivision.png" alt="City environment — medium subdivision" loading="lazy">
+          <span class="img-caption">City reflection — medium subdivision</span>
+        </div>
+        <div class="gallery-item" data-category="environment">
+          <img src="assets/images/PBR_reflective_environment_city_large_spheres.png" alt="City environment — large spheres" loading="lazy">
+          <span class="img-caption">City reflection — large spheres</span>
+        </div>
+        <div class="gallery-item" data-category="environment">
+          <img src="assets/images/PBR_reflective_environment_city_small_spheres.png" alt="City environment — small spheres" loading="lazy">
+          <span class="img-caption">City reflection — small spheres</span>
+        </div>
+        <div class="gallery-item" data-category="environment">
+          <img src="assets/images/PBR_reflective_environment_field_scales.png" alt="Field environment with scales" loading="lazy">
+          <span class="img-caption">Scales — field environment</span>
+        </div>
+        <div class="gallery-item" data-category="element">
+          <img src="assets/images/scales_AA_off.png" alt="Dragon scales — AA off" loading="lazy">
+          <span class="img-caption">Scales — AA off</span>
+        </div>
+        <div class="gallery-item" data-category="element">
+          <img src="assets/images/scales_full_AA.png" alt="Dragon scales — full AA" loading="lazy">
+          <span class="img-caption">Scales — full AA</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/diamond_studded_teapot.png" alt="Diamond studded teapot" loading="lazy">
+          <span class="img-caption">Diamond studded — teapot</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/diamond_studded_armour_low_subdivision.png" alt="Diamond studded armour — low subdivision" loading="lazy">
+          <span class="img-caption">Diamond armour — low subdivision</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/diamond_studded_armour_high_subdivision.png" alt="Diamond studded armour — high subdivision" loading="lazy">
+          <span class="img-caption">Diamond armour — high subdivision</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/diamond_studded_armour_black_high_subdivision.png" alt="Diamond studded armour — black" loading="lazy">
+          <span class="img-caption">Diamond armour — black variant</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/diamond_studded_armour_colored_faces.png" alt="Diamond studded armour — colored faces" loading="lazy">
+          <span class="img-caption">Diamond armour — colored faces</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/chainmail_shirt.png" alt="Full chainmail shirt" loading="lazy">
+          <span class="img-caption">Chainmail shirt — full garment</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/gold_bunny_PBR_reflective_field_high_subdivision.png" alt="Gold bunny — high subdivision" loading="lazy">
+          <span class="img-caption">Gold bunny — high subdivision</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/gold_bunny_PBR_reflective_field_fur.png" alt="Gold bunny — procedural fur" loading="lazy">
+          <span class="img-caption">Gold bunny — procedural fur</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/gold_bunny_PBR_reflective_field_rocky.png" alt="Gold bunny — rocky surface" loading="lazy">
+          <span class="img-caption">Gold bunny — rocky surface</span>
+        </div>
+        <div class="gallery-item" data-category="material">
+          <img src="assets/images/chainmail_PBR_environment_reflect_close_up.png" alt="Chainmail PBR reflection — close up" loading="lazy">
+          <span class="img-caption">Chainmail reflection — close-up</span>
+        </div>
+        <div class="gallery-item" data-category="material">
+          <img src="assets/images/chainmail_PBR_environment_reflect_medium_close_up.png" alt="Chainmail PBR reflection — medium" loading="lazy">
+          <span class="img-caption">Chainmail reflection — medium shot</span>
+        </div>
+        <div class="gallery-item" data-category="material">
+          <img src="assets/images/chainmail_PBR_environment_reflect_patch.png" alt="Chainmail PBR reflection — patch" loading="lazy">
+          <span class="img-caption">Chainmail reflection — patch view</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <video autoplay loop muted playsinline>
+            <source src="assets/videos/close_up_dragon_hair_animation.webm" type="video/webm">
+          </video>
+          <span class="img-caption">Dragon hair — close-up animated</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <video autoplay loop muted playsinline>
+            <source src="assets/videos/hairy_man_animation.webm" type="video/webm">
+          </video>
+          <span class="img-caption">Hairy man — animated</span>
+        </div>
+        <div class="gallery-item" data-category="element">
+          <video autoplay loop muted playsinline>
+            <source src="assets/videos/scales_AA_off.webm" type="video/webm">
+          </video>
+          <span class="img-caption">Scales — AA off (animated)</span>
+        </div>
+        <div class="gallery-item" data-category="element">
+          <video autoplay loop muted playsinline>
+            <source src="assets/videos/scales_full_AA.webm" type="video/webm">
+          </video>
+          <span class="img-caption">Scales — full AA (animated)</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/bunny_uniform_element_placement.png" alt="Bunny — uniform element placement" loading="lazy">
+          <span class="img-caption">Bunny — uniform placement</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/bunny_curvature_aware_placement.png" alt="Bunny — curvature-aware placement" loading="lazy">
+          <span class="img-caption">Bunny — curvature-aware placement</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/bunny_curvature_uniform_placement.png" alt="Bunny — curvature heatmap" loading="lazy">
+          <span class="img-caption">Bunny — curvature heatmap</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/bunny_feature_edge.png" alt="Bunny — feature edge detection" loading="lazy">
+          <span class="img-caption">Bunny — feature edges</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/bunny_slot_placement_single.png" alt="Bunny — single slot placement" loading="lazy">
+          <span class="img-caption">Bunny — slot placement (single)</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/bunny_slot_placment_64.png" alt="Bunny — 64-slot placement" loading="lazy">
+          <span class="img-caption">Bunny — slot placement (64)</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/bunny_curvature_curvature_aware_placement.png" alt="Bunny — dense curvature-aware placement" loading="lazy">
+          <span class="img-caption">Bunny — dense curvature placement</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <video autoplay loop muted playsinline>
+            <source src="assets/videos/bunny_curvature.webm" type="video/webm">
+          </video>
+          <span class="img-caption">Bunny — curvature (animated)</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <video autoplay loop muted playsinline>
+            <source src="assets/videos/bunny_curvature_awareness.webm" type="video/webm">
+          </video>
+          <span class="img-caption">Bunny — curvature awareness (animated)</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <video autoplay loop muted playsinline>
+            <source src="assets/videos/bunny_curvature_slot_placement.webm" type="video/webm">
+          </video>
+          <span class="img-caption">Bunny — slot placement (animated)</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <video autoplay loop muted playsinline>
+            <source src="assets/videos/bunny_proxy_shading.webm" type="video/webm">
+          </video>
+          <span class="img-caption">Bunny — proxy shading (animated)</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/house_model.png" alt="House model in field environment" loading="lazy">
+          <span class="img-caption">House model — field environment</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/house_window_closeup.png" alt="House window close-up" loading="lazy">
+          <span class="img-caption">House — window close-up</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/outfit_fur.png" alt="Outfit with procedural fur" loading="lazy">
+          <span class="img-caption">Outfit — procedural fur</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <img src="assets/images/outfit_fur_closeup.png" alt="Outfit fur close-up" loading="lazy">
+          <span class="img-caption">Outfit fur — close-up</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <video autoplay loop muted playsinline>
+            <source src="assets/videos/dancing_dragon.webm" type="video/webm">
+          </video>
+          <span class="img-caption">Dancing dragon</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <video autoplay loop muted playsinline>
+            <source src="assets/videos/drancing_dragon_orange_hair.webm" type="video/webm">
+          </video>
+          <span class="img-caption">Dancing dragon — orange hair</span>
+        </div>
+        <div class="gallery-item" data-category="showcase">
+          <video autoplay loop muted playsinline>
+            <source src="assets/videos/dancing_dragon_orange_hair_no_coat.webm" type="video/webm">
+          </video>
+          <span class="img-caption">Dancing dragon — hair, no coat</span>
+        </div>
+        <div class="gallery-item" data-category="base">
+          <video autoplay loop muted playsinline>
+            <source src="assets/videos/proxy_shading_lod_blue_monkey.webm" type="video/webm">
+          </video>
+          <span class="img-caption">Proxy shading LOD — blue monkey</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <span class="footer-left">gravel &nbsp;·&nbsp; michael salton</span>
+      <div class="footer-links">
+
+        <a href="https://www.linkedin.com/in/michaelsalton/" target="_blank">LinkedIn</a>
+        <a href="https://www.michaelsalton.com" target="_blank">michaelsalton.com</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Lightbox -->
+  <div class="lightbox" id="lightbox">
+    <button class="lightbox-close" id="lb-close">&times;</button>
+    <button class="lightbox-nav lightbox-prev" id="lb-prev">&larr;</button>
+    <button class="lightbox-nav lightbox-next" id="lb-next">&rarr;</button>
+    <div class="lightbox-content" id="lb-content">
+      <img id="lb-img" src="" alt="">
+      <video id="lb-video" class="lb-hidden" autoplay loop muted playsinline></video>
+      <div class="lightbox-caption" id="lb-caption"></div>
+    </div>
+    <div class="lightbox-counter" id="lb-counter"></div>
+  </div>
+
+  <script>
+    // Gallery filter
+    const filterBtns = document.querySelectorAll('.filter-btn');
+    const items = document.querySelectorAll('.gallery-item');
+
+    filterBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        filterBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const filter = btn.dataset.filter;
+        items.forEach(item => {
+          item.style.display = (filter === 'all' || item.dataset.category === filter) ? '' : 'none';
+        });
+      });
+    });
+
+    // Lightbox
+    const lightbox = document.getElementById('lightbox');
+    const lbImg = document.getElementById('lb-img');
+    const lbVideo = document.getElementById('lb-video');
+    const lbCounter = document.getElementById('lb-counter');
+    let currentIndex = 0;
+    let currentMediaList = [];
+
+    // Build description lookup from bio-media-items
+    const descMap = {};
+    document.querySelectorAll('.bio-media-item[data-desc]').forEach(el => {
+      const img = el.querySelector('img');
+      const video = el.querySelector('video source');
+      const src = img ? img.getAttribute('src') : (video ? video.getAttribute('src') : null);
+      if (src) descMap[src] = el.dataset.desc;
+    });
+
+    // Also add descriptions for gallery-only items
+    const extraDescs = {
+      'assets/images/procedural_element_parametric_hemisphere.png': 'A half-sphere generated per face — the flat base sits flush against the surface while the curved dome protrudes outward along the face normal.',
+      'assets/images/procedural_element_parametric_cylinder.png': 'Cylinders extruded along the face normal, with circular caps at both ends. Useful as a building block for pin, stud, or rivet-like surface details.',
+      'assets/images/procedural_element_parametric_hair.png': 'Extreme cone aspect ratios produce thousands of thin strands per face, reading as procedural fur. Each strand follows the surface normal with slight randomised splay.',
+      'assets/images/PBR_reflective_environment_field_scales.png': 'Dragon scales under a field environment HDR — the wide, even outdoor lighting reveals the shingled overlap and per-scale rotation driven by golden-ratio hashing.',
+      'assets/images/diamond_studded_teapot.png': 'The Utah teapot resurfaced with diamond-like procedural elements — highly reflective spheres packed across every face, catching light from the environment map.',
+      'assets/images/diamond_studded_armour_low_subdivision.png': 'Armour mesh at low subdivision with diamond studs — fewer, larger elements spaced apart, showing the base mesh topology underneath.',
+      'assets/images/diamond_studded_armour_high_subdivision.png': 'High subdivision packs diamond studs densely across the armour, approaching a continuous jewelled surface with rich inter-element reflections.',
+      'assets/images/diamond_studded_armour_black_high_subdivision.png': 'Black variant of the diamond armour — dark base material with bright specular highlights on each stud, creating a dramatic high-contrast look.',
+      'assets/images/diamond_studded_armour_colored_faces.png': 'Diamond armour with per-face colouring applied — each face tints its procedural elements a different colour, useful for debugging element assignment.',
+      'assets/images/chainmail_shirt.png': 'A complete chainmail shirt garment — thousands of interlocking torus rings generated procedurally across the entire clothing mesh in real time.',
+      'assets/images/chainmail_closeup.png': 'Close-up of chainmail weave showing individual torus rings and the gaps between them. Each ring is a separate procedural element with its own PBR shading.',
+      'assets/images/house_model.png': 'A house model placed in a field environment with procedural surface detail applied across the walls and roof — demonstrating resurfacing on architectural geometry.',
+      'assets/images/house_window_closeup.png': 'Close-up of the house window area showing how procedural elements handle edges, corners, and transitions between different surface regions.',
+      'assets/images/outfit_fur.png': 'A clothing outfit covered in procedural fur — parametric hair strands generated across the garment mesh, following the surface normals of each face.',
+      'assets/images/outfit_fur_closeup.png': 'Close-up of the procedural fur on clothing, showing individual strand detail, length variation, and how strands follow the underlying garment curvature.',
+      'assets/videos/hairy_man_animation.webm': 'Full-body procedural fur on an animated character — every strand is generated per-frame in the mesh shader, demonstrating fur coverage on complex, moving human topology.',
+    };
+    Object.assign(descMap, extraDescs);
+
+    function getMediaInfo(item) {
+      const img = item.querySelector('img');
+      const video = item.querySelector('video source');
+      const src = img ? img.getAttribute('src') : (video ? video.getAttribute('src') : null);
+      const desc = (src && descMap[src]) || '';
+      if (img) return { type: 'image', src: img.src, alt: img.alt || '', desc: desc };
+      const vid = item.querySelector('video');
+      if (vid) {
+        const source = vid.querySelector('source');
+        return { type: 'video', src: source ? source.src : vid.src, alt: '', desc: desc };
+      }
+      return null;
+    }
+
+    function openLightbox(mediaList, index) {
+      currentMediaList = mediaList;
+      currentIndex = index;
+      updateLightbox();
+      lightbox.classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+
+    const lbCaption = document.getElementById('lb-caption');
+
+    function updateLightbox() {
+      const media = currentMediaList[currentIndex];
+      if (media.type === 'video') {
+        lbImg.classList.add('lb-hidden');
+        lbVideo.classList.remove('lb-hidden');
+        lbVideo.src = media.src;
+        lbVideo.play();
+      } else {
+        lbVideo.classList.add('lb-hidden');
+        lbVideo.pause();
+        lbVideo.removeAttribute('src');
+        lbImg.classList.remove('lb-hidden');
+        lbImg.src = media.src;
+        lbImg.alt = media.alt;
+      }
+      lbCaption.textContent = media.desc || '';
+      lbCounter.textContent = (currentIndex + 1) + ' / ' + currentMediaList.length;
+    }
+
+    function closeLightbox() {
+      lightbox.classList.remove('active');
+      lbVideo.pause();
+      lbVideo.removeAttribute('src');
+      document.body.style.overflow = '';
+    }
+
+    // Gallery items
+    items.forEach(item => {
+      item.style.cursor = 'pointer';
+      item.addEventListener('click', () => {
+        const visible = [...document.querySelectorAll('.gallery-item')].filter(i => i.style.display !== 'none');
+        const mediaList = visible.map(v => getMediaInfo(v)).filter(Boolean);
+        const idx = visible.indexOf(item);
+        openLightbox(mediaList, idx);
+      });
+    });
+
+    // Biography media — append description paragraphs and enable lightbox on media click
+    document.querySelectorAll('.bio-media-item').forEach(mediaItem => {
+      const desc = mediaItem.dataset.desc;
+      if (desc) {
+        const p = document.createElement('p');
+        p.className = 'item-desc';
+        p.textContent = desc;
+        mediaItem.appendChild(p);
+      }
+      const clickTarget = mediaItem.querySelector('img') || mediaItem.querySelector('video');
+      if (clickTarget) {
+        clickTarget.style.cursor = 'pointer';
+        clickTarget.addEventListener('click', () => {
+          const chapter = mediaItem.closest('.bio-media');
+          const siblings = [...chapter.querySelectorAll('.bio-media-item')];
+          const mediaList = siblings.map(s => getMediaInfo(s)).filter(Boolean);
+          openLightbox(mediaList, siblings.indexOf(mediaItem));
+        });
+      }
+    });
+
+    document.getElementById('lb-close').addEventListener('click', closeLightbox);
+    document.getElementById('lb-prev').addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentIndex = (currentIndex - 1 + currentMediaList.length) % currentMediaList.length;
+      updateLightbox();
+    });
+    document.getElementById('lb-next').addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentIndex = (currentIndex + 1) % currentMediaList.length;
+      updateLightbox();
+    });
+
+    lightbox.addEventListener('click', (e) => {
+      if (e.target === lightbox) closeLightbox();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (!lightbox.classList.contains('active')) return;
+      if (e.key === 'Escape') closeLightbox();
+      if (e.key === 'ArrowLeft') { currentIndex = (currentIndex - 1 + currentMediaList.length) % currentMediaList.length; updateLightbox(); }
+      if (e.key === 'ArrowRight') { currentIndex = (currentIndex + 1) % currentMediaList.length; updateLightbox(); }
+    });
+  </script>
+
+</body>
+</html>
