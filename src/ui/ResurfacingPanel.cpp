@@ -167,6 +167,8 @@ void ResurfacingPanel::render(Renderer& r) {
                         ImGui::Text("Torus Parameters:");
                         ImGui::SliderFloat("Major Radius##sec", &r.secondaryTorusMajorR, 0.3f, 2.0f);
                         ImGui::SliderFloat("Minor Radius##sec", &r.secondaryTorusMinorR, 0.05f, 1.0f);
+                        ImGui::SliderFloat("Tilt Angle##sec", &r.secondaryChainmailTiltAngle, 0.0f, 1.0f);
+                        ImGui::SliderFloat("Surface Offset##sec", &r.secondaryChainmailSurfaceOffset, 0.0f, 1.0f);
                     } else if (r.secondaryElementType == 1) {
                         ImGui::Text("Sphere Parameters:");
                         ImGui::SliderFloat("Radius##sec", &r.secondarySphereRadius, 0.1f, 2.0f);
