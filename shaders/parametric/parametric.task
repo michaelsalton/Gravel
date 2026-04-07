@@ -275,6 +275,34 @@ void main() {
     // Stud surface: faces only (skip vertex elements)
     if (isVertex && payload.elementType == 7u) return;
 
+    // European 4-in-1 chainmail: faces only, row-based striping + stagger
+    // All rings in a row lean the same way; adjacent rows alternate.
+    // Odd rows are offset by half a cell width so rings interleave between rows.
+    if (push.chainmailMode != 0u) {
+        if (isVertex) return;
+
+        // Derive a deterministic tangent frame from the normal, NOT from per-face edgeTangent.
+        // This guarantees all faces with the same normal get the exact same tilt axis,
+        // producing exactly 2 orientations across the entire mesh.
+        vec3 N = normalize(payload.normal);
+        vec3 helper = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+        vec3 T = normalize(cross(helper, N));
+        vec3 B = cross(N, T);
+        float cellSize = sqrt(payload.area);
+
+        // Determine row from tangent projection (rows run along B, alternate along T)
+        int row = int(floor(dot(payload.position, T) / cellSize));
+        payload.faceColor = float(row & 1);
+
+        // Tilt axis = T (rings lean along the row direction B)
+        payload.edgeTangent = T;
+
+        // Stagger: shift odd rows by half a cell width along the bitangent
+        if ((row & 1) != 0) {
+            payload.position += B * cellSize * 0.5;
+        }
+    }
+
     // Per-element random orientation twist for dragon scale
     if (payload.elementType == 5u && resurfacingUBO.normalPerturbation > 0.0) {
         float angle = fract(float(globalId) * 0.618033988749895)

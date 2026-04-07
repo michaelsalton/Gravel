@@ -552,6 +552,7 @@ public:
     float     lastCullUserScaling       = 1.0f;
     bool      lastDoMaskCull            = false;
     uint32_t  lastSlotK                 = 0;
+    bool      lastChainmailMode        = false;
     bool     showGPUInvocStats     = false;  // enables task/mesh invoc query (has GPU perf cost)
 
 private:

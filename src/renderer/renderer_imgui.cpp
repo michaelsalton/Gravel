@@ -391,6 +391,12 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
         bool prevTri = triangulateMesh;
         int prevSubdiv = subdivideLevel;
         int prevFlatSubdiv = subdivideFlatLevel;
+        // Reset topology settings when selecting a different mesh
+        if (selectedMesh != prev) {
+            triangulateMesh = false;
+            subdivideLevel = 0;
+            subdivideFlatLevel = 0;
+        }
         ImGui::Checkbox("Triangulate", &triangulateMesh);
         ImGui::SliderInt("Subdivide", &subdivideLevel, 0, 3);
         ImGui::SliderInt("Subdivide Flat", &subdivideFlatLevel, 0, 3);
@@ -729,13 +735,13 @@ void Renderer::renderImGui(VkCommandBuffer cmd) {
 
 void Renderer::applyPresetChainMail() {
     elementType        = 0;       // Torus
-    torusMajorR        = 0.965f;
-    torusMinorR        = 0.149f;
-    userScaling        = 0.628f;
-    resolutionM        = 37;
-    resolutionN        = 37;
+    torusMajorR        = 1.081f;
+    torusMinorR        = 0.241f;
+    userScaling        = 0.681f;
+    resolutionM        = 28;
+    resolutionN        = 29;
     chainmailMode      = true;
-    chainmailTiltAngle = 0.26f;
+    chainmailTiltAngle = 0.156f;
     chainmailSurfaceOffset = 0.500f;
 
     // PBR lighting for metallic chainmail

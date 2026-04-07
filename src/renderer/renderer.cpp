@@ -705,7 +705,8 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                                 || (cullingThreshold      != lastCullingThreshold)
                                 || (userScaling           != lastCullUserScaling)
                                 || (doMaskCull            != lastDoMaskCull)
-                                || (slotK                 != lastSlotK);
+                                || (slotK                 != lastSlotK)
+                                || (chainmailMode         != lastChainmailMode);
             bool cameraChanged = (mvp != lastCullMVP);
 
             if (visibleCacheDirty || settingsChanged || cameraChanged) {
@@ -766,12 +767,15 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                             if (cachedVisibleIndices.size() < VISIBLE_INDICES_MAX)
                                 cachedVisibleIndices.push_back(i);
                     }
-                    for (uint32_t i = 0; i < heNbVertices; i++) {
-                        if (isMasked(cpuVertexUVs[i])) continue;
-                        cachedTotalElements++;
-                        if (isVisible(cpuVertexPositions[i], cpuVertexNormals[i], cpuVertexFaceAreas[i]))
-                            if (cachedVisibleIndices.size() < VISIBLE_INDICES_MAX)
-                                cachedVisibleIndices.push_back(heNbFaces + i);
+                    // Skip vertex elements in chainmail mode (face elements only)
+                    if (!chainmailMode) {
+                        for (uint32_t i = 0; i < heNbVertices; i++) {
+                            if (isMasked(cpuVertexUVs[i])) continue;
+                            cachedTotalElements++;
+                            if (isVisible(cpuVertexPositions[i], cpuVertexNormals[i], cpuVertexFaceAreas[i]))
+                                if (cachedVisibleIndices.size() < VISIBLE_INDICES_MAX)
+                                    cachedVisibleIndices.push_back(heNbFaces + i);
+                        }
                     }
                 }
 
@@ -785,6 +789,7 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
                 lastCullUserScaling         = userScaling;
                 lastDoMaskCull              = doMaskCull;
                 lastSlotK                   = slotK;
+                lastChainmailMode           = chainmailMode;
                 visibleCacheDirty           = false;
             }
 
