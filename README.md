@@ -1,5 +1,7 @@
 # Gravel
 
+# Procedural Mesh Resurfacing Engine
+
 ## Overview
 
 This project implements a real-time geometry generation system that takes a base mesh and procedurally generates new geometric surfaces on-the-fly at each face/vertex using the Vulkan mesh shader pipeline (task shader → mesh shader → fragment shader). No traditional vertex input is used — all geometry is read from storage buffers and generated on-chip.
@@ -28,11 +30,6 @@ This project implements a real-time geometry generation system that takes a base
 - CMake 3.20+
 - C++17 compatible compiler (GCC 9+, Clang 10+, MSVC 2019+)
 - glslangValidator (included with Vulkan SDK)
-
-
-## License
-
-[Add appropriate license]
 
 ## Acknowledgments
 
