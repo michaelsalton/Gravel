@@ -6,6 +6,8 @@
 #include "input/Gamepad.h"
 #include "input/KeyboardMouse.h"
 
+// *** Michael Salton ***
+
 class Window {
 public:
     Window(int width, int height, const std::string& title);
@@ -47,3 +49,5 @@ private:
     int windowedX = 100, windowedY = 100;
     int windowedWidth = 1920, windowedHeight = 1080;
 };
+
+// *** ************ ***

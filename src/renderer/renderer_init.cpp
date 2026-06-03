@@ -10,6 +10,8 @@
 #include <array>
 #include <fstream>
 
+// *** AI Generated ***
+
 void Renderer::createInstance() {
     if (enableValidationLayers && !checkValidationLayerSupport()) {
         throw std::runtime_error("Validation layers requested, but not available!");
@@ -76,6 +78,10 @@ void Renderer::createSurface() {
 
     std::cout << "Window surface created" << std::endl;
 }
+
+// *** ************ ***
+
+// *** Michael Salton ***
 
 void Renderer::pickPhysicalDevice() {
     uint32_t deviceCount = 0;
@@ -151,6 +157,10 @@ bool Renderer::isDeviceSuitable(VkPhysicalDevice device) {
     return meshFeatures.meshShader && meshFeatures.taskShader;
 }
 
+// *** ************ ***
+
+// *** AI Generated ***
+
 bool Renderer::checkDeviceExtensionSupport(VkPhysicalDevice device) {
     uint32_t extensionCount;
     vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
@@ -195,6 +205,10 @@ QueueFamilyIndices Renderer::findQueueFamilies(VkPhysicalDevice device) {
 
     return indices;
 }
+
+// *** ************ ***
+
+// *** Michael Salton ***
 
 void Renderer::printMeshShaderProperties(VkPhysicalDevice device) {
     VkPhysicalDeviceMeshShaderPropertiesEXT meshProps{};
@@ -327,6 +341,10 @@ void Renderer::createLogicalDevice() {
     std::cout << "  Present queue family:  "
               << queueFamilyIndices.presentFamily.value() << std::endl;
 }
+
+// *** ************ ***
+
+// *** AI Generated ***
 
 void Renderer::createCommandPool() {
     VkCommandPoolCreateInfo poolInfo{};
@@ -891,6 +909,10 @@ void Renderer::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
     vkBindBufferMemory(device, buffer, bufferMemory, 0);
 }
 
+// *** ************ ***
+
+// *** Michael Salton ***
+
 void Renderer::createDescriptorSetLayouts() {
     // Set 0: Scene
     VkDescriptorSetLayoutBinding viewBinding{};
@@ -1441,6 +1463,10 @@ void Renderer::createDescriptorSets() {
     std::cout << "Descriptor sets allocated and written" << std::endl;
 }
 
+// *** ************ ***
+
+// *** AI Generated ***
+
 std::vector<char> Renderer::readFile(const std::string& filename) {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
@@ -1470,6 +1496,10 @@ VkShaderModule Renderer::createShaderModule(const std::vector<char>& code) {
 
     return shaderModule;
 }
+
+// *** ************ ***
+
+// *** Michael Salton ***
 
 void Renderer::loadMeshShaderFunctions() {
     pfnCmdDrawMeshTasksEXT = (PFN_vkCmdDrawMeshTasksEXT)
@@ -1987,6 +2017,10 @@ void Renderer::createBenchmarkPipeline() {
     std::cout << "Benchmark vertex pipeline created" << std::endl;
 }
 
+// *** ************ ***
+
+// *** AI Generated ***
+
 bool Renderer::checkValidationLayerSupport() {
     uint32_t layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
@@ -2041,6 +2075,10 @@ VKAPI_ATTR VkBool32 VKAPI_CALL Renderer::debugCallback(
     return VK_FALSE;
 }
 
+// *** ************ ***
+
+// *** Michael Salton ***
+
 void Renderer::recreatePipelines() {
     // Destroy existing pipelines
     if (graphicsPipeline != VK_NULL_HANDLE) vkDestroyPipeline(device, graphicsPipeline, nullptr);
@@ -2067,6 +2105,10 @@ void Renderer::recreatePipelines() {
         createSkyboxPipeline();
     }
 }
+
+// *** ************ ***
+
+// *** AI Generated ***
 
 void Renderer::createSamplers() {
     // Linear sampler (for AO texture - smooth interpolation)
@@ -2103,6 +2145,10 @@ void Renderer::createSamplers() {
 // ============================================================================
 // Export Compute Pipelines
 // ============================================================================
+
+// *** ************ ***
+
+// *** Michael Salton ***
 
 void Renderer::createExportComputePipelines() {
     if (exportPipelinesCreated) return;
@@ -2220,3 +2266,5 @@ void Renderer::cleanupExportPipelines() {
 
     exportPipelinesCreated = false;
 }
+
+// *** ************ ***

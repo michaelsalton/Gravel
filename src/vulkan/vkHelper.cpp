@@ -2,6 +2,8 @@
 #include <stdexcept>
 #include <cstring>
 
+// *** AI Generated ***
+
 StorageBuffer::StorageBuffer(StorageBuffer&& other) noexcept
     : device(other.device), buffer(other.buffer),
       memory(other.memory), bufferSize(other.bufferSize) {
@@ -368,3 +370,5 @@ void VulkanTexture::destroy() {
         }
     }
 }
+
+// *** ************ ***

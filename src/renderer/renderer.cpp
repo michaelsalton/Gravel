@@ -15,65 +15,74 @@
 #include <cmath>
 #include <chrono>
 
-Renderer::Renderer(Window& window) : window(window) {
-    createInstance();
-    setupDebugMessenger();
-    createSurface();
-    pickPhysicalDevice();
-    createLogicalDevice();
-    loadMeshShaderFunctions();
-    createCommandPool();
-    createSwapChain();
-    createImageViews();
-    createDepthResources();
-    createMsaaColorResources();
-    createRenderPass();
-    createFramebuffers();
-    createCommandBuffers();
-    createSyncObjects();
+// *** Michael Salton ***
+
+// Constructor: brings up the whole renderer in dependency order — Vulkan core,
+// swapchain/attachments, the mesh-shader pipelines and descriptor resources,
+// then scene assets (ground plane, scale LUT, skybox, default mesh) and ImGui.
+Renderer::Renderer(Window& window) : window(window) { // Keep a reference to the window (surface/extent source)
+    createInstance();                            // Vulkan instance (+ validation layers)
+    setupDebugMessenger();                       // Validation-layer debug callback
+    createSurface();                             // Window surface to present to
+    pickPhysicalDevice();                        // Choose a GPU with mesh-shader support
+    createLogicalDevice();                       // Logical device + queues (mesh shader features enabled)
+    loadMeshShaderFunctions();                   // Resolve vkCmdDrawMeshTasksEXT
+    createCommandPool();                         // Pool for command buffers
+    createSwapChain();                           // Swapchain images
+    createImageViews();                          // Views over them
+    createDepthResources();                      // Depth buffer
+    createMsaaColorResources();                  // MSAA color target (if enabled)
+    createRenderPass();                          // Render pass (color + depth, optional resolve)
+    createFramebuffers();                        // One framebuffer per swapchain image
+    createCommandBuffers();                      // Per-frame command buffers
+    createSyncObjects();                         // Semaphores + fences
 
     // Pipeline statistics query pool for real-time triangle counting
     {
-        VkQueryPoolCreateInfo queryPoolInfo{};
+        VkQueryPoolCreateInfo queryPoolInfo{};   // Query pool for the on-screen GPU stats
         queryPoolInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
         queryPoolInfo.queryType = VK_QUERY_TYPE_PIPELINE_STATISTICS;
-        queryPoolInfo.queryCount = STATS_QUERY_COUNT;
-        queryPoolInfo.pipelineStatistics =
+        queryPoolInfo.queryCount = STATS_QUERY_COUNT; // One slot per frame in flight
+        queryPoolInfo.pipelineStatistics =       // Start with just the clipped-primitive (triangle) counter
             VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT;
         if (vkCreateQueryPool(device, &queryPoolInfo, nullptr, &statsQueryPool) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create statistics query pool!");
         }
-        vkResetQueryPool(device, statsQueryPool, 0, STATS_QUERY_COUNT);
+        vkResetQueryPool(device, statsQueryPool, 0, STATS_QUERY_COUNT); // Host-reset into a valid initial state
     }
 
-    createDescriptorSetLayouts();
-    createPipelineLayout();
-    createUniformBuffers();
-    createDescriptorPool();
-    createDescriptorSets();
-    createGraphicsPipeline();
-    createBenchmarkPipeline();
-    createSamplers();
-    generateGroundPlane(groundPlaneCellSize);
-    loadScaleLut();
-    scanSkyboxes();
-    if (!skyboxPaths.empty()) {
-        selectedSkybox = 0;
+    createDescriptorSetLayouts();                // Scene / HalfEdge / PerObject set layouts
+    createPipelineLayout();                      // Pipeline layout (3 sets + push constants)
+    createUniformBuffers();                      // View/Shading/Resurfacing/Pebble UBOs + pre-cull/stats SSBOs
+    createDescriptorPool();                      // Pool sized for all the sets
+    createDescriptorSets();                      // Allocate + write the scene/per-object sets
+    createGraphicsPipeline();                    // The task+mesh+frag resurfacing pipeline
+    createBenchmarkPipeline();                   // Traditional vertex pipeline (for comparison)
+    createSamplers();                            // Linear + nearest samplers
+    generateGroundPlane(groundPlaneCellSize);    // Build the procedural ground plane
+    loadScaleLut();                              // Dragon-scale B-spline control cage
+    scanSkyboxes();                              // Discover available skyboxes
+    if (!skyboxPaths.empty()) {                  // If any skyboxes were found...
+        selectedSkybox = 0;                      // Default to the first
         // Default to ludwikowice if available
-        for (int i = 0; i < static_cast<int>(skyboxNames.size()); i++) {
+        for (int i = 0; i < static_cast<int>(skyboxNames.size()); i++) { // ...but prefer "ludwikowice" if present
             if (skyboxNames[i].find("ludwikowice") != std::string::npos) {
                 selectedSkybox = i;
                 break;
             }
         }
-        loadSkybox(skyboxPaths[selectedSkybox]);
+        loadSkybox(skyboxPaths[selectedSkybox]); // Load the chosen skybox HDR
     }
-    precomputeProxyParams();
-    scanAssetMeshes();
-    if (selectedMesh >= 0 && selectedMesh < static_cast<int>(assetMeshPaths.size()))
-        pendingMeshLoad = assetMeshPaths[selectedMesh];
-    initImGui();
+    precomputeProxyParams();                     // Precompute per-element-type proxy PBR params
+    scanAssetMeshes();                           // Discover loadable base meshes
+    if (selectedMesh >= 0 && selectedMesh < static_cast<int>(assetMeshPaths.size())) // If a default mesh is selected...
+        pendingMeshLoad = assetMeshPaths[selectedMesh]; // ...queue it to load on the first frame
+    initImGui();                                 // Initialize the ImGui UI backend
 }
+
+// *** ************ ***
+
+// *** AI Generated ***
 
 Renderer::~Renderer() {
     vkDeviceWaitIdle(device);
@@ -206,130 +215,138 @@ Renderer::~Renderer() {
     }
 }
 
+// *** ************ ***
+
+// *** Michael Salton ***
+
+// Start a frame: process any deferred/heavy work (mesh & benchmark loads, export,
+// ground regen, skybox/coat/GRWM loads) — heavy ops wait two frames so a loading
+// overlay is visible first — then read back the previous frame's GPU stats, wait
+// on this slot's fence, and acquire the next swapchain image. Sets frameStarted.
 void Renderer::beginFrame() {
     // Check if any heavy operation is pending — show loading overlay first frame,
     // then do the actual work on the next frame
-    bool hasPendingWork = !pendingMeshLoad.empty() ||
-                          (!pendingBenchmarkLoad.empty() && pendingBenchmarkLoad != "__unload__") ||
-                          pendingExport;
+    bool hasPendingWork = !pendingMeshLoad.empty() || // Is a heavy op queued? (mesh load,
+                          (!pendingBenchmarkLoad.empty() && pendingBenchmarkLoad != "__unload__") || // benchmark load,
+                          pendingExport;          // or export)
 
     if (hasPendingWork && !loadingActive) {
         // First frame: just set loading flag, let this frame render the overlay
-        loadingActive = true;
-        loadingFrameCount = 0;
-        if (!pendingMeshLoad.empty())
+        loadingActive = true;                    // Enter "loading" state
+        loadingFrameCount = 0;                   // Reset the overlay-visible frame counter
+        if (!pendingMeshLoad.empty())            // Pick an overlay message for the queued op
             loadingMessage = "Loading mesh...";
         else if (!pendingBenchmarkLoad.empty())
             loadingMessage = "Loading benchmark mesh...";
         else if (pendingExport)
             loadingMessage = "Exporting mesh...";
-        loadingStartTime = static_cast<float>(glfwGetTime());
+        loadingStartTime = static_cast<float>(glfwGetTime()); // Stamp the start time
         // Don't process the work yet — fall through to render a frame with the overlay
     } else if (loadingActive && loadingFrameCount < 2) {
         // Wait for overlay to be visible on screen (need 2 frames: render + present)
-        loadingFrameCount++;
+        loadingFrameCount++;                     // Count overlay frames (need render + present)
         // Fall through to render another frame with the overlay
     } else if (loadingActive) {
         // Overlay has been shown for 2 frames, now do the actual work
-        if (pendingGroundRegenerate) {
+        if (pendingGroundRegenerate) {           // Deferred ground-plane regen
             pendingGroundRegenerate = false;
-            vkDeviceWaitIdle(device);
+            vkDeviceWaitIdle(device);            // Safe to mutate GPU resources only when idle
             generateGroundPlane(groundPlaneCellSize);
         }
 
-        if (!pendingMeshLoad.empty()) {
-            std::string path = std::move(pendingMeshLoad);
+        if (!pendingMeshLoad.empty()) {          // Deferred mesh load
+            std::string path = std::move(pendingMeshLoad); // Take and clear the request
             pendingMeshLoad.clear();
-            loadMesh(path);
+            loadMesh(path);                      // Do the actual (heavy) load
 
-            if (pendingPreset) {
-                doSkinning = pendingPreset->doSkinning;
+            if (pendingPreset) {                 // A UI preset may accompany the load
+                doSkinning = pendingPreset->doSkinning;       // Apply preset toggles
                 animationPlaying = pendingPreset->animationPlaying;
                 animationSpeed = pendingPreset->animationSpeed;
                 baseMeshMode = pendingPreset->baseMeshMode;
-                if (pendingPreset->chainmailMode) {
+                if (pendingPreset->chainmailMode) {           // Chainmail preset
                     applyPresetChainMail();
                 }
-                if (pendingPreset->enableDragonCoat && dragonCoatAvailable) {
+                if (pendingPreset->enableDragonCoat && dragonCoatAvailable) { // Coat preset
                     dragonCoatEnabled = true;
                     loadSecondaryMesh(dragonCoatPath);
                 }
-                if (pendingPreset->applyDragonScales) {
+                if (pendingPreset->applyDragonScales) {       // Dragon-scale preset
                     applyPresetDragonScales();
                     dragonBaseMeshMode = 2;  // Solid
                 }
-                pendingPreset = nullptr;
+                pendingPreset = nullptr;         // Preset consumed
             }
         }
 
-        if (!pendingBenchmarkLoad.empty()) {
+        if (!pendingBenchmarkLoad.empty()) {     // Deferred benchmark mesh load/unload
             std::string path = std::move(pendingBenchmarkLoad);
             pendingBenchmarkLoad.clear();
-            if (path == "__unload__") {
+            if (path == "__unload__") {          // Sentinel = unload the benchmark mesh
                 vkDeviceWaitIdle(device);
                 cleanupBenchmarkMesh();
                 renderBenchmarkMesh = false;
-            } else {
+            } else {                             // Otherwise load the given benchmark mesh
                 loadBenchmarkMesh(path);
             }
         }
 
-        if (pendingExport) {
+        if (pendingExport) {                     // Deferred procedural-mesh export
             pendingExport = false;
             try {
-                auto pos = exportFilePath.find_last_of("/\\");
+                auto pos = exportFilePath.find_last_of("/\\"); // Ensure the output directory exists
                 if (pos != std::string::npos) {
                     std::filesystem::create_directories(exportFilePath.substr(0, pos));
                 }
-                exportProceduralMesh(exportFilePath, exportMode);
-                lastExportStatus = "Exported: " + exportFilePath;
-            } catch (const std::exception& e) {
+                exportProceduralMesh(exportFilePath, exportMode); // Bake + write the mesh
+                lastExportStatus = "Exported: " + exportFilePath; // UI status
+            } catch (const std::exception& e) {  // Report failures to the UI rather than crashing
                 lastExportStatus = std::string("Export failed: ") + e.what();
             }
         }
 
-        loadingDuration = static_cast<float>(glfwGetTime()) - loadingStartTime;
-        loadingActive = false;
-        loadingDone = true;
+        loadingDuration = static_cast<float>(glfwGetTime()) - loadingStartTime; // Record how long it took
+        loadingActive = false;                   // Leave loading state
+        loadingDone = true;                      // Trigger the "done" UI flash
         loadingDoneTime = static_cast<float>(glfwGetTime());
     } else {
         // Deferred GRWM buffer load (after pipeline run completes)
-        if (grwmPendingLoad) {
+        if (grwmPendingLoad) {                   // GRWM output becomes available after its run finishes
             grwmPendingLoad = false;
             vkDeviceWaitIdle(device);
-            loadGrwmPreprocess(loadedMeshPath);
-            writeGrwmDescriptors(heDescriptorSet);
-            grwmStatus = preprocessLoaded ? "Loaded successfully" : "Failed to load output";
+            loadGrwmPreprocess(loadedMeshPath);  // Load curvature/feature/slot data
+            writeGrwmDescriptors(heDescriptorSet); // Bind it
+            grwmStatus = preprocessLoaded ? "Loaded successfully" : "Failed to load output"; // UI status
         }
 
         // Deferred dragon coat load/unload
-        if (pendingCoatLoad) {
+        if (pendingCoatLoad) {                   // Toggle: load the dragon coat
             pendingCoatLoad = false;
             vkDeviceWaitIdle(device);
             loadSecondaryMesh(dragonCoatPath);
         }
-        if (pendingCoatUnload) {
+        if (pendingCoatUnload) {                 // Toggle: unload the dragon coat
             pendingCoatUnload = false;
             vkDeviceWaitIdle(device);
             cleanupSecondaryMesh();
         }
 
         // Deferred skybox load
-        if (!pendingSkyboxLoad.empty()) {
+        if (!pendingSkyboxLoad.empty()) {        // UI picked a different skybox
             std::string path = std::move(pendingSkyboxLoad);
             pendingSkyboxLoad.clear();
             loadSkybox(path);
         }
 
         // No loading — process lightweight deferred ops
-        if (pendingGroundRegenerate) {
+        if (pendingGroundRegenerate) {           // Ground regen without the loading overlay
             pendingGroundRegenerate = false;
             vkDeviceWaitIdle(device);
             generateGroundPlane(groundPlaneCellSize);
         }
 
         // Handle quick unload (no loading overlay needed)
-        if (!pendingBenchmarkLoad.empty() && pendingBenchmarkLoad == "__unload__") {
+        if (!pendingBenchmarkLoad.empty() && pendingBenchmarkLoad == "__unload__") { // Cheap benchmark unload
             pendingBenchmarkLoad.clear();
             vkDeviceWaitIdle(device);
             cleanupBenchmarkMesh();
@@ -337,47 +354,47 @@ void Renderer::beginFrame() {
         }
     }
 
-    vkWaitForFences(device, 1, &inFlightFences[currentFrame],
+    vkWaitForFences(device, 1, &inFlightFences[currentFrame], // Wait until this frame slot's prior work finished
                     VK_TRUE, UINT64_MAX);
 
     // Recreate query pool if invoc-stats toggle changed
     // Wait for all in-flight fences (not vkDeviceWaitIdle — avoids disturbing semaphore state)
-    if (showGPUInvocStats != invocStatsActive) {
-        vkWaitForFences(device, static_cast<uint32_t>(inFlightFences.size()),
+    if (showGPUInvocStats != invocStatsActive) { // UI toggled the task/mesh invocation counters
+        vkWaitForFences(device, static_cast<uint32_t>(inFlightFences.size()), // Ensure no frame is using the pool
                         inFlightFences.data(), VK_TRUE, UINT64_MAX);
-        vkDestroyQueryPool(device, statsQueryPool, nullptr);
+        vkDestroyQueryPool(device, statsQueryPool, nullptr); // Rebuild the pool with the new statistic set
         VkQueryPoolCreateInfo qpInfo{};
         qpInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
         qpInfo.queryType = VK_QUERY_TYPE_PIPELINE_STATISTICS;
         qpInfo.queryCount = STATS_QUERY_COUNT;
-        qpInfo.pipelineStatistics = VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT;
-        if (showGPUInvocStats)
+        qpInfo.pipelineStatistics = VK_QUERY_PIPELINE_STATISTIC_CLIPPING_PRIMITIVES_BIT; // Always count triangles
+        if (showGPUInvocStats)                   // Optionally also count task/mesh shader invocations
             qpInfo.pipelineStatistics |=
                 VK_QUERY_PIPELINE_STATISTIC_TASK_SHADER_INVOCATIONS_BIT_EXT |
                 VK_QUERY_PIPELINE_STATISTIC_MESH_SHADER_INVOCATIONS_BIT_EXT;
         vkCreateQueryPool(device, &qpInfo, nullptr, &statsQueryPool);
         // Host-side reset so the new pool is in a valid state before first use
         vkResetQueryPool(device, statsQueryPool, 0, STATS_QUERY_COUNT);
-        invocStatsActive = showGPUInvocStats;
-        if (!invocStatsActive) {
+        invocStatsActive = showGPUInvocStats;    // Remember the new mode
+        if (!invocStatsActive) {                 // Clear stale invocation counts when turning off
             gpuTaskShaderInvocations = 0;
             gpuMeshShaderInvocations = 0;
         }
     }
 
     // Read back pipeline statistics from the previous frame on this slot
-    if (invocStatsActive) {
+    if (invocStatsActive) {                      // Extended mode: triangles + task + mesh invocations
         uint64_t stats[3] = {};
-        VkResult qr = vkGetQueryPoolResults(
+        VkResult qr = vkGetQueryPoolResults(     // Non-blocking read of this slot's previous-frame results
             device, statsQueryPool, currentFrame, 1,
             sizeof(stats), stats, sizeof(stats),
             VK_QUERY_RESULT_64_BIT);
-        if (qr == VK_SUCCESS) {
+        if (qr == VK_SUCCESS) {                  // Only update the UI numbers if results are ready
             gpuRenderedTriangles     = stats[0];
             gpuTaskShaderInvocations = stats[1];
             gpuMeshShaderInvocations = stats[2];
         }
-    } else {
+    } else {                                     // Default mode: just the triangle (clipped-primitive) count
         uint64_t clipping = 0;
         VkResult qr = vkGetQueryPoolResults(
             device, statsQueryPool, currentFrame, 1,
@@ -388,71 +405,76 @@ void Renderer::beginFrame() {
     }
 
     // Read back rendered element count from this frame's atomic counter, then reset
-    gpuRenderedElements = *reinterpret_cast<uint32_t*>(elementStatsMapped[currentFrame]);
-    *reinterpret_cast<uint32_t*>(elementStatsMapped[currentFrame]) = 0;
+    gpuRenderedElements = *reinterpret_cast<uint32_t*>(elementStatsMapped[currentFrame]); // Read the atomic counter
+    *reinterpret_cast<uint32_t*>(elementStatsMapped[currentFrame]) = 0; // Reset it for this frame's draws
 
-    VkResult result = vkAcquireNextImageKHR(
+    VkResult result = vkAcquireNextImageKHR(     // Acquire the next swapchain image to render into
         device, swapChain, UINT64_MAX,
-        imageAvailableSemaphores[currentFrame],
+        imageAvailableSemaphores[currentFrame],  // Signaled when the image is ready
         VK_NULL_HANDLE, &currentImageIndex);
 
-    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-        recreateSwapChain();
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {    // Window resized/invalidated...
+        recreateSwapChain();                     // ...rebuild the swapchain and skip this frame
         return;
-    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+    } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) { // Suboptimal is acceptable; other errors aren't
         throw std::runtime_error("Failed to acquire swap chain image!");
     }
 
-    vkResetFences(device, 1, &inFlightFences[currentFrame]);
-    vkResetCommandBuffer(commandBuffers[currentFrame], 0);
+    vkResetFences(device, 1, &inFlightFences[currentFrame]); // Reset the fence now that we're committed to rendering
+    vkResetCommandBuffer(commandBuffers[currentFrame], 0);   // Reset this slot's command buffer for re-recording
 
-    frameStarted = true;
+    frameStarted = true;                         // Mark the frame open (endFrame checks this)
 }
 
+// Record one frame's command buffer: begin the render pass, draw the skybox,
+// push the per-frame UBOs (view/shading/resurfacing/pebble), run the CPU pre-cull
+// to build the visible-element list, then dispatch every mesh-shader draw —
+// resurfacing, pebbles, control cage, ground pathway/wireframe, the dual
+// (secondary) mesh, and the base-mesh overlay. frameDrawCalls tallies the draws.
 void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
-    frameDrawCalls = 0;
+    frameDrawCalls = 0;                          // Reset the per-frame draw-call counter
 
-    VkCommandBufferBeginInfo beginInfo{};
+    VkCommandBufferBeginInfo beginInfo{};        // Begin recording this frame's command buffer
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
     if (vkBeginCommandBuffer(cmd, &beginInfo) != VK_SUCCESS) {
         throw std::runtime_error("Failed to begin recording command buffer!");
     }
 
-    VkRenderPassBeginInfo renderPassInfo{};
+    VkRenderPassBeginInfo renderPassInfo{};      // Configure the render pass for this frame
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassInfo.renderPass = renderPass;
-    renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+    renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex]; // Target this swapchain image's framebuffer
     renderPassInfo.renderArea.offset = {0, 0};
     renderPassInfo.renderArea.extent = swapChainExtent;
 
-    std::array<VkClearValue, 2> clearValues{};
-    clearValues[0].color = {{backgroundColor.x, backgroundColor.y, backgroundColor.z, 1.0f}};
-    clearValues[1].depthStencil = {1.0f, 0};
+    std::array<VkClearValue, 2> clearValues{};   // [0] color, [1] depth
+    clearValues[0].color = {{backgroundColor.x, backgroundColor.y, backgroundColor.z, 1.0f}}; // Clear to the UI background color
+    clearValues[1].depthStencil = {1.0f, 0};     // Clear depth to far
 
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
 
     // Reset query pool outside render pass (required), begin inside (begin and end must match scope)
-    vkCmdResetQueryPool(cmd, statsQueryPool, currentFrame, 1);
+    vkCmdResetQueryPool(cmd, statsQueryPool, currentFrame, 1); // Reset this slot's stats query before use
 
     // Clear proxy face buffer before rendering (task shader writes per-face flags)
-    if (enableProxy && proxyFlagBuffer != VK_NULL_HANDLE) {
-        vkCmdFillBuffer(cmd, proxyFlagBuffer, 0, proxyFlagSize, 0);
-        VkMemoryBarrier barrier{};
+    if (enableProxy && proxyFlagBuffer != VK_NULL_HANDLE) { // Proxy mode: zero the per-face proxy buffer each frame
+        vkCmdFillBuffer(cmd, proxyFlagBuffer, 0, proxyFlagSize, 0); // GPU memset to 0
+        VkMemoryBarrier barrier{};               // Barrier so the fill is visible to the task/fragment shaders
         barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT; // After the transfer write...
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT; // ...before shader reads/writes
         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_PIPELINE_STAGE_TASK_SHADER_BIT_EXT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
             0, 1, &barrier, 0, nullptr, 0, nullptr);
     }
 
-    vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE); // Enter the render pass
 
-    vkCmdBeginQuery(cmd, statsQueryPool, currentFrame, 0);
+    vkCmdBeginQuery(cmd, statsQueryPool, currentFrame, 0); // Begin collecting pipeline statistics
 
-    VkViewport viewport{};
+    VkViewport viewport{};                       // Full-window viewport
     viewport.x = 0.0f;
     viewport.y = 0.0f;
     viewport.width = static_cast<float>(swapChainExtent.width);
@@ -461,64 +483,65 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(cmd, 0, 1, &viewport);
 
-    VkRect2D scissor{};
+    VkRect2D scissor{};                          // Full-window scissor
     scissor.offset = {0, 0};
     scissor.extent = swapChainExtent;
     vkCmdSetScissor(cmd, 0, 1, &scissor);
 
     // Draw skybox first (no depth write, always behind everything)
-    if (showSkybox && skyboxLoaded) {
-        float aspect = static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height);
-        glm::mat4 view = activeCamera->getViewMatrix();
-        glm::mat4 proj = activeCamera->getProjectionMatrix(aspect);
-        glm::mat4 invVP = glm::inverse(proj * view);
+    if (showSkybox && skyboxLoaded) {            // Only if a skybox is enabled + loaded
+        float aspect = static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height); // Aspect ratio
+        glm::mat4 view = activeCamera->getViewMatrix();          // Current camera view
+        glm::mat4 proj = activeCamera->getProjectionMatrix(aspect); // Current projection
+        glm::mat4 invVP = glm::inverse(proj * view);             // Inverse VP → reconstruct world rays in the shader
 
-        struct { glm::mat4 invVP; float exposure; float pad[3]; } skyUBO;
+        struct { glm::mat4 invVP; float exposure; float pad[3]; } skyUBO; // Skybox UBO layout
         skyUBO.invVP = invVP;
-        skyUBO.exposure = skyboxExposure;
-        memcpy(skyboxUBOMapped, &skyUBO, sizeof(skyUBO));
+        skyUBO.exposure = skyboxExposure;        // HDR exposure
+        memcpy(skyboxUBOMapped, &skyUBO, sizeof(skyUBO)); // Upload
 
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, skyboxPipeline);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, skyboxPipeline); // Bind skybox pipeline
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                  skyboxPipelineLayout, 0, 1,
                                  &skyboxDescriptorSet, 0, nullptr);
-        vkCmdDraw(cmd, 3, 1, 0, 0);  // fullscreen triangle
+        vkCmdDraw(cmd, 3, 1, 0, 0);  // fullscreen triangle // One big triangle covering the screen
     }
 
-    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline); // Bind the resurfacing pipeline
 
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 0: scene (view/shading/pre-cull/stats)
                              pipelineLayout, 0, 1,
                              &sceneDescriptorSets[currentFrame],
                              0, nullptr);
 
-    if (heMeshUploaded) {
+    if (heMeshUploaded) {                         // Set 1: half-edge data (only if a mesh is loaded)
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                  pipelineLayout, 1, 1,
                                  &heDescriptorSet,
                                  0, nullptr);
     }
 
-    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 2: per-object (config UBO, textures, ...)
                              pipelineLayout, 2, 1,
                              &perObjectDescriptorSet,
                              0, nullptr);
 
     // Update view UBO from current camera state
     {
-        float aspect = static_cast<float>(swapChainExtent.width) /
+        float aspect = static_cast<float>(swapChainExtent.width) / // Aspect for the projection matrix
                        static_cast<float>(swapChainExtent.height);
 
-        ViewUBO viewData{};
+        ViewUBO viewData{};                      // Fill the camera UBO from the active camera
         viewData.view           = activeCamera->getViewMatrix();
         viewData.projection     = activeCamera->getProjectionMatrix(aspect);
         viewData.cameraPosition = glm::vec4(activeCamera->getPosition(), 1.0f);
         viewData.nearPlane      = activeCamera->nearPlane;
         viewData.farPlane       = activeCamera->farPlane;
-        memcpy(viewUBOMapped[currentFrame], &viewData, sizeof(ViewUBO));
+        memcpy(viewUBOMapped[currentFrame], &viewData, sizeof(ViewUBO)); // Upload to this frame's mapped UBO
     }
 
     // Update shading UBO with current lighting config
+    // (light + the primary/base-mesh/secondary PBR material params, copied from UI state)
     GlobalShadingUBO shadingData{};
     shadingData.lightPosition         = glm::vec4(lightPosition, 0.0f);
     shadingData.ambient               = glm::vec4(ambientColor, ambientIntensity);
@@ -550,15 +573,15 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
     memcpy(shadingUBOMapped[currentFrame], &shadingData, sizeof(GlobalShadingUBO));
 
     // Per-frame animation update
-    if (skeletonLoaded && animationPlaying && !animations.empty()) {
-        animationTime += lastDeltaTime * animationSpeed;
-        if (animationTime > animations[0].duration) {
+    if (skeletonLoaded && animationPlaying && !animations.empty()) { // Only when a clip is playing
+        animationTime += lastDeltaTime * animationSpeed; // Advance the clock by dt × speed
+        if (animationTime > animations[0].duration) {    // Loop the clip
             animationTime = std::fmod(animationTime, animations[0].duration);
         }
-        GltfLoader::updateSkeleton(animations[0], animationTime, skeleton);
-        std::vector<glm::mat4> boneMatrices;
+        GltfLoader::updateSkeleton(animations[0], animationTime, skeleton); // Pose the skeleton at this time
+        std::vector<glm::mat4> boneMatrices;             // Recompute the bone matrices...
         GltfLoader::computeBoneMatrices(skeleton, boneMatrices);
-        boneMatricesBuffer.update(boneMatrices.data(),
+        boneMatricesBuffer.update(boneMatrices.data(),   // ...and upload them for skinning
                                   boneMatrices.size() * sizeof(glm::mat4));
     }
 
@@ -647,418 +670,418 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         memcpy(secondaryResurfacingUBOMapped, &secData, sizeof(ResurfacingUBO));
     }
 
-    PushConstants pushConstants{};
+    PushConstants pushConstants{};               // Per-draw constants shared by task/mesh/frag
 
-    glm::mat4 baseModel = thirdPersonMode ? player.getModelMatrix() : glm::mat4(1.0f);
-    if (turntableMode) {
+    glm::mat4 baseModel = thirdPersonMode ? player.getModelMatrix() : glm::mat4(1.0f); // Player transform in 3rd-person, else identity
+    if (turntableMode) {                         // Turntable mode adds the UI drag rotation
         baseModel = glm::mat4_cast(objectRotation) * baseModel;
     }
-    pushConstants.model = baseModel;
-    pushConstants.nbFaces = heNbFaces;
+    pushConstants.model = baseModel;             // Object→world matrix
+    pushConstants.nbFaces = heNbFaces;           // Mesh element counts (for vertex-element indexing)
     pushConstants.nbVertices = heNbVertices;
-    pushConstants.elementType = elementType;
-    pushConstants.userScaling = userScaling;
-    pushConstants.torusMajorR = torusMajorR;
+    pushConstants.elementType = elementType;     // Which procedural element to grow
+    pushConstants.userScaling = userScaling;     // Global element size
+    pushConstants.torusMajorR = torusMajorR;     // Shape params (only the relevant ones used)
     pushConstants.torusMinorR = torusMinorR;
     pushConstants.sphereRadius = sphereRadius;
-    pushConstants.resolutionM = resolutionM;
+    pushConstants.resolutionM = resolutionM;     // Tessellation resolution
     pushConstants.resolutionN = resolutionN;
-    pushConstants.debugMode = debugMode;
-    pushConstants.enableCulling = (enableFrustumCulling ? 1u : 0u) | (enableBackfaceCulling ? 2u : 0u)
-                                | ((useMaskTexture && maskTextureLoaded) ? 4u : 0u);
-    pushConstants.cullingThreshold = cullingThreshold;
-    pushConstants.enableLod = enableLod ? 1u : 0u;
+    pushConstants.debugMode = debugMode;         // Debug visualization selector
+    pushConstants.enableCulling = (enableFrustumCulling ? 1u : 0u) | (enableBackfaceCulling ? 2u : 0u) // Culling bitmask:
+                                | ((useMaskTexture && maskTextureLoaded) ? 4u : 0u); // bit0 frustum, bit1 backface, bit2 mask
+    pushConstants.cullingThreshold = cullingThreshold; // Backface dot threshold
+    pushConstants.enableLod = enableLod ? 1u : 0u;     // Adaptive LOD flag
     pushConstants.lodFactor = lodFactor;
-    pushConstants.chainmailMode = chainmailMode ? 1u : 0u;
+    pushConstants.chainmailMode = chainmailMode ? 1u : 0u; // Chainmail layout flag
     pushConstants.chainmailTiltAngle = chainmailTiltAngle;
     pushConstants.chainmailSurfaceOffset = chainmailSurfaceOffset;
-    pushConstants.activeSlots = (enableSlotPlacement && preprocessLoaded && enablePreprocess)
+    pushConstants.activeSlots = (enableSlotPlacement && preprocessLoaded && enablePreprocess) // GRWM slot count (0 = off)
         ? static_cast<uint32_t>(activeSlotCount) : 0u;
-    pushConstants.slotUniformSizeFlag = slotUniformSize ? 1u : 0u;
+    pushConstants.slotUniformSizeFlag = slotUniformSize ? 1u : 0u; // Don't shrink elements per slot count
 
-    vkCmdPushConstants(cmd, pipelineLayout,
+    vkCmdPushConstants(cmd, pipelineLayout,      // Push the constants to all three stages
                         VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
                         VK_SHADER_STAGE_FRAGMENT_BIT,
                         0, sizeof(PushConstants), &pushConstants);
-    if (renderResurfacing && !renderPebbles) {
-        if (heMeshUploaded) {
+    if (renderResurfacing && !renderPebbles) {   // Resurfacing draw path (mutually exclusive with pebbles)
+        if (heMeshUploaded) {                    // Only if a mesh is loaded
             // CPU pre-cull: build compact visible element index list.
             // Only rebuilt when camera, scale, or culling settings change.
-            bool doMaskCull = useMaskTexture && maskTextureLoaded && !cpuMaskPixels.empty();
-            bool doCulling   = enableFrustumCulling || enableBackfaceCulling;
+            bool doMaskCull = useMaskTexture && maskTextureLoaded && !cpuMaskPixels.empty(); // Mask culling active?
+            bool doCulling   = enableFrustumCulling || enableBackfaceCulling; // Any geometric culling?
 
-            float aspect = static_cast<float>(swapChainExtent.width) /
+            float aspect = static_cast<float>(swapChainExtent.width) / // Aspect for the MVP
                            static_cast<float>(swapChainExtent.height);
-            glm::mat4 model = thirdPersonMode ? player.getModelMatrix() : glm::mat4(1.0f);
+            glm::mat4 model = thirdPersonMode ? player.getModelMatrix() : glm::mat4(1.0f); // Same model matrix as the push constant
             if (turntableMode) {
                 model = glm::mat4_cast(objectRotation) * model;
             }
             glm::mat3 modelNormalMat = glm::mat3(model);  // for transforming normals
-            glm::mat4 mvp = activeCamera->getProjectionMatrix(aspect) *
+            glm::mat4 mvp = activeCamera->getProjectionMatrix(aspect) * // Object→clip, for the culling test
                             activeCamera->getViewMatrix() * model;
 
-            uint32_t slotK = (enableSlotPlacement && preprocessLoaded && enablePreprocess)
+            uint32_t slotK = (enableSlotPlacement && preprocessLoaded && enablePreprocess) // Slots-per-face (0 = off)
                 ? static_cast<uint32_t>(activeSlotCount) : 0u;
 
-            bool settingsChanged = (enableFrustumCulling  != lastEnableFrustumCulling)
+            bool settingsChanged = (enableFrustumCulling  != lastEnableFrustumCulling) // Did any cull-affecting setting change?
                                 || (enableBackfaceCulling != lastEnableBackfaceCulling)
                                 || (cullingThreshold      != lastCullingThreshold)
                                 || (userScaling           != lastCullUserScaling)
                                 || (doMaskCull            != lastDoMaskCull)
                                 || (slotK                 != lastSlotK);
-            bool cameraChanged = (mvp != lastCullMVP);
+            bool cameraChanged = (mvp != lastCullMVP); // Did the camera/model move?
 
-            if (visibleCacheDirty || settingsChanged || cameraChanged) {
-                cachedVisibleIndices.clear();
+            if (visibleCacheDirty || settingsChanged || cameraChanged) { // Rebuild the visible list only when needed
+                cachedVisibleIndices.clear();    // Reset the cached list
                 cachedTotalElements = 0;
 
-                auto isMasked = [&](glm::vec2 uv) -> bool {
+                auto isMasked = [&](glm::vec2 uv) -> bool { // True if this UV falls in a masked-out region
                     if (!doMaskCull) return false;
-                    uint32_t x = static_cast<uint32_t>(uv.x * cpuMaskWidth)  % cpuMaskWidth;
+                    uint32_t x = static_cast<uint32_t>(uv.x * cpuMaskWidth)  % cpuMaskWidth;  // Wrap into mask texels
                     uint32_t y = static_cast<uint32_t>(uv.y * cpuMaskHeight) % cpuMaskHeight;
-                    return cpuMaskPixels[y * cpuMaskWidth + x] < 128;
+                    return cpuMaskPixels[y * cpuMaskWidth + x] < 128; // Dark = masked out
                 };
 
-                auto isVisible = [&](glm::vec3 pos, glm::vec3 normal, float area) -> bool {
+                auto isVisible = [&](glm::vec3 pos, glm::vec3 normal, float area) -> bool { // Frustum + backface test (mirrors the task shader)
                     if (!doCulling) return true;
-                    float radius = std::sqrt(area) * userScaling * 2.0f;
+                    float radius = std::sqrt(area) * userScaling * 2.0f; // Conservative element radius
                     if (enableFrustumCulling) {
-                        glm::vec4 clip = mvp * glm::vec4(pos, 1.0f);
-                        if (clip.w <= 0.0f) return false;
-                        float cr = radius / clip.w * 2.0f * 1.1f;
-                        glm::vec3 ndc = glm::vec3(clip) / clip.w;
-                        if (ndc.x + cr < -1.0f || ndc.x - cr > 1.0f) return false;
-                        if (ndc.y + cr < -1.0f || ndc.y - cr > 1.0f) return false;
-                        if (ndc.z + cr <  0.0f || ndc.z - cr > 1.0f) return false;
+                        glm::vec4 clip = mvp * glm::vec4(pos, 1.0f); // Project to clip space
+                        if (clip.w <= 0.0f) return false;            // Behind the camera
+                        float cr = radius / clip.w * 2.0f * 1.1f;    // Radius in NDC (with margin)
+                        glm::vec3 ndc = glm::vec3(clip) / clip.w;    // NDC center
+                        if (ndc.x + cr < -1.0f || ndc.x - cr > 1.0f) return false; // Left/right
+                        if (ndc.y + cr < -1.0f || ndc.y - cr > 1.0f) return false; // Bottom/top
+                        if (ndc.z + cr <  0.0f || ndc.z - cr > 1.0f) return false; // Near/far (Vulkan [0,1])
                     }
                     if (enableBackfaceCulling) {
-                        glm::vec3 worldPos = glm::vec3(model * glm::vec4(pos, 1.0f));
-                        glm::vec3 worldNormal = glm::normalize(modelNormalMat * normal);
-                        glm::vec3 viewDir = glm::normalize(activeCamera->getPosition() - worldPos);
-                        if (glm::dot(viewDir, worldNormal) <= cullingThreshold) return false;
+                        glm::vec3 worldPos = glm::vec3(model * glm::vec4(pos, 1.0f)); // Element world position
+                        glm::vec3 worldNormal = glm::normalize(modelNormalMat * normal); // World normal
+                        glm::vec3 viewDir = glm::normalize(activeCamera->getPosition() - worldPos); // Toward camera
+                        if (glm::dot(viewDir, worldNormal) <= cullingThreshold) return false; // Facing away → cull
                     }
-                    return true;
+                    return true;                 // Survives all tests
                 };
 
-                uint32_t totalElements = heNbFaces + heNbVertices;
-                cachedVisibleIndices.reserve(std::min(totalElements, VISIBLE_INDICES_MAX));
+                uint32_t totalElements = heNbFaces + heNbVertices; // Faces + vertex elements
+                cachedVisibleIndices.reserve(std::min(totalElements, VISIBLE_INDICES_MAX)); // Avoid reallocations
 
-                auto cullStart = std::chrono::high_resolution_clock::now();
+                auto cullStart = std::chrono::high_resolution_clock::now(); // Time the cull for the stats UI
 
-                if (slotK > 0) {
+                if (slotK > 0) {                 // Slot placement mode
                     // Slot mode: emit K indices per visible face
-                    for (uint32_t i = 0; i < heNbFaces; i++) {
-                        if (isMasked(cpuFaceUVs[i])) continue;
-                        cachedTotalElements += slotK;
-                        if (isVisible(cpuFaceCenters[i], cpuFaceNormals[i], cpuFaceAreas[i])) {
-                            for (uint32_t s = 0; s < slotK; s++) {
+                    for (uint32_t i = 0; i < heNbFaces; i++) { // Faces only (no vertex elements in slot mode)
+                        if (isMasked(cpuFaceUVs[i])) continue; // Skip masked faces
+                        cachedTotalElements += slotK; // Count K elements per face
+                        if (isVisible(cpuFaceCenters[i], cpuFaceNormals[i], cpuFaceAreas[i])) { // Visible?
+                            for (uint32_t s = 0; s < slotK; s++) { // Emit one compound index per slot
                                 if (cachedVisibleIndices.size() < VISIBLE_INDICES_MAX)
-                                    cachedVisibleIndices.push_back(i * slotK + s);
+                                    cachedVisibleIndices.push_back(i * slotK + s); // faceId*K + slot
                             }
                         }
                     }
                     // Skip vertex elements in slot mode
-                } else {
-                    for (uint32_t i = 0; i < heNbFaces; i++) {
+                } else {                         // Regular (one element per face/vertex) mode
+                    for (uint32_t i = 0; i < heNbFaces; i++) { // Face elements
                         if (isMasked(cpuFaceUVs[i])) continue;
                         cachedTotalElements++;
                         if (isVisible(cpuFaceCenters[i], cpuFaceNormals[i], cpuFaceAreas[i]))
                             if (cachedVisibleIndices.size() < VISIBLE_INDICES_MAX)
-                                cachedVisibleIndices.push_back(i);
+                                cachedVisibleIndices.push_back(i); // Face index
                     }
-                    for (uint32_t i = 0; i < heNbVertices; i++) {
+                    for (uint32_t i = 0; i < heNbVertices; i++) { // Vertex elements
                         if (isMasked(cpuVertexUVs[i])) continue;
                         cachedTotalElements++;
                         if (isVisible(cpuVertexPositions[i], cpuVertexNormals[i], cpuVertexFaceAreas[i]))
                             if (cachedVisibleIndices.size() < VISIBLE_INDICES_MAX)
-                                cachedVisibleIndices.push_back(heNbFaces + i);
+                                cachedVisibleIndices.push_back(heNbFaces + i); // Vertex elements indexed after faces
                     }
                 }
 
-                cpuCullTimeMs = std::chrono::duration<float, std::milli>(
+                cpuCullTimeMs = std::chrono::duration<float, std::milli>( // Record cull time (ms) for the UI
                     std::chrono::high_resolution_clock::now() - cullStart).count();
 
-                lastCullMVP                 = mvp;
+                lastCullMVP                 = mvp; // Remember the inputs so we can skip rebuilds next frame
                 lastEnableFrustumCulling    = enableFrustumCulling;
                 lastEnableBackfaceCulling   = enableBackfaceCulling;
                 lastCullingThreshold        = cullingThreshold;
                 lastCullUserScaling         = userScaling;
                 lastDoMaskCull              = doMaskCull;
                 lastSlotK                   = slotK;
-                visibleCacheDirty           = false;
+                visibleCacheDirty           = false; // Cache is now clean
             }
 
             // Upload visible indices to GPU buffer and dispatch
-            uint32_t visibleCount = static_cast<uint32_t>(cachedVisibleIndices.size());
+            uint32_t visibleCount = static_cast<uint32_t>(cachedVisibleIndices.size()); // How many elements survived
 
             // Compute CPU-estimated mesh shader workgroup count (LOD off, tile grid per element)
-            if (!enableLod && visibleCount > 0) {
+            if (!enableLod && visibleCount > 0) { // (Stats estimate only; mirrors the task shader's tile math)
                 uint32_t M = resolutionM, N = resolutionN;
-                uint32_t dU = M, dV = N;
-                if ((dU + 1) * (dV + 1) > 256) {
+                uint32_t dU = M, dV = N;          // Start with the full element as one tile
+                if ((dU + 1) * (dV + 1) > 256) {  // Clamp to the 256-vertex mesh limit
                     uint32_t maxD = static_cast<uint32_t>(std::sqrt(256.0f)) - 1;
                     dU = std::min(dU, maxD);
                     dV = std::min(dV, maxD);
                 }
-                if (dU * dV * 2 > 256) {
+                if (dU * dV * 2 > 256) {          // Clamp to the 256-primitive limit
                     uint32_t maxD = static_cast<uint32_t>(std::sqrt(256.0f / 2.0f));
                     dU = std::min(dU, maxD);
                     dV = std::min(dV, maxD);
                 }
-                dU = std::max(dU, 2u);
+                dU = std::max(dU, 2u);            // Minimum tile size
                 dV = std::max(dV, 2u);
-                uint32_t tilesU = (M + dU - 1) / dU;
-                uint32_t tilesV = (N + dV - 1) / dV;
-                cachedEstMeshShaders = visibleCount * tilesU * tilesV;
+                uint32_t tilesU = (M + dU - 1) / dU; // Tiles needed in U
+                uint32_t tilesV = (N + dV - 1) / dV; // Tiles needed in V
+                cachedEstMeshShaders = visibleCount * tilesU * tilesV; // Estimated mesh workgroups
             } else {
-                cachedEstMeshShaders = 0;
+                cachedEstMeshShaders = 0;         // Unknown when LOD is on (task shader decides)
             }
 
-            if (visibleCount > 0) {
-                memcpy(visibleIndicesMapped[currentFrame],
+            if (visibleCount > 0) {               // Only draw if something is visible
+                memcpy(visibleIndicesMapped[currentFrame], // Upload the visible-index list for the task shader
                        cachedVisibleIndices.data(),
                        visibleCount * sizeof(uint32_t));
-                pfnCmdDrawMeshTasksEXT(cmd, visibleCount, 1, 1);
+                pfnCmdDrawMeshTasksEXT(cmd, visibleCount, 1, 1); // One task workgroup per visible element
                 frameDrawCalls++;
             }
-        } else {
+        } else {                                 // No mesh loaded → dispatch a single dummy workgroup
             cachedVisibleIndices.clear();
             cachedTotalElements = 0;
             cachedEstMeshShaders = 0;
             cpuCullTimeMs = 0.0f;
-            pfnCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
+            pfnCmdDrawMeshTasksEXT(cmd, 1, 1, 1); // Keeps the pipeline "warm" / valid
             frameDrawCalls++;
         }
     }
 
     // Pebble pipeline draw path
-    if (renderPebbles && heMeshUploaded) {
+    if (renderPebbles && heMeshUploaded) {       // Pebbles instead of resurfacing (mutually exclusive)
         // Update PebbleUBO
-        pebbleUBO.hasAOTexture = (useAOTexture && aoTextureLoaded) ? 1u : 0u;
-        pebbleUBO.doSkinning = (skeletonLoaded && doSkinning) ? 1u : 0u;
+        pebbleUBO.hasAOTexture = (useAOTexture && aoTextureLoaded) ? 1u : 0u; // AO texture present?
+        pebbleUBO.doSkinning = (skeletonLoaded && doSkinning) ? 1u : 0u;      // Skinning active?
         // Sync universal culling/LOD settings into pebble UBO
-        pebbleUBO.useCulling = (enableFrustumCulling || enableBackfaceCulling) ? 1u : 0u;
+        pebbleUBO.useCulling = (enableFrustumCulling || enableBackfaceCulling) ? 1u : 0u; // Share the global culling toggles
         pebbleUBO.cullingThreshold = cullingThreshold;
         pebbleUBO.useLod = enableLod ? 1u : 0u;
         pebbleUBO.lodFactor = lodFactor;
-        memcpy(pebbleUBOMapped, &pebbleUBO, sizeof(PebbleUBO));
+        memcpy(pebbleUBOMapped, &pebbleUBO, sizeof(PebbleUBO)); // Upload the pebble config
 
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pebblePipeline);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pebblePipeline); // Bind pebble pipeline
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 0: scene
                                  pipelineLayout, 0, 1,
                                  &sceneDescriptorSets[currentFrame], 0, nullptr);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 1: half-edge
                                  pipelineLayout, 1, 1,
                                  &heDescriptorSet, 0, nullptr);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 2: pebble per-object (PebbleUBO)
                                  pipelineLayout, 2, 1,
                                  &pebblePerObjectDescriptorSet, 0, nullptr);
         vkCmdPushConstants(cmd, pipelineLayout,
                             VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
                             VK_SHADER_STAGE_FRAGMENT_BIT,
                             0, sizeof(PushConstants), &pushConstants);
-        pfnCmdDrawMeshTasksEXT(cmd, heNbFaces, 1, 1);
+        pfnCmdDrawMeshTasksEXT(cmd, heNbFaces, 1, 1); // One task workgroup per face (no pre-cull for pebbles)
         frameDrawCalls++;
     }
 
     // Pebble control cage overlay
-    if (showControlCage && renderPebbles && heMeshUploaded) {
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pebbleCagePipeline);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+    if (showControlCage && renderPebbles && heMeshUploaded) { // Debug overlay: draw the pebble control cages
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pebbleCagePipeline); // Bind the cage (line) pipeline
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 0: scene
                                  pipelineLayout, 0, 1,
                                  &sceneDescriptorSets[currentFrame], 0, nullptr);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 1: half-edge
                                  pipelineLayout, 1, 1,
                                  &heDescriptorSet, 0, nullptr);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 2: pebble per-object
                                  pipelineLayout, 2, 1,
                                  &pebblePerObjectDescriptorSet, 0, nullptr);
         vkCmdPushConstants(cmd, pipelineLayout,
                             VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
                             VK_SHADER_STAGE_FRAGMENT_BIT,
                             0, sizeof(PushConstants), &pushConstants);
-        pfnCmdDrawMeshTasksEXT(cmd, heNbFaces, 1, 1);
+        pfnCmdDrawMeshTasksEXT(cmd, heNbFaces, 1, 1); // One workgroup per face (rebuilds the cage as lines)
         frameDrawCalls++;
     }
 
     // Ground pathway pebbles
-    if (renderPathway && groundMeshActive) {
+    if (renderPathway && groundMeshActive) {     // Pebbles on the ground plane, revealed along the player's path
         // Update per-frame and pathway-specific fields (pebble appearance is controlled independently via UI)
-        groundPebbleUBO.usePathway       = fogOfWar ? 1u : 0u;
-        groundPebbleUBO.playerWorldPos   = player.position;
+        groundPebbleUBO.usePathway       = fogOfWar ? 1u : 0u; // Fog-of-war: only show pebbles near the path
+        groundPebbleUBO.playerWorldPos   = player.position;    // Path is centered on the player
         groundPebbleUBO.pad1             = 0.0f;
-        groundPebbleUBO.playerForward    = playerForwardDir();
+        groundPebbleUBO.playerForward    = playerForwardDir();  // Path direction
         groundPebbleUBO.pad2             = 0.0f;
-        groundPebbleUBO.pathwayRadius    = pathwayRadius;
-        groundPebbleUBO.pathwayBackScale = pathwayBackScale;
-        groundPebbleUBO.pathwayFalloff   = pathwayFalloff;
-        groundPebbleUBO.time             = pebbleUBO.time;
-        groundPebbleUBO.doSkinning       = 0;
-        groundPebbleUBO.hasAOTexture     = 0;
+        groundPebbleUBO.pathwayRadius    = pathwayRadius;       // Path zone size
+        groundPebbleUBO.pathwayBackScale = pathwayBackScale;    // Smaller radius behind the player
+        groundPebbleUBO.pathwayFalloff   = pathwayFalloff;      // Edge softness
+        groundPebbleUBO.time             = pebbleUBO.time;      // Share the animation clock
+        groundPebbleUBO.doSkinning       = 0;                   // Ground never skins
+        groundPebbleUBO.hasAOTexture     = 0;                   // No AO on the ground
 
         // Apply ground pebble scale to a copy for upload
-        PebbleUBO groundUpload = groundPebbleUBO;
-        groundUpload.extrusionAmount *= groundPebbleScale;
+        PebbleUBO groundUpload = groundPebbleUBO; // Upload a scaled copy (keep the UI value intact)
+        groundUpload.extrusionAmount *= groundPebbleScale; // Independent ground pebble size
         memcpy(groundPebbleUBOMapped, &groundUpload, sizeof(PebbleUBO));
 
         // Ground plane is stationary — model matrix stays at world origin
-        PushConstants groundPush = pushConstants;
-        groundPush.model        = glm::mat4(1.0f);
-        groundPush.nbFaces      = groundNbFaces;
-        groundPush.nbVertices   = 0;
-        groundPush.enableCulling &= ~4u;  // no mask texture on ground plane
+        PushConstants groundPush = pushConstants; // Start from the shared constants...
+        groundPush.model        = glm::mat4(1.0f); // ...but the ground is fixed at the origin
+        groundPush.nbFaces      = groundNbFaces;    // Ground face count
+        groundPush.nbVertices   = 0;                // No vertex elements on the ground
+        groundPush.enableCulling &= ~4u;  // no mask texture on ground plane // Clear the mask-cull bit
 
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pebblePipeline);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pebblePipeline); // Reuse the pebble pipeline
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 0: scene
                                  pipelineLayout, 0, 1,
                                  &sceneDescriptorSets[currentFrame], 0, nullptr);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 1: ground half-edge
                                  pipelineLayout, 1, 1,
                                  &groundHeDescriptorSet, 0, nullptr);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 2: ground pebble UBO
                                  pipelineLayout, 2, 1,
                                  &groundPebbleDescriptorSet, 0, nullptr);
         vkCmdPushConstants(cmd, pipelineLayout,
                             VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
                             VK_SHADER_STAGE_FRAGMENT_BIT,
                             0, sizeof(PushConstants), &groundPush);
-        pfnCmdDrawMeshTasksEXT(cmd, groundNbFaces, 1, 1);
+        pfnCmdDrawMeshTasksEXT(cmd, groundNbFaces, 1, 1); // One workgroup per ground face
         frameDrawCalls++;
     }
 
     // Ground plane wireframe overlay
-    if (showGroundMesh && groundMeshActive) {
-        PushConstants gp = pushConstants;
+    if (showGroundMesh && groundMeshActive) {    // Debug overlay: draw the ground mesh wireframe
+        PushConstants gp = pushConstants;        // Ground at the origin, face count from the ground mesh
         gp.model    = glm::mat4(1.0f);
         gp.nbFaces  = groundNbFaces;
         gp.nbVertices = 0;
 
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, baseMeshPipeline);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, baseMeshPipeline); // Reuse the base-mesh (wire) pipeline
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 0: scene
                                  pipelineLayout, 0, 1,
                                  &sceneDescriptorSets[currentFrame], 0, nullptr);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 1: ground half-edge
                                  pipelineLayout, 1, 1,
                                  &groundHeDescriptorSet, 0, nullptr);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 2: ground pebble set (reused)
                                  pipelineLayout, 2, 1,
                                  &groundPebbleDescriptorSet, 0, nullptr);
         vkCmdPushConstants(cmd, pipelineLayout,
                             VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
                             VK_SHADER_STAGE_FRAGMENT_BIT,
                             0, sizeof(PushConstants), &gp);
-        pfnCmdDrawMeshTasksEXT(cmd, groundNbFaces, 1, 1);
+        pfnCmdDrawMeshTasksEXT(cmd, groundNbFaces, 1, 1); // One workgroup per ground face
         frameDrawCalls++;
     }
 
     // Dual-mesh: render secondary mesh with its own independent resurfacing
-    if (renderResurfacing && dualMeshActive && heMeshUploaded) {
-        PushConstants secPush{};
+    if (renderResurfacing && dualMeshActive && heMeshUploaded) { // The dragon coat, with its own resurfacing params
+        PushConstants secPush{};                 // Build separate push constants for the secondary mesh
         secPush.model          = pushConstants.model;   // inherit player transform
-        secPush.nbFaces        = secondaryHeNbFaces;
+        secPush.nbFaces        = secondaryHeNbFaces;     // Secondary face count
         secPush.nbVertices     = 0;                     // face elements only
-        secPush.elementType    = secondaryElementType;
-        secPush.userScaling    = secondaryUserScaling;
-        secPush.torusMajorR    = secondaryTorusMajorR;
+        secPush.elementType    = secondaryElementType;   // Secondary's own element type...
+        secPush.userScaling    = secondaryUserScaling;   // ...scale...
+        secPush.torusMajorR    = secondaryTorusMajorR;   // ...and shape params
         secPush.torusMinorR    = secondaryTorusMinorR;
         secPush.sphereRadius   = secondarySphereRadius;
         secPush.resolutionM    = secondaryResolutionM;
         secPush.resolutionN    = secondaryResolutionN;
-        secPush.debugMode      = debugMode;
+        secPush.debugMode      = debugMode;              // Shares the global debug mode
         secPush.enableCulling  = 0;                     // no culling for secondary
         secPush.enableLod      = enableLod ? 1u : 0u;
         secPush.lodFactor      = lodFactor;
-        secPush.chainmailMode  = secondaryChainmailMode ? 1u : 0u;
+        secPush.chainmailMode  = secondaryChainmailMode ? 1u : 0u; // Independent chainmail toggle
         secPush.chainmailTiltAngle = secondaryChainmailTiltAngle;
         secPush.chainmailSurfaceOffset = secondaryChainmailSurfaceOffset;
-        secPush.useDirectIndex = 1;                     // bypass visibleIndices lookup
+        secPush.useDirectIndex = 1;                     // bypass visibleIndices lookup // No pre-cull list → index directly
 
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline); // Same resurfacing pipeline
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 0: scene
                                  pipelineLayout, 0, 1,
                                  &sceneDescriptorSets[currentFrame], 0, nullptr);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 1: secondary half-edge
                                  pipelineLayout, 1, 1,
                                  &secondaryHeDescriptorSet, 0, nullptr);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 2: secondary per-object (own ResurfacingUBO)
                                  pipelineLayout, 2, 1,
                                  &secondaryPerObjectDescriptorSet, 0, nullptr);
         vkCmdPushConstants(cmd, pipelineLayout,
                             VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
                             VK_SHADER_STAGE_FRAGMENT_BIT,
                             0, sizeof(PushConstants), &secPush);
-        pfnCmdDrawMeshTasksEXT(cmd, secondaryHeNbFaces, 1, 1);
+        pfnCmdDrawMeshTasksEXT(cmd, secondaryHeNbFaces, 1, 1); // One workgroup per secondary face (direct-indexed)
         frameDrawCalls++;
     }
 
     // Base mesh overlay (0=off, 1=wireframe, 2=solid, 3=both)
-    if (baseMeshMode > 0 && heMeshUploaded) {
-        auto drawBaseMesh = [&](VkPipeline pipeline, VkDescriptorSet heSet,
+    if (baseMeshMode > 0 && heMeshUploaded) {    // Optionally draw the underlying base mesh over the resurfacing
+        auto drawBaseMesh = [&](VkPipeline pipeline, VkDescriptorSet heSet, // Helper: bind + draw one base-mesh pass
                                  VkDescriptorSet objSet, uint32_t nbFaces,
                                  uint32_t useDirectIdx) {
-            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline); // Bind the given base-mesh pipeline
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 0: scene
                                      pipelineLayout, 0, 1,
                                      &sceneDescriptorSets[currentFrame],
                                      0, nullptr);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 1: half-edge
                                      pipelineLayout, 1, 1,
                                      &heSet, 0, nullptr);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 2: per-object
                                      pipelineLayout, 2, 1,
                                      &objSet, 0, nullptr);
-            pushConstants.useDirectIndex = useDirectIdx;
+            pushConstants.useDirectIndex = useDirectIdx; // Direct-index for secondary meshes
             vkCmdPushConstants(cmd, pipelineLayout,
                                 VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
                                 VK_SHADER_STAGE_FRAGMENT_BIT,
                                 0, sizeof(PushConstants), &pushConstants);
-            pfnCmdDrawMeshTasksEXT(cmd, nbFaces, 1, 1);
-            pushConstants.useDirectIndex = 0;
+            pfnCmdDrawMeshTasksEXT(cmd, nbFaces, 1, 1); // One workgroup per face
+            pushConstants.useDirectIndex = 0;    // Restore the shared push constant
             frameDrawCalls++;
         };
 
         // Primary base mesh (coat)
-        if (baseMeshMode == 6) {
-            pushConstants.debugMode = 102;
+        if (baseMeshMode == 6) {                 // Mode 6: solid, per-face hash coloring (debugMode 102)
+            pushConstants.debugMode = 102;        // Temporarily override the debug mode...
             drawBaseMesh(baseMeshSolidPipeline, heDescriptorSet, perObjectDescriptorSet, heNbFaces, 0);
-            pushConstants.debugMode = debugMode;
-        } else if (baseMeshMode == 5) {
+            pushConstants.debugMode = debugMode;  // ...then restore it
+        } else if (baseMeshMode == 5) {          // Mode 5: solid, skin-texture preview (debugMode 101)
             pushConstants.debugMode = 101;
             drawBaseMesh(baseMeshSolidPipeline, heDescriptorSet, perObjectDescriptorSet, heNbFaces, 0);
             pushConstants.debugMode = debugMode;
-        } else if (baseMeshMode == 4) {
+        } else if (baseMeshMode == 4) {          // Mode 4: solid, mask preview (debugMode 100)
             pushConstants.debugMode = 100;
             drawBaseMesh(baseMeshSolidPipeline, heDescriptorSet, perObjectDescriptorSet, heNbFaces, 0);
             pushConstants.debugMode = debugMode;
-        } else if (baseMeshMode == 2 || baseMeshMode == 3) {
+        } else if (baseMeshMode == 2 || baseMeshMode == 3) { // Modes 2/3: plain solid base mesh
             drawBaseMesh(baseMeshSolidPipeline, heDescriptorSet, perObjectDescriptorSet, heNbFaces, 0);
         }
-        if (baseMeshMode == 1 || baseMeshMode == 3)
+        if (baseMeshMode == 1 || baseMeshMode == 3) // Modes 1/3: also draw the wireframe overlay
             drawBaseMesh(baseMeshPipeline, heDescriptorSet, perObjectDescriptorSet, heNbFaces, 0);
 
     }
 
     // Dragon body base mesh — controlled by dragonBaseMeshMode (independent of coat baseMeshMode)
-    if (dragonBaseMeshMode > 0 && dualMeshActive && secondaryHeNbFaces > 0 && heMeshUploaded) {
+    if (dragonBaseMeshMode > 0 && dualMeshActive && secondaryHeNbFaces > 0 && heMeshUploaded) { // Base-mesh overlay for the secondary mesh
         // Override nbFaces for the secondary mesh (shader checks push.nbFaces)
-        uint32_t savedNbFaces = pushConstants.nbFaces;
-        pushConstants.nbFaces = secondaryHeNbFaces;
+        uint32_t savedNbFaces = pushConstants.nbFaces; // Save the primary face count...
+        pushConstants.nbFaces = secondaryHeNbFaces;     // ...and swap in the secondary's
 
-        auto drawDragonBaseMesh = [&](VkPipeline pipeline, VkDescriptorSet heSet,
+        auto drawDragonBaseMesh = [&](VkPipeline pipeline, VkDescriptorSet heSet, // Same helper, bound to the secondary sets
                                  VkDescriptorSet objSet, uint32_t nbFaces,
                                  uint32_t useDirectIdx) {
             vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 0: scene
                                      pipelineLayout, 0, 1,
                                      &sceneDescriptorSets[currentFrame],
                                      0, nullptr);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 1: half-edge
                                      pipelineLayout, 1, 1,
                                      &heSet, 0, nullptr);
-            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, // Set 2: per-object
                                      pipelineLayout, 2, 1,
                                      &objSet, 0, nullptr);
-            pushConstants.useDirectIndex = useDirectIdx;
+            pushConstants.useDirectIndex = useDirectIdx; // 1 for the secondary mesh
             vkCmdPushConstants(cmd, pipelineLayout,
                                 VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT |
                                 VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -1067,115 +1090,119 @@ void Renderer::recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
             pushConstants.useDirectIndex = 0;
             frameDrawCalls++;
         };
-        if (dragonBaseMeshMode == 2 || dragonBaseMeshMode == 3) {
+        if (dragonBaseMeshMode == 2 || dragonBaseMeshMode == 3) { // Solid pass
             drawDragonBaseMesh(baseMeshSolidPipeline, secondaryHeDescriptorSet,
                          secondaryPerObjectDescriptorSet, secondaryHeNbFaces, 1);
         }
-        if (dragonBaseMeshMode == 1 || dragonBaseMeshMode == 3) {
+        if (dragonBaseMeshMode == 1 || dragonBaseMeshMode == 3) { // Wireframe pass
             drawDragonBaseMesh(baseMeshPipeline, secondaryHeDescriptorSet,
                          secondaryPerObjectDescriptorSet, secondaryHeNbFaces, 1);
         }
-        pushConstants.nbFaces = savedNbFaces;
+        pushConstants.nbFaces = savedNbFaces;    // Restore the primary face count
     }
 
     // Benchmark mesh (traditional vertex pipeline)
-    if (renderBenchmarkMesh && benchmarkMeshLoaded) {
-        float aspect = static_cast<float>(swapChainExtent.width) /
+    if (renderBenchmarkMesh && benchmarkMeshLoaded) { // Optional traditional vertex-pipeline mesh (for comparison)
+        float aspect = static_cast<float>(swapChainExtent.width) / // Aspect for the projection
                        static_cast<float>(swapChainExtent.height);
-        BenchmarkPushConstants benchPush{};
+        BenchmarkPushConstants benchPush{};      // Benchmark uses its own MVP push constants (no UBOs)
         benchPush.model = glm::mat4(1.0f);
         benchPush.view = activeCamera->getViewMatrix();
         benchPush.projection = activeCamera->getProjectionMatrix(aspect);
         benchPush.debugMode = debugMode;
 
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, benchmarkPipeline);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, benchmarkPipeline); // Bind the vertex/fragment pipeline
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                  benchmarkPipelineLayout, 0, 1,
                                  &sceneDescriptorSets[currentFrame], 0, nullptr);
-        vkCmdPushConstants(cmd, benchmarkPipelineLayout,
+        vkCmdPushConstants(cmd, benchmarkPipelineLayout, // Push MVP to the vertex + fragment stages
                             VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                             0, sizeof(BenchmarkPushConstants), &benchPush);
 
-        VkBuffer vertexBuffers[] = { benchmarkVertexBuffer };
+        VkBuffer vertexBuffers[] = { benchmarkVertexBuffer }; // Bind the interleaved vertex buffer
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, offsets);
-        vkCmdBindIndexBuffer(cmd, benchmarkIndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(cmd, benchmarkIndexCount, 1, 0, 0, 0);
+        vkCmdBindIndexBuffer(cmd, benchmarkIndexBuffer, 0, VK_INDEX_TYPE_UINT32); // ...and index buffer
+        vkCmdDrawIndexed(cmd, benchmarkIndexCount, 1, 0, 0, 0); // Classic indexed draw
         frameDrawCalls++;
     }
 
     // End pipeline statistics query before ImGui (exclude UI triangles, same subpass as begin)
-    vkCmdEndQuery(cmd, statsQueryPool, currentFrame);
+    vkCmdEndQuery(cmd, statsQueryPool, currentFrame); // Stop counting before the UI draws
 
     // Draw ImGui on top
-    renderImGui(cmd);
+    renderImGui(cmd);                            // The UI (not counted in the triangle stats)
 
-    vkCmdEndRenderPass(cmd);
+    vkCmdEndRenderPass(cmd);                     // End the render pass
 
-    if (vkEndCommandBuffer(cmd) != VK_SUCCESS) {
+    if (vkEndCommandBuffer(cmd) != VK_SUCCESS) { // Finish recording
         throw std::runtime_error("Failed to record command buffer!");
     }
 }
 
+// Finish a frame: record the command buffer, submit it (wait on image-available,
+// signal render-finished + the in-flight fence), present, then handle a pending
+// MSAA change (full render-pass/pipeline/framebuffer/ImGui rebuild) or swapchain
+// recreation, and advance to the next frame slot.
 void Renderer::endFrame() {
-    if (!frameStarted) return;
+    if (!frameStarted) return;                   // beginFrame may have bailed (e.g. swapchain out-of-date)
 
-    recordCommandBuffer(commandBuffers[currentFrame], currentImageIndex);
+    recordCommandBuffer(commandBuffers[currentFrame], currentImageIndex); // Record this frame's draws
 
-    VkSubmitInfo submitInfo{};
+    VkSubmitInfo submitInfo{};                   // Submit the recorded command buffer
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-    VkSemaphore waitSemaphores[] = {imageAvailableSemaphores[currentFrame]};
+    VkSemaphore waitSemaphores[] = {imageAvailableSemaphores[currentFrame]}; // Wait until the image is acquired...
     VkPipelineStageFlags waitStages[] = {
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT // ...at the color-output stage
     };
     submitInfo.waitSemaphoreCount = 1;
     submitInfo.pWaitSemaphores = waitSemaphores;
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
+    submitInfo.pCommandBuffers = &commandBuffers[currentFrame]; // This frame's command buffer
 
-    VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]};
+    VkSemaphore signalSemaphores[] = {renderFinishedSemaphores[currentFrame]}; // Signal when rendering completes
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    VkResult submitResult = vkQueueSubmit(graphicsQueue, 1, &submitInfo,
+    VkResult submitResult = vkQueueSubmit(graphicsQueue, 1, &submitInfo, // Submit; the fence fires when done
                                           inFlightFences[currentFrame]);
     if (submitResult != VK_SUCCESS) {
         throw std::runtime_error("Failed to submit draw command buffer! VkResult: " +
                                  std::to_string(static_cast<int>(submitResult)));
     }
 
-    VkPresentInfoKHR presentInfo{};
+    VkPresentInfoKHR presentInfo{};              // Present the rendered image
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = signalSemaphores;
+    presentInfo.pWaitSemaphores = signalSemaphores; // Wait for rendering to finish first
 
     VkSwapchainKHR swapChains[] = {swapChain};
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapChains;
-    presentInfo.pImageIndices = &currentImageIndex;
+    presentInfo.pImageIndices = &currentImageIndex; // The acquired image index
 
-    VkResult result = vkQueuePresentKHR(presentQueue, &presentInfo);
+    VkResult result = vkQueuePresentKHR(presentQueue, &presentInfo); // Queue the present
 
-    if (pendingMsaaChange) {
+    if (pendingMsaaChange) {                     // MSAA setting changed in the UI → full rebuild
         pendingMsaaChange = false;
-        msaaSamples = static_cast<VkSampleCountFlagBits>(msaaSampleCount);
-        vkDeviceWaitIdle(device);
+        msaaSamples = static_cast<VkSampleCountFlagBits>(msaaSampleCount); // New sample count
+        vkDeviceWaitIdle(device);                // Must be idle before tearing things down
         // Full rebuild: render pass + pipelines + framebuffers + MSAA resources + ImGui
-        cleanupSwapChain();
-        vkDestroyRenderPass(device, renderPass, nullptr);
-        createSwapChain();
+        cleanupSwapChain();                      // Drop swapchain-derived resources
+        vkDestroyRenderPass(device, renderPass, nullptr); // Render pass depends on sample count
+        createSwapChain();                       // Recreate everything with the new MSAA level
         createImageViews();
         createDepthResources();
         createMsaaColorResources();
         createRenderPass();
         createFramebuffers();
         // Pipelines reference the render pass, so recreate them
-        recreatePipelines();
+        recreatePipelines();                     // Pipelines bake in the sample count too
         // Reinitialize ImGui with new MSAA sample count
-        ImGui_ImplVulkan_Shutdown();
-        ImGui_ImplVulkan_InitInfo initInfo{};
+        ImGui_ImplVulkan_Shutdown();             // ImGui's Vulkan backend also bakes in MSAA
+        ImGui_ImplVulkan_InitInfo initInfo{};    // Re-init it against the new render pass
         initInfo.Instance = instance;
         initInfo.PhysicalDevice = physicalDevice;
         initInfo.Device = device;
@@ -1189,16 +1216,20 @@ void Renderer::endFrame() {
         initInfo.MSAASamples = msaaSamples;
         ImGui_ImplVulkan_Init(&initInfo);
         std::cout << "MSAA changed to " << msaaSamples << "x" << std::endl;
-    } else if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || pendingSwapChainRecreation) {
+    } else if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || pendingSwapChainRecreation) { // Resize/invalidation
         pendingSwapChainRecreation = false;
-        recreateSwapChain();
-    } else if (result != VK_SUCCESS) {
+        recreateSwapChain();                     // Rebuild just the swapchain
+    } else if (result != VK_SUCCESS) {           // Any other present error is fatal
         throw std::runtime_error("Failed to present swap chain image!");
     }
 
-    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-    frameStarted = false;
+    currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT; // Advance to the next frame-in-flight slot
+    frameStarted = false;                        // Frame closed
 }
+
+// *** ************ ***
+
+// *** AI Generated ***
 
 void Renderer::recreateSwapChain() {
     int width = 0, height = 0;
@@ -1908,3 +1939,5 @@ void Renderer::exportProceduralMesh(const std::string& filepath, int mode) {
 
     std::cout << "Export complete: " << filepath << std::endl;
 }
+
+// *** ************ ***

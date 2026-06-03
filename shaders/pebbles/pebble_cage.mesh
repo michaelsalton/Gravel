@@ -1,201 +1,217 @@
-#version 460
-#extension GL_EXT_mesh_shader : require
-#extension GL_GOOGLE_include_directive : require
-#extension GL_KHR_shader_subgroup_basic : enable
-#extension GL_KHR_shader_subgroup_vote : enable
-#extension GL_KHR_shader_subgroup_arithmetic : enable
+#version 460                                    // Use GLSL version 4.60 (needed for the subgroup extensions below)
+#extension GL_EXT_mesh_shader : require          // Enable the task/mesh shader stages (taskPayloadSharedEXT, SetMeshOutputsEXT, ...)
+#extension GL_GOOGLE_include_directive : require // Enable #include directive
+#extension GL_KHR_shader_subgroup_basic : enable // Enable subgroup intrinsics (subgroupElect)
+#extension GL_KHR_shader_subgroup_vote : enable  // Enable subgroup voting (subgroupAll)
+#extension GL_KHR_shader_subgroup_arithmetic : enable // Enable subgroup arithmetic (not directly used here, kept for parity)
 
-#include "pebble.glsl"
-#include "noise.glsl"
+#include "pebble.glsl"                          // Task payload struct, MAX_SUBDIV_PER_WORKGROUP, fetchFaceData, getVertexPosShared, vertCount
+#include "noise.glsl"                           // rand() and the _seed it uses for per-pebble randomization
+
+// =============================================================================
+// pebble_cage.mesh — Pebble control-cage wireframe mesh shader
+//
+// Debug/visualization overlay for the pebble pipeline. Instead of emitting the
+// subdivided pebble surface (pebble.mesh does that), this shader rebuilds the
+// same 4x4 B-spline control cage that defines a pebble and emits it as a
+// colored line grid (16 vertices, 24 lines) so the control structure can be
+// inspected. It mirrors pebble.mesh's vertex setup and extrusion logic exactly,
+// then draws the cage rings color-coded by ring index. Pairs with
+// pebble_cage.frag, which just passes the per-vertex color through.
+// =============================================================================
+
+// *** Michael Salton ***
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-layout(local_size_x = 32) in;
-layout(max_vertices = 16, max_primitives = 24, lines) out;
+layout(local_size_x = 32) in;                   // 32 threads per workgroup (one subgroup), cooperating on one cage patch
+layout(max_vertices = 16, max_primitives = 24, lines) out; // Output limit: the 16 cage vertices and 24 grid lines, as line primitives
 
 // ============================================================================
 // Uniforms
 // ============================================================================
 
-layout(push_constant) uniform PushConstants {
-    mat4 model;
-    uint nbFaces;
-    uint nbVertices;
-    uint elementType;
-    float userScaling;
-    float torusMajorR;
-    float torusMinorR;
-    float sphereRadius;
-    uint resolutionM;
-    uint resolutionN;
-    uint debugMode;
-    uint enableCulling;
-    float cullingThreshold;
-    uint enableLod;
-    float lodFactor;
-    uint chainmailMode;
-    float chainmailTiltAngle;
-} pc;
+layout(push_constant) uniform PushConstants {   // Per-draw constants (shared layout across the pipelines)
+    mat4 model;                                // Object→world transform
+    uint nbFaces;                              // Face count (unused here)
+    uint nbVertices;                           // Vertex count (unused here)
+    uint elementType;                          // Element type (unused here)
+    float userScaling;                         // Global scale (unused here)
+    float torusMajorR;                         // Torus major radius (unused here)
+    float torusMinorR;                         // Torus minor radius (unused here)
+    float sphereRadius;                        // Sphere radius (unused here)
+    uint resolutionM;                          // Resolution U (unused here)
+    uint resolutionN;                          // Resolution V (unused here)
+    uint debugMode;                            // Debug mode (unused here)
+    uint enableCulling;                        // Culling bitmask (unused here)
+    float cullingThreshold;                    // Cull threshold (unused here)
+    uint enableLod;                            // LOD flag (unused here)
+    float lodFactor;                           // LOD factor (unused here)
+    uint chainmailMode;                        // Chainmail mode (unused here)
+    float chainmailTiltAngle;                  // Chainmail tilt (unused here)
+} pc;                                          // Instance name of the push-constant block
 
-layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
-    mat4 view;
-    mat4 projection;
-    vec4 cameraPosition;
-    float nearPlane;
-    float farPlane;
-} viewUBO;
+layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock { // Scene-set UBO (set 0, binding 0): camera data
+    mat4 view;                                  // World→view matrix
+    mat4 projection;                            // View→clip matrix
+    vec4 cameraPosition;                        // Camera world position (unused here)
+    float nearPlane;                            // Near clip distance
+    float farPlane;                             // Far clip distance
+} viewUBO;                                      // Instance name of the view UBO
 
 // ============================================================================
 // Task Payload & Shared Memory
 // ============================================================================
 
-taskPayloadSharedEXT Task IN;
+taskPayloadSharedEXT Task IN;                   // Payload from the pebble task shader: baseID, targetSubdivLevel, scale, skinMatrix
 
-shared vec3 sharedVertices[16];  // 4x4 B-spline control cage
+shared vec3 sharedVertices[16];  // 4x4 B-spline control cage // Workgroup-shared scratch for the 16 cage control points
 
 // ============================================================================
 // Per-Vertex Output
 // ============================================================================
 
-layout(location = 0) out vec4 outColor[];
+layout(location = 0) out vec4 outColor[];       // Per-vertex output: cage line color (ring-coded), passed to the fragment shader
 
 
 // ============================================================================
 // Main
 // ============================================================================
 
-void main() {
-    uint lid = gl_LocalInvocationID.x;
-    uint groupId = gl_WorkGroupID.x;
-    uint N = IN.targetSubdivLevel;
-    uint baseID = IN.baseID;
+void main() {                                   // Mesh shader entry point (one workgroup builds one cage patch)
+    uint lid = gl_LocalInvocationID.x;          // This thread's index within the 32-thread workgroup
+    uint groupId = gl_WorkGroupID.x;            // This workgroup's index (which patch/sub-patch it handles)
+    uint N = IN.targetSubdivLevel;              // Requested subdivision level for this pebble
+    uint baseID = IN.baseID;                    // Base-mesh face this pebble grows from
 
-    fetchFaceData(baseID);
+    fetchFaceData(baseID);                      // Cooperatively load the face's vertex indices into shared memory (sets vertCount)
 
-    vec3 center = getFaceCenter(baseID);
-    vec3 faceNormal = getFaceNormal(baseID);
+    vec3 center = getFaceCenter(baseID);        // Face center (cage's inner anchor)
+    vec3 faceNormal = getFaceNormal(baseID);    // Face normal (extrusion direction)
 
     // N=0: flat extrusion, no B-spline cage
-    if (subgroupAll(N == 0)) {
-        SetMeshOutputsEXT(0, 0);
-        return;
+    if (subgroupAll(N == 0)) {                  // If no subdivision requested (whole subgroup agrees)...
+        SetMeshOutputsEXT(0, 0);                // ...emit nothing (there is no cage to show)
+        return;                                 // ...and exit
     }
 
-    N -= 1;
-    uint subPatchCount = 1;
-    if (N > MAX_SUBDIV_PER_WORKGROUP)
-        subPatchCount = uint(pow(4, N - MAX_SUBDIV_PER_WORKGROUP));
+    N -= 1;                                     // Shift to a 0-based subdivision count
+    uint subPatchCount = 1;                     // How many sub-patches this patch is split into across workgroups
+    if (N > MAX_SUBDIV_PER_WORKGROUP)           // Beyond what one workgroup can subdivide...
+        subPatchCount = uint(pow(4, N - MAX_SUBDIV_PER_WORKGROUP)); // ...each extra level quadruples the sub-patch count
 
-    uint patchID = groupId / subPatchCount;
-    uint ringID = patchID / (vertCount * 2);
+    uint patchID = groupId / subPatchCount;     // Which logical cage patch this workgroup belongs to
+    uint ringID = patchID / (vertCount * 2);    // Which cage ring (0,1,2 = outer/mid/inner) this patch is in
 
     // Skip vertex patches (inner fill)
-    if (subgroupAll(ringID > 2)) {
-        SetMeshOutputsEXT(0, 0);
+    if (subgroupAll(ringID > 2)) {              // Rings beyond 2 are inner fill patches, not cage...
+        SetMeshOutputsEXT(0, 0);                // ...emit nothing
         return;
     }
 
     // Skip duplicate sub-patches (only draw cage once per patch)
-    uint subPatchIndex = groupId % subPatchCount;
-    if (subgroupAll(subPatchIndex > 0)) {
-        SetMeshOutputsEXT(0, 0);
+    uint subPatchIndex = groupId % subPatchCount; // Which sub-patch within the patch
+    if (subgroupAll(subPatchIndex > 0)) {       // Only the first sub-patch draws the cage (avoid overdraw)...
+        SetMeshOutputsEXT(0, 0);                // ...others emit nothing
         return;
     }
 
-    uint edgeID = (patchID / 2) % vertCount;
+    uint edgeID = (patchID / 2) % vertCount;    // Which face edge this patch is built around
 
     // ==================== Load Base Vertices (row 3, indices 12-15) ====================
 
-    if (subgroupElect()) {
-        if ((patchID % 2) == 0) {
-            uint nextFaceID = (edgeID + 1) % vertCount;
-            uint prevFaceID = (edgeID - 1 + vertCount) % vertCount;
-            sharedVertices[13] = getVertexPosShared(edgeID);
-            sharedVertices[15] = getVertexPosShared(nextFaceID);
-            sharedVertices[12] = (getVertexPosShared(prevFaceID) + sharedVertices[13]) / 2.0;
-            sharedVertices[14] = (sharedVertices[13] + sharedVertices[15]) / 2.0;
-        } else {
-            uint nextFaceID = (edgeID + 1) % vertCount;
-            uint nextFaceID2 = (edgeID + 2 + vertCount) % vertCount;
-            sharedVertices[12] = getVertexPosShared(edgeID);
-            sharedVertices[14] = getVertexPosShared(nextFaceID);
-            sharedVertices[13] = (sharedVertices[12] + sharedVertices[14]) / 2.0;
-            sharedVertices[15] = (getVertexPosShared(nextFaceID2) + sharedVertices[14]) / 2.0;
+    if (subgroupElect()) {                      // One representative thread fills the base row of control points
+        if ((patchID % 2) == 0) {               // Even patch: centered on edgeID's vertex
+            uint nextFaceID = (edgeID + 1) % vertCount; // Next face vertex (wrap around)
+            uint prevFaceID = (edgeID - 1 + vertCount) % vertCount; // Previous face vertex (wrap around)
+            sharedVertices[13] = getVertexPosShared(edgeID);     // Control point at this edge's vertex
+            sharedVertices[15] = getVertexPosShared(nextFaceID); // Control point at the next vertex
+            sharedVertices[12] = (getVertexPosShared(prevFaceID) + sharedVertices[13]) / 2.0; // Midpoint toward previous vertex
+            sharedVertices[14] = (sharedVertices[13] + sharedVertices[15]) / 2.0; // Midpoint toward next vertex
+        } else {                                // Odd patch: spans the edge between two vertices
+            uint nextFaceID = (edgeID + 1) % vertCount;          // Next vertex
+            uint nextFaceID2 = (edgeID + 2 + vertCount) % vertCount; // Vertex after next
+            sharedVertices[12] = getVertexPosShared(edgeID);     // Control point at this vertex
+            sharedVertices[14] = getVertexPosShared(nextFaceID); // Control point at the next vertex
+            sharedVertices[13] = (sharedVertices[12] + sharedVertices[14]) / 2.0; // Midpoint between them
+            sharedVertices[15] = (getVertexPosShared(nextFaceID2) + sharedVertices[14]) / 2.0; // Midpoint toward vertex-after-next
         }
     }
-    barrier();
+    barrier();                                  // Wait until the base control row is fully written
 
     // ==================== Extrude Control Cage (same logic as pebble.mesh) ====================
 
-    _seed = IN.baseID;
-    float minLevel = pebbleUbo.extrusionAmount * (1.0 - pebbleUbo.extrusionVariation);
-    float maxLevel = pebbleUbo.extrusionAmount * (1.0 + pebbleUbo.extrusionVariation);
-    float randomizedExtrusion = rand(minLevel, maxLevel);
+    _seed = IN.baseID;                          // Seed the RNG per pebble so its extrusion is stable across frames
+    float minLevel = pebbleUbo.extrusionAmount * (1.0 - pebbleUbo.extrusionVariation); // Lower bound of random extrusion
+    float maxLevel = pebbleUbo.extrusionAmount * (1.0 + pebbleUbo.extrusionVariation); // Upper bound
+    float randomizedExtrusion = rand(minLevel, maxLevel); // Pick this pebble's extrusion height
 
-    float roundness = mix(0.95, 0.5, pebbleUbo.roundness);
-    float extrusionAmount = randomizedExtrusion;
+    float roundness = mix(0.95, 0.5, pebbleUbo.roundness); // Map UI roundness → control-point pull factor
+    float extrusionAmount = randomizedExtrusion; // Final extrusion distance along the face normal
 
-    uint offset = ringID * 4;
-    uint vertexIndex = lid % 4;
+    uint offset = ringID * 4;                   // Base index in sharedVertices for this ring's 4 control points
+    uint vertexIndex = lid % 4;                 // Which of the 4 corner control points this thread handles
 
-    if (lid < 4) {
-        sharedVertices[offset + lid] = sharedVertices[12 + vertexIndex] + extrusionAmount * faceNormal;
-    } else if (lid < 8) {
-        if (subgroupAll(ringID < 2)) {
-            sharedVertices[offset + lid] = sharedVertices[12 + vertexIndex] + roundness * extrusionAmount * faceNormal;
-        } else if (subgroupAll(ringID == 2)) {
-            sharedVertices[vertexIndex] = center + (2 * pebbleUbo.fillradius - 1) * (sharedVertices[12 + vertexIndex] - center) + extrusionAmount * faceNormal;
+    if (lid < 4) {                              // Threads 0-3: outer ring, full extrusion
+        sharedVertices[offset + lid] = sharedVertices[12 + vertexIndex] + extrusionAmount * faceNormal; // Lift base point by full extrusion
+    } else if (lid < 8) {                       // Threads 4-7: mid control points (roundness-scaled)
+        if (subgroupAll(ringID < 2)) {          // Outer/mid rings:
+            sharedVertices[offset + lid] = sharedVertices[12 + vertexIndex] + roundness * extrusionAmount * faceNormal; // Partial lift for rounding
+        } else if (subgroupAll(ringID == 2)) {  // Inner ring:
+            sharedVertices[vertexIndex] = center + (2 * pebbleUbo.fillradius - 1) * (sharedVertices[12 + vertexIndex] - center) + extrusionAmount * faceNormal; // Pull toward center by fill radius, then extrude
         }
-    } else if (lid < 12) {
-        if (subgroupAll(ringID == 0)) {
+    } else if (lid < 12) {                       // Threads 8-11: ring-dependent fill points
+        if (subgroupAll(ringID == 0)) {         // Outer ring: copy base position (no offset)
             sharedVertices[lid] = sharedVertices[12 + vertexIndex];
-        } else if (subgroupAll(ringID == 1)) {
+        } else if (subgroupAll(ringID == 1)) {  // Mid ring: pull toward center by fill radius and extrude
             sharedVertices[vertexIndex] = center + pebbleUbo.fillradius * (sharedVertices[12 + vertexIndex] - center) + extrusionAmount * faceNormal;
-        } else if (subgroupAll(ringID == 2)) {
+        } else if (subgroupAll(ringID == 2)) {  // Inner ring: same but into the next control-point block
             sharedVertices[vertexIndex + 4] = center + pebbleUbo.fillradius * (sharedVertices[12 + vertexIndex] - center) + extrusionAmount * faceNormal;
         }
-    } else if (lid < 16) {
-        if (subgroupAll(ringID == 0)) {
+    } else if (lid < 16) {                       // Threads 12-15: underside / skirt control points
+        if (subgroupAll(ringID == 0)) {         // Outer ring: push below the surface (negative lift) for rounding
             sharedVertices[lid] = sharedVertices[12 + vertexIndex] - roundness * extrusionAmount * faceNormal;
-        } else if (subgroupAll(ringID == 2)) {
+        } else if (subgroupAll(ringID == 2)) {  // Inner ring: push above for rounding
             sharedVertices[lid] = sharedVertices[12 + vertexIndex] + roundness * extrusionAmount * faceNormal;
         }
     }
-    barrier();
+    barrier();                                  // Wait until all 16 cage control points are computed
 
     // ==================== Emit Cage Wireframe ====================
 
-    SetMeshOutputsEXT(16, 24);
+    SetMeshOutputsEXT(16, 24);                  // Emit 16 cage vertices and 24 grid lines
 
-    mat4 MVP = viewUBO.projection * viewUBO.view * pc.model;
+    mat4 MVP = viewUBO.projection * viewUBO.view * pc.model; // Object→clip transform
 
     // Ring color coding
-    vec4 gridColor;
-    if (ringID == 0)      gridColor = vec4(1.0, 0.3, 0.3, 1.0);
-    else if (ringID == 1) gridColor = vec4(0.3, 1.0, 0.3, 1.0);
-    else                  gridColor = vec4(0.3, 0.3, 1.0, 1.0);
+    vec4 gridColor;                             // Color this cage ring by index
+    if (ringID == 0)      gridColor = vec4(1.0, 0.3, 0.3, 1.0); // Ring 0 → red
+    else if (ringID == 1) gridColor = vec4(0.3, 1.0, 0.3, 1.0); // Ring 1 → green
+    else                  gridColor = vec4(0.3, 0.3, 1.0, 1.0); // Ring 2 → blue
 
     // --- 16 grid vertices ---
-    if (lid < 16) {
-        vec3 pos = sharedVertices[lid];
-        if (pebbleUbo.doSkinning != 0u)
-            pos = (IN.skinMatrix * vec4(pos, 1.0)).xyz;
-        gl_MeshVerticesEXT[lid].gl_Position = MVP * vec4(pos, 1.0);
-        outColor[lid] = gridColor;
+    if (lid < 16) {                             // First 16 threads each emit one cage vertex
+        vec3 pos = sharedVertices[lid];         // This thread's control point
+        if (pebbleUbo.doSkinning != 0u)         // If skinning is active...
+            pos = (IN.skinMatrix * vec4(pos, 1.0)).xyz; // ...transform the control point by the pebble's bone matrix
+        gl_MeshVerticesEXT[lid].gl_Position = MVP * vec4(pos, 1.0); // Project to clip space
+        outColor[lid] = gridColor;              // Tag the vertex with the ring color
     }
 
     // --- 24 grid lines: 12 horizontal + 12 vertical ---
-    if (lid < 24) {
-        if (lid < 12) {
-            uint row = lid / 3;
-            uint col = lid % 3;
-            gl_PrimitiveLineIndicesEXT[lid] = uvec2(row * 4 + col, row * 4 + col + 1);
-        } else {
-            uint col = (lid - 12) / 3;
-            uint row = (lid - 12) % 3;
-            gl_PrimitiveLineIndicesEXT[lid] = uvec2(row * 4 + col, (row + 1) * 4 + col);
+    if (lid < 24) {                             // First 24 threads each emit one line of the 4x4 grid
+        if (lid < 12) {                         // Lines 0-11: horizontal connections (within each row)
+            uint row = lid / 3;                 // Which of the 4 rows
+            uint col = lid % 3;                 // Which of the 3 horizontal segments in that row
+            gl_PrimitiveLineIndicesEXT[lid] = uvec2(row * 4 + col, row * 4 + col + 1); // Connect (row,col)→(row,col+1)
+        } else {                                // Lines 12-23: vertical connections (between rows)
+            uint col = (lid - 12) / 3;          // Which of the 4 columns
+            uint row = (lid - 12) % 3;          // Which of the 3 vertical segments in that column
+            gl_PrimitiveLineIndicesEXT[lid] = uvec2(row * 4 + col, (row + 1) * 4 + col); // Connect (row,col)→(row+1,col)
         }
     }
-}
+}                                               // End of main()
+
+// *** ************ ***

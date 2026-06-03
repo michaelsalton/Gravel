@@ -2,6 +2,8 @@
 
 #include "camera/CameraBase.h"
 
+// *** AI Generated ***
+
 class OrbitCamera : public CameraBase {
 public:
     float distance  = 5.0f;
@@ -25,3 +27,5 @@ public:
 private:
     glm::vec3 orbitTarget = {0.0f, 1.5f, 0.0f};
 };
+
+// *** ************ ***

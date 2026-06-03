@@ -3,6 +3,8 @@
 #include "core/window.h"
 #include "imgui.h"
 
+// *** AI Generated ***
+
 void AdvancedPanel::render(Renderer& r) {
     if (ImGui::CollapsingHeader("Advanced", ImGuiTreeNodeFlags_DefaultOpen)) {
         // Display
@@ -100,3 +102,5 @@ void AdvancedPanel::render(Renderer& r) {
         }
     }
 }
+
+// *** ************ ***

@@ -6,6 +6,8 @@
 #include <cmath>
 #include <filesystem>
 
+// *** AI Generated ***
+
 void ResurfacingPanel::render(Renderer& r) {
     if (ImGui::CollapsingHeader("Resurfacing", ImGuiTreeNodeFlags_DefaultOpen)) {
 
@@ -370,3 +372,5 @@ void ResurfacingPanel::renderPathway(Renderer& r) {
         }
     }
 }
+
+// *** ************ ***

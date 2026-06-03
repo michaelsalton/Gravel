@@ -2,6 +2,8 @@
 
 #include "camera/CameraBase.h"
 
+// *** AI Generated ***
+
 class FreeFlyCamera : public CameraBase {
 public:
     glm::vec3 position  = {0.0f, 2.0f, 4.0f};
@@ -23,3 +25,5 @@ public:
     void processInput(Window& window, float deltaTime) override;
     void renderImGuiControls() override;
 };
+
+// *** ************ ***

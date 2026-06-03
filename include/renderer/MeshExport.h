@@ -8,6 +8,8 @@
 
 #include "vulkan/vkHelper.h"
 
+// *** AI Generated ***
+
 struct ExportElementOffset {
     uint32_t vertexOffset;
     uint32_t triangleOffset;
@@ -30,3 +32,5 @@ struct MeshExportBuffers {
                   const std::vector<ExportElementOffset>& elementOffsets);
     void destroy();
 };
+
+// *** ************ ***

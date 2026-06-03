@@ -3,11 +3,13 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+// *** Michael Salton ***
+
 class Window;
 
 class PlayerController {
 public:
-    enum class AnimState { Idle, Walking, Running };
+    enum class AnimState { Idle, Walking, Running }; // AI Generated
 
     // Position and orientation
     glm::vec3 position = {0.0f, 0.0f, 0.0f};
@@ -24,14 +26,16 @@ public:
 
     // Getters
     glm::mat4 getModelMatrix() const;
-    AnimState getAnimState() const { return animState; }
-    float getAnimationSpeed() const;
-    bool isMoving() const { return animState != AnimState::Idle; }
-    bool isSprinting() const { return animState == AnimState::Running; }
+    AnimState getAnimState() const { return animState; } // AI Generated
+    float getAnimationSpeed() const; // AI Generated
+    bool isMoving() const { return animState != AnimState::Idle; }  // AI Generated
+    bool isSprinting() const { return animState == AnimState::Running; } // AI Generated
 
 private:
     float targetYaw = 0.0f;
-    AnimState animState = AnimState::Idle;
+    AnimState animState = AnimState::Idle;  // AI Generated
     bool sprinting = false;
     float currentSpeed = 0.0f;  // actual speed this frame (for animation)
 };
+
+// *** ************ ***

@@ -3,6 +3,8 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 
+// *** Michael Salton ***
+
 class Gamepad {
 public:
     void poll();
@@ -31,3 +33,5 @@ private:
     static constexpr float stickDeadzone = 0.15f;
     static constexpr float triggerDeadzone = 0.1f;
 };
+
+// *** ************ ***

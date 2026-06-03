@@ -4,6 +4,8 @@
 #include <string>
 #include <cstdint>
 
+// *** AI Generated ***
+
 struct NGonMesh;
 
 class ObjWriter {
@@ -22,3 +24,5 @@ public:
                            const NGonMesh& mesh,
                            uint32_t vertexOffset);
 };
+
+// *** ************ ***

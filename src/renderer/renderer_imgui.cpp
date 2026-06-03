@@ -8,6 +8,8 @@
 #include <cstring>
 #include <filesystem>
 
+// *** AI Generated ***
+
 void Renderer::initImGui() {
     // Create dedicated descriptor pool for ImGui
     VkDescriptorPoolSize poolSizes[] = {
@@ -1168,3 +1170,4 @@ void Renderer::applyPreset(const LevelPreset& preset) {
     lightIntensity   = preset.lightIntensity;
 }
 
+// *** ************ ***

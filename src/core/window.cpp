@@ -3,6 +3,8 @@
 #include <iostream>
 #include <stb_image.h>
 
+// *** Michael Salton ***
+
 Window::Window(int width, int height, const std::string& title)
     : width(width), height(height), title(title) {
 
@@ -10,7 +12,7 @@ Window::Window(int width, int height, const std::string& title)
         throw std::runtime_error("Failed to initialize GLFW");
     }
 
-    // No OpenGL context — we're using Vulkan
+    // No OpenGL context — using Vulkan
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHintString(GLFW_X11_CLASS_NAME, "Gravel");
     glfwWindowHintString(GLFW_X11_INSTANCE_NAME, "Gravel");
@@ -102,3 +104,4 @@ void Window::toggleFullscreen() {
     }
 }
 
+// *** ************ ***

@@ -1,131 +1,145 @@
-#version 450
-#extension GL_EXT_mesh_shader : require
-#extension GL_GOOGLE_include_directive : require
+#version 450                                    // Use GLSL version 4.50
+#extension GL_EXT_mesh_shader : require          // Enable the mesh shader stage (gl_MeshVerticesEXT, taskPayloadSharedEXT, ...)
+#extension GL_GOOGLE_include_directive : require // Enable #include directive
 
-#include "shaderInterface.h"
-#include "common.glsl"
-#include "parametricSurfaces.glsl"
+#include "shaderInterface.h"                    // Shared set/binding defines, UBO/SSBO layouts, HE accessor helpers
+#include "common.glsl"                          // offsetVertex / offsetVertexChainmail: place a local-space element onto the base surface
+#include "parametricSurfaces.glsl"              // evaluateParametricSurface: generate a procedural surface point for a given UV
+
+// =============================================================================
+// parametric.mesh — Resurfacing mesh (tessellation) shader
+//
+// Second stage of the parametric resurfacing pipeline. Each workgroup handles
+// one tile of one element (the task shader spawned a numTilesU x numTilesV grid
+// per element). Its 32 threads cooperatively evaluate the procedural surface
+// (torus, sphere, etc.) over the tile's UV sub-grid, offset/orient each vertex
+// onto the base mesh (or into chainmail layout), transform to clip space, and
+// emit the tile's quad grid as triangles — passing per-vertex and per-primitive
+// data downstream to parametric.frag.
+// =============================================================================
+
+// *** Michael Salton ***
 
 // 32 threads for parallel vertex/primitive generation
-layout(local_size_x = 32) in;
+layout(local_size_x = 32) in;                   // 32 invocations per workgroup; they split the vertex/triangle work
 
 // Output limits: max tile is 11x11 (144 verts, 242 prims)
 // GPU max: 256 verts, 256 prims
-layout(max_vertices = 256, max_primitives = 256, triangles) out;
+layout(max_vertices = 256, max_primitives = 256, triangles) out; // Max output per workgroup; primitive type = triangles
 
 // Must match task shader payload
-struct TaskPayload {
-    vec3 position;
-    vec3 normal;
-    vec3 edgeTangent;
-    float area;
-    uint taskId;
-    uint isVertex;
-    uint elementType;
-    uint resolutionM;
-    uint resolutionN;
-    uint deltaU;
-    uint deltaV;
-    float faceColor;
-    vec2 baseUV;
-    float screenAlpha;
-    uint faceId;
-    float curvature;
+struct TaskPayload {                            // Mirror of the task shader's payload struct (layout must match exactly)
+    vec3 position;                              // Element anchor position (object space)
+    vec3 normal;                               // Element anchor normal
+    vec3 edgeTangent;                          // Surface tangent for element orientation
+    float area;                                // Element footprint area (sizing)
+    uint taskId;                               // Unique element ID
+    uint isVertex;                             // 1 = vertex element, 0 = face element
+    uint elementType;                          // Procedural surface type
+    uint resolutionM;                          // Tessellation resolution U
+    uint resolutionN;                          // Tessellation resolution V
+    uint deltaU;                               // Tile size U
+    uint deltaV;                               // Tile size V
+    float faceColor;                           // Checkerboard color (chainmail tilt)
+    vec2 baseUV;                               // Base-mesh UV
+    float screenAlpha;                         // Coverage-fade alpha
+    uint faceId;                               // Source face ID
+    float curvature;                           // GRWM curvature value
 };
 
-taskPayloadSharedEXT TaskPayload payload;
+taskPayloadSharedEXT TaskPayload payload;       // The payload received from the task shader that launched this workgroup
 
 // Per-vertex outputs
-layout(location = 0) out PerVertexData {
-    vec4 worldPosU;  // xyz = world position, w = u coordinate
-    vec4 normalV;    // xyz = world normal, w = v coordinate
-} vOut[];
+layout(location = 0) out PerVertexData {        // Interpolated per-vertex data sent to the fragment shader
+    vec4 worldPosU;  // xyz = world position, w = u coordinate // World position packed with the U coordinate
+    vec4 normalV;    // xyz = world normal, w = v coordinate    // World normal packed with the V coordinate
+} vOut[];                                       // One entry per emitted vertex
 
 // Per-primitive outputs
-layout(location = 2) perprimitiveEXT out PerPrimitiveData {
-    flat uvec4 data;  // x = taskId, y = isVertex, z = elementType, w = unused
-} pOut[];
+layout(location = 2) perprimitiveEXT out PerPrimitiveData { // Flat (non-interpolated) per-triangle data
+    flat uvec4 data;  // x = taskId, y = isVertex, z = elementType, w = faceId // Packed element identifiers
+} pOut[];                                       // One entry per emitted triangle
 
-layout(location = 3) perprimitiveEXT out vec2 outBaseUV[];
-layout(location = 4) perprimitiveEXT out vec3 outFaceNormal[];
-layout(location = 5) perprimitiveEXT out float outScreenAlpha[];
-layout(location = 6) perprimitiveEXT out float outCurvature[];
+layout(location = 3) perprimitiveEXT out vec2 outBaseUV[];     // Per-triangle base-mesh UV (for AO/texture sampling in frag)
+layout(location = 4) perprimitiveEXT out vec3 outFaceNormal[]; // Per-triangle base-surface normal (for specular AA in frag)
+layout(location = 5) perprimitiveEXT out float outScreenAlpha[]; // Per-triangle coverage-fade alpha
+layout(location = 6) perprimitiveEXT out float outCurvature[];   // Per-triangle GRWM curvature (heatmap)
 
-layout(push_constant) uniform PushConstants {
-    mat4 model;
-    uint nbFaces;
-    uint nbVertices;
-    uint elementType;
-    float userScaling;
-    float torusMajorR;
-    float torusMinorR;
-    float sphereRadius;
-    uint resolutionM;
-    uint resolutionN;
-    uint debugMode;
-    uint enableCulling;
-    float cullingThreshold;
-    uint enableLod;
-    float lodFactor;
-    uint chainmailMode;
-    float chainmailTiltAngle;
-    uint useDirectIndex;
-    float chainmailSurfaceOffset;
-    uint activeSlots;
-    uint slotUniformSize;
-} push;
+layout(push_constant) uniform PushConstants {   // Per-draw constants (shared layout across task/mesh/frag)
+    mat4 model;                                // Object→world transform
+    uint nbFaces;                              // Face count (unused here)
+    uint nbVertices;                           // Vertex count (unused here)
+    uint elementType;                          // Default element type (unused here; payload type is authoritative)
+    float userScaling;                         // Global element-size multiplier
+    float torusMajorR;                         // Torus major radius
+    float torusMinorR;                         // Torus minor radius
+    float sphereRadius;                        // Sphere radius
+    uint resolutionM;                          // UI resolution U (unused here; payload value used)
+    uint resolutionN;                          // UI resolution V (unused here; payload value used)
+    uint debugMode;                            // Debug mode (unused here)
+    uint enableCulling;                        // Culling bitmask (unused here)
+    float cullingThreshold;                    // Cull threshold (unused here)
+    uint enableLod;                            // LOD flag (unused here)
+    float lodFactor;                           // LOD factor (unused here)
+    uint chainmailMode;                        // 0 = off, 1 = chainmail placement
+    float chainmailTiltAngle;                  // Chainmail tilt angle (radians)
+    uint useDirectIndex;                       // Secondary-mesh flag (unused here)
+    float chainmailSurfaceOffset;              // Chainmail lift off the surface
+    uint activeSlots;                          // Slot count (unused here)
+    uint slotUniformSize;                      // Slot uniform-size flag (unused here)
+} push;                                        // Instance name of the push-constant block
 
-layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
-    mat4 view;
-    mat4 projection;
-    vec4 cameraPosition;
-    float nearPlane;
-    float farPlane;
-} viewUBO;
+layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock { // Scene-set UBO (set 0, binding 0): camera data
+    mat4 view;                                  // World→view matrix
+    mat4 projection;                            // View→clip matrix
+    vec4 cameraPosition;                        // Camera world position
+    float nearPlane;                            // Near clip distance
+    float farPlane;                             // Far clip distance
+} viewUBO;                                      // Instance name of the view UBO
 
-void main() {
+void main() {                                   // Mesh shader entry point (runs once per workgroup = once per tile)
     // Read resolution and tile info from payload
-    uint M = payload.resolutionM;
-    uint N = payload.resolutionN;
-    uint deltaU = payload.deltaU;
-    uint deltaV = payload.deltaV;
+    uint M = payload.resolutionM;               // Full element resolution in U
+    uint N = payload.resolutionN;               // Full element resolution in V
+    uint deltaU = payload.deltaU;               // This tile's width in grid cells
+    uint deltaV = payload.deltaV;               // This tile's height in grid cells
 
     // Compute UV offset for this tile using workgroup ID
-    uint tileU = gl_WorkGroupID.x;
-    uint tileV = gl_WorkGroupID.y;
-    uint startU = tileU * deltaU;
-    uint startV = tileV * deltaV;
+    uint tileU = gl_WorkGroupID.x;              // This tile's column in the element's tile grid
+    uint tileV = gl_WorkGroupID.y;              // This tile's row
+    uint startU = tileU * deltaU;               // U index where this tile starts
+    uint startV = tileV * deltaV;               // V index where this tile starts
 
     // Handle edge tiles (may be smaller than deltaU x deltaV)
-    uint localM = min(deltaU, M - startU);
-    uint localN = min(deltaV, N - startV);
+    uint localM = min(deltaU, M - startU);      // Clamp tile width at the element's U edge
+    uint localN = min(deltaV, N - startV);      // Clamp tile height at the element's V edge
 
-    uint numVerts = (localM + 1) * (localN + 1);
-    uint numQuads = localM * localN;
-    uint numPrims = numQuads * 2;
+    uint numVerts = (localM + 1) * (localN + 1); // Vertices in this tile's quad grid
+    uint numQuads = localM * localN;            // Quads in this tile
+    uint numPrims = numQuads * 2;               // Triangles (2 per quad)
 
-    SetMeshOutputsEXT(numVerts, numPrims);
+    SetMeshOutputsEXT(numVerts, numPrims);      // Declare how many vertices/triangles this workgroup will emit
 
-    mat4 mvp = viewUBO.projection * viewUBO.view * push.model;
-    uint localId = gl_LocalInvocationID.x;
+    mat4 mvp = viewUBO.projection * viewUBO.view * push.model; // Object→clip transform
+    uint localId = gl_LocalInvocationID.x;      // This thread's index within the 32-thread workgroup
 
     // Generate vertices in parallel
-    for (uint i = localId; i < numVerts; i += 32) {
-        uint u = i % (localM + 1);
-        uint v = i / (localM + 1);
+    for (uint i = localId; i < numVerts; i += 32) { // Strided loop: 32 threads cover all tile vertices
+        uint u = i % (localM + 1);              // Local U index of this vertex within the tile
+        uint v = i / (localM + 1);              // Local V index
 
         // Map local tile UV to global UV [0,1]
-        vec2 uv = vec2(startU + u, startV + v) / vec2(M, N);
+        vec2 uv = vec2(startU + u, startV + v) / vec2(M, N); // Normalize to the element's full [0,1] parametric domain
 
         // Evaluate parametric surface in local space
-        vec3 localPos, localNormal;
-        evaluateParametricSurface(uv, localPos, localNormal, payload.elementType,
+        vec3 localPos, localNormal;             // Surface point/normal in the element's local frame
+        evaluateParametricSurface(uv, localPos, localNormal, payload.elementType, // Generate the procedural surface point
                                   push.torusMajorR, push.torusMinorR, push.sphereRadius,
                                   payload.taskId, payload.faceColor);
 
         // Transform to world space
-        vec3 worldPos, worldNormal;
-        if (push.chainmailMode != 0u) {
+        vec3 worldPos, worldNormal;             // Element point placed onto the base surface
+        if (push.chainmailMode != 0u) {         // Chainmail layout: tilt/lift rings so they interlock
             offsetVertexChainmail(localPos, localNormal,
                                   payload.position, payload.normal,
                                   payload.edgeTangent,
@@ -133,46 +147,48 @@ void main() {
                                   payload.faceColor, push.chainmailTiltAngle,
                                   push.chainmailSurfaceOffset,
                                   worldPos, worldNormal);
-        } else {
+        } else {                                // Standard layout: scale + orient onto the anchor
             offsetVertex(localPos, localNormal,
                          payload.position, payload.normal, payload.area, push.userScaling,
                          worldPos, worldNormal);
         }
 
         // Apply model matrix to world position and normal for correct lighting
-        vec3 transformedPos = (push.model * vec4(worldPos, 1.0)).xyz;
-        vec3 transformedNormal = normalize(mat3(push.model) * worldNormal);
-        vOut[i].worldPosU = vec4(transformedPos, uv.x);
-        vOut[i].normalV = vec4(transformedNormal, uv.y);
-        gl_MeshVerticesEXT[i].gl_Position = mvp * vec4(worldPos, 1.0);
+        vec3 transformedPos = (push.model * vec4(worldPos, 1.0)).xyz;        // Final world-space position (for lighting)
+        vec3 transformedNormal = normalize(mat3(push.model) * worldNormal);  // Final world-space normal
+        vOut[i].worldPosU = vec4(transformedPos, uv.x); // Output world pos + U coordinate
+        vOut[i].normalV = vec4(transformedNormal, uv.y); // Output world normal + V coordinate
+        gl_MeshVerticesEXT[i].gl_Position = mvp * vec4(worldPos, 1.0); // Clip-space position for the rasterizer
     }
 
     // Generate triangle indices in parallel
-    for (uint q = localId; q < numQuads; q += 32) {
-        uint qu = q % localM;
-        uint qv = q / localM;
+    for (uint q = localId; q < numQuads; q += 32) { // Strided loop: 32 threads cover all tile quads
+        uint qu = q % localM;                   // Quad's column in the tile
+        uint qv = q / localM;                   // Quad's row
 
-        uint v00 = qv * (localM + 1) + qu;
-        uint v10 = v00 + 1;
-        uint v01 = v00 + (localM + 1);
-        uint v11 = v01 + 1;
+        uint v00 = qv * (localM + 1) + qu;      // Bottom-left vertex index of the quad
+        uint v10 = v00 + 1;                     // Bottom-right
+        uint v01 = v00 + (localM + 1);          // Top-left
+        uint v11 = v01 + 1;                     // Top-right
 
-        uint triId0 = 2 * q;
-        uint triId1 = 2 * q + 1;
+        uint triId0 = 2 * q;                    // First triangle index of this quad
+        uint triId1 = 2 * q + 1;                // Second triangle index
 
-        gl_PrimitiveTriangleIndicesEXT[triId0] = uvec3(v00, v10, v11);
-        gl_PrimitiveTriangleIndicesEXT[triId1] = uvec3(v00, v11, v01);
+        gl_PrimitiveTriangleIndicesEXT[triId0] = uvec3(v00, v10, v11); // Triangle 1: BL, BR, TR
+        gl_PrimitiveTriangleIndicesEXT[triId1] = uvec3(v00, v11, v01); // Triangle 2: BL, TR, TL
 
-        pOut[triId0].data = uvec4(payload.taskId, payload.isVertex, payload.elementType, payload.faceId);
+        pOut[triId0].data = uvec4(payload.taskId, payload.isVertex, payload.elementType, payload.faceId); // Per-tri IDs
         pOut[triId1].data = uvec4(payload.taskId, payload.isVertex, payload.elementType, payload.faceId);
-        outBaseUV[triId0] = payload.baseUV;
+        outBaseUV[triId0] = payload.baseUV;     // Pass base-mesh UV to both triangles
         outBaseUV[triId1] = payload.baseUV;
-        vec3 faceN = normalize(mat3(push.model) * payload.normal);
+        vec3 faceN = normalize(mat3(push.model) * payload.normal); // Base-surface normal in world space (for specular AA)
         outFaceNormal[triId0] = faceN;
         outFaceNormal[triId1] = faceN;
-        outScreenAlpha[triId0] = payload.screenAlpha;
+        outScreenAlpha[triId0] = payload.screenAlpha; // Pass coverage-fade alpha
         outScreenAlpha[triId1] = payload.screenAlpha;
-        outCurvature[triId0] = payload.curvature;
+        outCurvature[triId0] = payload.curvature; // Pass curvature (heatmap)
         outCurvature[triId1] = payload.curvature;
     }
-}
+}                                               // End of main()
+
+// *** ************ ***

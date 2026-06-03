@@ -4,6 +4,8 @@
 
 #include "shaderInterface.h"
 
+// *** AI Generated ***
+
 // One workgroup per face (no task shader)
 layout(local_size_x = 1) in;
 
@@ -97,3 +99,5 @@ void main() {
         outFaceId[i] = faceId;
     }
 }
+
+// *** ************ ***

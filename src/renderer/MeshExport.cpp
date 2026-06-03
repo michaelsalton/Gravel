@@ -2,6 +2,8 @@
 #include <stdexcept>
 #include <iostream>
 
+// *** AI Generated ***
+
 void MeshExportBuffers::allocate(VkDevice device, VkPhysicalDevice physDevice,
                                   uint32_t numVerts, uint32_t numTris,
                                   const std::vector<ExportElementOffset>& elementOffsets) {
@@ -36,3 +38,5 @@ void MeshExportBuffers::destroy() {
     totalVertices = 0;
     totalTriangles = 0;
 }
+
+// *** ************ ***

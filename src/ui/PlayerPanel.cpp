@@ -2,6 +2,8 @@
 #include "renderer/renderer.h"
 #include "imgui.h"
 
+// *** AI Generated ***
+
 void PlayerPanel::render(Renderer& r) {
     if (ImGui::CollapsingHeader("Player", ImGuiTreeNodeFlags_DefaultOpen)) {
         bool prevMode = r.thirdPersonMode;
@@ -24,3 +26,5 @@ void PlayerPanel::render(Renderer& r) {
         }
     }
 }
+
+// *** ************ ***

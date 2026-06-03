@@ -5,6 +5,8 @@
 #include <iostream>
 #include <stdexcept>
 
+// *** Michael Salton ***
+
 int main() {
     std::cout << "=== Gravel - GPU Mesh Shader Resurfacing ===" << std::endl;
     std::cout << std::endl;
@@ -129,3 +131,5 @@ int main() {
 
     return 0;
 }
+
+// *** ************ ***

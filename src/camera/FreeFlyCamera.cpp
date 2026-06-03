@@ -2,6 +2,8 @@
 #include "core/window.h"
 #include "imgui.h"
 
+// *** AI Generated ***
+
 glm::vec3 FreeFlyCamera::getForward() const {
     glm::vec3 forward;
     forward.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
@@ -99,3 +101,5 @@ void FreeFlyCamera::renderImGuiControls() {
     if (ImGui::Button("Reset Transform"))
         reset();
 }
+
+// *** ************ ***

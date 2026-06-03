@@ -2,6 +2,8 @@
 #include "core/window.h"
 #include "imgui.h"
 
+// *** AI Generated ***
+
 glm::vec3 OrbitCamera::getPosition() const {
     float yawRad = glm::radians(yaw);
     float pitchRad = glm::radians(pitch);
@@ -61,3 +63,5 @@ void OrbitCamera::renderImGuiControls() {
     if (ImGui::Button("Reset Transform"))
         reset();
 }
+
+// *** ************ ***

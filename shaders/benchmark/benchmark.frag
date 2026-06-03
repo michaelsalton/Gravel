@@ -7,6 +7,8 @@
 
 #include "shading.glsl"
 
+// *** AI Generated ***
+
 layout(location = 0) in vec3 inNormal;
 layout(location = 1) in vec3 inWorldPos;
 layout(location = 2) in vec2 inUV;
@@ -86,3 +88,5 @@ void main() {
 
     outColor = vec4(computeShading(N), 1.0);
 }
+
+// *** ************ ***

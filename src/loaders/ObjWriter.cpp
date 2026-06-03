@@ -4,6 +4,8 @@
 #include <iostream>
 #include <stdexcept>
 
+// *** AI Generated ***
+
 void ObjWriter::write(const std::string& filepath,
                       const glm::vec4* positions,
                       const glm::vec4* normals,
@@ -115,3 +117,5 @@ void ObjWriter::appendMesh(const std::string& filepath,
     std::cout << "Appended base mesh: " << mesh.positions.size()
               << " vertices, " << baseTris << " triangles" << std::endl;
 }
+
+// *** ************ ***

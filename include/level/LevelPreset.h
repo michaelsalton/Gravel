@@ -2,6 +2,8 @@
 
 #include <glm/glm.hpp>
 
+// *** AI Generated ***
+
 struct LevelPreset {
     const char* name;
 
@@ -53,3 +55,5 @@ struct LevelPreset {
 
 extern const LevelPreset LEVEL_PRESETS[];
 extern const int LEVEL_PRESET_COUNT;
+
+// *** ************ ***

@@ -24,6 +24,8 @@
 #include "ui/AnimationPanel.h"
 #include "ui/GrwmPanel.h"
 
+// Per-frame loop and runtime behaviour
+
 class Window;
 struct HalfEdgeMesh;
 

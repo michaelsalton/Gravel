@@ -4,6 +4,10 @@
 #include <vector>
 #include <optional>
 
+// Vulkan setup / one-time construction
+
+// *** AI Generated ***
+
 struct SwapChainSupportDetails {
     VkSurfaceCapabilitiesKHR capabilities;
     std::vector<VkSurfaceFormatKHR> formats;
@@ -18,3 +22,5 @@ struct QueueFamilyIndices {
         return graphicsFamily.has_value() && presentFamily.has_value();
     }
 };
+
+// *** ************ ***

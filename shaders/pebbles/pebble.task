@@ -1,212 +1,227 @@
-#version 460
-#extension GL_EXT_mesh_shader : require
-#extension GL_GOOGLE_include_directive : require
+#version 460                                    // Use GLSL version 4.60
+#extension GL_EXT_mesh_shader : require          // Enable task/mesh shader stages (EmitMeshTasksEXT, taskPayloadSharedEXT)
+#extension GL_GOOGLE_include_directive : require // Enable #include directive
 
-#define GROUP_SIZE 32
+#define GROUP_SIZE 32                            // Workgroup thread count (one subgroup)
 
-#include "pebble.glsl"
-#include "culling.glsl"
+#include "pebble.glsl"                           // Task payload, face-data helpers, pebble constants
+#include "culling.glsl"                          // isInFrustum frustum-culling helper
 
-layout(local_size_x = GROUP_SIZE) in;
+// =============================================================================
+// pebble.task — Pebble task (amplification) shader
+//
+// First stage of the pebble pipeline. One workgroup per base-mesh face. It
+// loads the face data, runs cheap pre-skinning culling (backface + mask), then
+// skinning, then pathway and frustum culling, picks a subdivision level from a
+// screen-space LOD estimate, computes how many mesh-shader workgroups are
+// needed to tessellate the pebble at that level, fills the task payload, and
+// emits that many mesh workgroups (or none if the face is culled).
+// =============================================================================
+
+// *** Michael Salton ***
+
+layout(local_size_x = GROUP_SIZE) in;            // 32 threads per workgroup (cooperative face-data load)
 
 // ============================================================================
 // UBOs
 // ============================================================================
 
-layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
-    mat4 view;
-    mat4 projection;
-    vec4 cameraPosition;
-    float nearPlane;
-    float farPlane;
-} viewUBO;
+layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock { // Scene-set UBO (set 0, binding 0): camera data
+    mat4 view;                                   // World→view matrix
+    mat4 projection;                             // View→clip matrix
+    vec4 cameraPosition;                         // Camera world position (backface culling)
+    float nearPlane;                             // Near clip distance
+    float farPlane;                              // Far clip distance
+} viewUBO;                                       // Instance name of the view UBO
 
-layout(push_constant) uniform PushConstants {
-    mat4 model;
-    uint nbFaces;
-    uint nbVertices;
-    uint elementType;
-    float userScaling;
-    float torusMajorR;
-    float torusMinorR;
-    float sphereRadius;
-    uint resolutionM;
-    uint resolutionN;
-    uint debugMode;
-    uint enableCulling;
-    float cullingThreshold;
-    uint enableLod;
-    float lodFactor;
-    uint chainmailMode;
-    float chainmailTiltAngle;
-} pc;
+layout(push_constant) uniform PushConstants {    // Per-draw constants (shared layout)
+    mat4 model;                                  // Object→world transform
+    uint nbFaces;                                // Face count
+    uint nbVertices;                             // Vertex count
+    uint elementType;                            // Element type (unused here)
+    float userScaling;                           // Global scale (unused here)
+    float torusMajorR;                           // (unused here)
+    float torusMinorR;                           // (unused here)
+    float sphereRadius;                          // (unused here)
+    uint resolutionM;                            // (unused here)
+    uint resolutionN;                            // (unused here)
+    uint debugMode;                              // (unused here)
+    uint enableCulling;                          // Culling bitmask (bit 2 = mask-texture culling)
+    float cullingThreshold;                      // (pebble uses pebbleUbo.cullingThreshold instead)
+    uint enableLod;                              // (pebble uses pebbleUbo.useLod instead)
+    float lodFactor;                             // (pebble uses pebbleUbo.lodFactor instead)
+    uint chainmailMode;                          // (unused here)
+    float chainmailTiltAngle;                    // (unused here)
+} pc;                                            // Instance name of the push-constant block
 
-taskPayloadSharedEXT Task OUT;
+taskPayloadSharedEXT Task OUT;                   // Payload written here and read by the spawned mesh workgroups
 
 // ============================================================================
 // LOD Computation
 // ============================================================================
 
 // Compute AABB from face vertices + extrusion along face normal
-void pebbleBoundingBox(uint numVertices, vec3 faceNormal, out vec3 minAABB, out vec3 maxAABB) {
-    minAABB = vec3(1e6);
-    maxAABB = vec3(-1e6);
+void pebbleBoundingBox(uint numVertices, vec3 faceNormal, out vec3 minAABB, out vec3 maxAABB) { // Bounding box of the pebble
+    minAABB = vec3(1e6);                         // Start min at +large
+    maxAABB = vec3(-1e6);                        // Start max at -large
 
-    for (uint i = 0; i < numVertices; i++) {
-        vec3 vertexPos = getVertexPosShared(i);
-        minAABB = min(minAABB, vertexPos);
-        maxAABB = max(maxAABB, vertexPos);
+    for (uint i = 0; i < numVertices; i++) {     // Expand the box over every face vertex
+        vec3 vertexPos = getVertexPosShared(i);  // Face-corner position
+        minAABB = min(minAABB, vertexPos);       // Track minimum
+        maxAABB = max(maxAABB, vertexPos);       // Track maximum
     }
 
     // Extend bounds by extrusion
-    vec3 extrusionOffset = faceNormal * pebbleUbo.extrusionAmount * (1.0 + pebbleUbo.extrusionVariation);
-    minAABB = min(minAABB, minAABB + extrusionOffset);
+    vec3 extrusionOffset = faceNormal * pebbleUbo.extrusionAmount * (1.0 + pebbleUbo.extrusionVariation); // Max extrusion vector
+    minAABB = min(minAABB, minAABB + extrusionOffset); // Grow box to include the extruded top
     maxAABB = max(maxAABB, maxAABB + extrusionOffset);
 }
 
 // Project AABB to screen space and return max NDC extent
-float pebbleScreenSpaceSize(vec3 minAABB, vec3 maxAABB, mat4 mvp) {
-    vec2 screenMin = vec2( 1e10);
+float pebbleScreenSpaceSize(vec3 minAABB, vec3 maxAABB, mat4 mvp) { // Estimate how big the pebble is on screen
+    vec2 screenMin = vec2( 1e10);                // NDC bounds accumulators
     vec2 screenMax = vec2(-1e10);
 
-    for (uint i = 0; i < 8; i++) {
-        vec3 corner = vec3(
+    for (uint i = 0; i < 8; i++) {               // Project each of the 8 AABB corners
+        vec3 corner = vec3(                      // Select this corner from the AABB via the loop bits
             ((i & 1) != 0) ? maxAABB.x : minAABB.x,
             ((i & 2) != 0) ? maxAABB.y : minAABB.y,
             ((i & 4) != 0) ? maxAABB.z : minAABB.z
         );
 
-        vec4 clip = mvp * vec4(corner, 1.0);
-        if (clip.w <= 0.0)
-            return 10.0; // behind camera — treat as large
+        vec4 clip = mvp * vec4(corner, 1.0);     // Project to clip space
+        if (clip.w <= 0.0)                       // Corner behind the camera...
+            return 10.0; // behind camera — treat as large // ...force "large" so it isn't culled by LOD
 
-        vec2 ndc = clip.xy / clip.w;
-        screenMin = min(screenMin, ndc);
+        vec2 ndc = clip.xy / clip.w;             // Perspective divide → NDC
+        screenMin = min(screenMin, ndc);         // Track NDC bounds
         screenMax = max(screenMax, ndc);
     }
 
-    vec2 extent = screenMax - screenMin;
-    return max(extent.x, extent.y);
+    vec2 extent = screenMax - screenMin;         // NDC size of the projected box
+    return max(extent.x, extent.y);              // Use the larger axis as the screen size
 }
 
-uint computeSubdivLevel(vec3 faceNormal) {
-    uint N = pebbleUbo.subdivisionLevel;
+uint computeSubdivLevel(vec3 faceNormal) {       // Choose a subdivision level for this pebble
+    uint N = pebbleUbo.subdivisionLevel;         // Maximum (UI-chosen) subdivision level
 
-    if (pebbleUbo.useLod == 0)
-        return N;
+    if (pebbleUbo.useLod == 0)                   // If LOD is off...
+        return N;                                // ...always use the max level
 
-    vec3 minAABB, maxAABB;
-    pebbleBoundingBox(vertCount, faceNormal, minAABB, maxAABB);
+    vec3 minAABB, maxAABB;                        // Pebble bounding box
+    pebbleBoundingBox(vertCount, faceNormal, minAABB, maxAABB); // Compute it
 
-    mat4 mvp = viewUBO.projection * viewUBO.view * pc.model;
-    float screenSize = pebbleScreenSpaceSize(minAABB, maxAABB, mvp);
+    mat4 mvp = viewUBO.projection * viewUBO.view * pc.model; // Object→clip transform
+    float screenSize = pebbleScreenSpaceSize(minAABB, maxAABB, mvp); // Estimate screen size
 
-    uint targetN = uint(float(N) * sqrt(screenSize * pebbleUbo.lodFactor));
-    targetN = min(targetN, N);
+    uint targetN = uint(float(N) * sqrt(screenSize * pebbleUbo.lodFactor)); // Scale level by sqrt of screen size
+    targetN = min(targetN, N);                   // Never exceed the max level
 
     // Prevent N=0 (flat extrusion) unless explicitly allowed
-    if (pebbleUbo.allowLowLod == 0)
-        targetN = max(targetN, 1);
+    if (pebbleUbo.allowLowLod == 0)              // Unless low LOD is allowed...
+        targetN = max(targetN, 1);               // ...keep at least one subdivision (avoid flat extrusion)
 
-    return targetN;
+    return targetN;                              // Chosen subdivision level
 }
 
 // ============================================================================
 // Main
 // ============================================================================
 
-void main() {
-    uint groupId = gl_WorkGroupID.x;
-    fetchFaceData(groupId);
+void main() {                                    // Task shader entry (one workgroup per face)
+    uint groupId = gl_WorkGroupID.x;             // This workgroup = this face index
+    fetchFaceData(groupId);                      // Cooperatively load the face's vertex data into shared memory
 
-    if (vertCount < 3) {
-        return;
+    if (vertCount < 3) {                         // Degenerate face (fewer than 3 vertices)...
+        return;                                  // ...emit nothing
     }
 
     // ==================== Face Data ====================
-    vec3 center = getFaceCenter(groupId);
-    vec3 normal = getFaceNormal(groupId);
+    vec3 center = getFaceCenter(groupId);        // Face center
+    vec3 normal = getFaceNormal(groupId);        // Face normal
 
     // ==================== Early Backface Cull (pre-skinning) ====================
     // Uses un-skinned normal — conservative approximation, avoids skinning cost for
     // clearly backfacing faces. Skinning rarely flips face orientation significantly.
-    if (pebbleUbo.useCulling != 0) {
-        vec3 viewDir = -normalize(viewUBO.cameraPosition.xyz - center);
-        if (dot(viewDir, normal) >= pebbleUbo.cullingThreshold) {
-            return;
+    if (pebbleUbo.useCulling != 0) {             // If culling is enabled...
+        vec3 viewDir = -normalize(viewUBO.cameraPosition.xyz - center); // Direction from camera to face
+        if (dot(viewDir, normal) >= pebbleUbo.cullingThreshold) { // Facing away from camera...
+            return;                              // ...cull early (before paying skinning cost)
         }
     }
 
     // ==================== Mask Texture Culling (pre-skinning) ====================
     // UV coordinates are skinning-independent, so this can also run early.
-    if ((pc.enableCulling & 4u) != 0u) {
-        uint vertId = uint(getHalfEdgeVertex(uint(getFaceEdge(groupId))));
-        vec2 baseUV = getVertexTexCoord(vertId);
-        float maskVal = textureLod(
+    if ((pc.enableCulling & 4u) != 0u) {         // If mask-texture culling is enabled (bit 2)...
+        uint vertId = uint(getHalfEdgeVertex(uint(getFaceEdge(groupId)))); // Face's first vertex
+        vec2 baseUV = getVertexTexCoord(vertId); // Its base-mesh UV
+        float maskVal = textureLod(              // Sample the mask texture (nearest, no mip)
             sampler2D(textures[MASK_TEXTURE], samplers[NEAREST_SAMPLER]),
             baseUV, 0.0
-        ).r;
-        if (maskVal < 0.5) {
-            return;
+        ).r;                                     // Red channel = mask value
+        if (maskVal < 0.5) {                     // Masked-out region...
+            return;                              // ...cull
         }
     }
 
     // ==================== Skinning ====================
-    mat4 skinMat = mat4(1.0);
-    if (pebbleUbo.doSkinning != 0u) {
-        skinMat = computeFaceSkinMatrix(groupId);
-        center = (skinMat * vec4(center, 1.0)).xyz;
-        normal = normalize((skinMat * vec4(normal, 0.0)).xyz);
+    mat4 skinMat = mat4(1.0);                    // Default: no skinning
+    if (pebbleUbo.doSkinning != 0u) {            // If skeletal animation is active...
+        skinMat = computeFaceSkinMatrix(groupId);// ...build this face's skin matrix
+        center = (skinMat * vec4(center, 1.0)).xyz; // Skin the center
+        normal = normalize((skinMat * vec4(normal, 0.0)).xyz); // Skin the normal
     }
 
     // ==================== Pathway Culling ====================
-    float pathwayScale = 1.0;
-    if (pebbleUbo.usePathway != 0u) {
-        vec2 toFaceXZ  = center.xz - pebbleUbo.playerWorldPos.xz;
-        vec2 fwdXZ     = normalize(pebbleUbo.playerForward.xz);
-        float projFwd  = dot(toFaceXZ, fwdXZ);
-        float projSide = length(toFaceXZ - projFwd * fwdXZ);
-        float radius   = (projFwd >= 0.0)
+    float pathwayScale = 1.0;                    // Coverage scale from the player "pathway" zone
+    if (pebbleUbo.usePathway != 0u) {            // If pathway culling (fog-of-war trail) is on...
+        vec2 toFaceXZ  = center.xz - pebbleUbo.playerWorldPos.xz; // Vector from player to face (ground plane)
+        vec2 fwdXZ     = normalize(pebbleUbo.playerForward.xz);   // Player forward direction (ground plane)
+        float projFwd  = dot(toFaceXZ, fwdXZ);   // Distance ahead/behind the player
+        float projSide = length(toFaceXZ - projFwd * fwdXZ); // Lateral distance from the player's path
+        float radius   = (projFwd >= 0.0)        // Choose forward vs. rear radius
                          ? pebbleUbo.pathwayRadius
                          : pebbleUbo.pathwayRadius * pebbleUbo.pathwayBackScale;
-        float dist     = length(vec2(projFwd / radius,
+        float dist     = length(vec2(projFwd / radius,            // Normalized elliptical distance from the path
                                      projSide / pebbleUbo.pathwayRadius));
         // pathwayFalloff controls how many "rings" wide the fade band is.
         // Higher = narrower band (sharper edge). ~8 ≈ 2-3 rows.
-        float t = clamp((1.0 - dist) * pebbleUbo.pathwayFalloff, 0.0, 1.0);
-        pathwayScale = smoothstep(0.0, 1.0, t);
-        if (pathwayScale < 0.01) return;
+        float t = clamp((1.0 - dist) * pebbleUbo.pathwayFalloff, 0.0, 1.0); // Fade factor near the path edge
+        pathwayScale = smoothstep(0.0, 1.0, t);  // Smooth the fade
+        if (pathwayScale < 0.01) return;         // Fully outside the pathway → cull
     }
 
     // ==================== Frustum Culling (post-skinning) ====================
     // Uses skinned center so the test is accurate after deformation.
-    if (pebbleUbo.useCulling != 0) {
-        mat4 mvp = viewUBO.projection * viewUBO.view * pc.model;
-        if (!isInFrustum(center, pebbleUbo.extrusionAmount, mvp, 0.1)) {
-            return;
+    if (pebbleUbo.useCulling != 0) {             // If culling is enabled...
+        mat4 mvp = viewUBO.projection * viewUBO.view * pc.model; // Object→clip transform
+        if (!isInFrustum(center, pebbleUbo.extrusionAmount, mvp, 0.1)) { // Pebble outside the frustum...
+            return;                              // ...cull
         }
     }
 
     // ==================== Patch Count ====================
     // Each edge -> 2 patches, 3 rings of extrusion
-    uint nbPatches = vertCount * 2 * 3;
-    uint nbWorkGroupsPerPatch = 1;
+    uint nbPatches = vertCount * 2 * 3;          // Edge patches: 2 per edge × 3 rings
+    uint nbWorkGroupsPerPatch = 1;               // Workgroups needed per patch (grows with high subdivision)
 
     // ==================== LOD ====================
-    uint N = computeSubdivLevel(normal);
+    uint N = computeSubdivLevel(normal);         // Pick subdivision level
 
-    uint taskcount = 1;
-    if (N > 0) {
-        if (N - 1 > MAX_SUBDIV_PER_WORKGROUP)
-            nbWorkGroupsPerPatch = uint(pow(4, N - 1 - MAX_SUBDIV_PER_WORKGROUP));
-        taskcount = nbPatches * nbWorkGroupsPerPatch + vertCount * 2;
+    uint taskcount = 1;                          // Number of mesh workgroups to emit
+    if (N > 0) {                                 // If the pebble is subdivided...
+        if (N - 1 > MAX_SUBDIV_PER_WORKGROUP)    // Beyond what one workgroup can do...
+            nbWorkGroupsPerPatch = uint(pow(4, N - 1 - MAX_SUBDIV_PER_WORKGROUP)); // ...split each patch into sub-patches
+        taskcount = nbPatches * nbWorkGroupsPerPatch + vertCount * 2; // Edge patches + inner-fill vertex patches
     }
 
     // ==================== Emit ====================
-    OUT.baseID = groupId;
-    OUT.targetSubdivLevel = N;
-    OUT.scale = pathwayScale;
-    OUT.skinMatrix = skinMat;
+    OUT.baseID = groupId;                        // Tell the mesh shader which face this is
+    OUT.targetSubdivLevel = N;                   // ...and the subdivision level
+    OUT.scale = pathwayScale;                    // ...and the pathway coverage scale
+    OUT.skinMatrix = skinMat;                    // ...and the skinning matrix
 
-    EmitMeshTasksEXT(taskcount, 1, 1);
-}
+    EmitMeshTasksEXT(taskcount, 1, 1);           // Launch the mesh-shader workgroups (0 if culled via early returns)
+}                                                // End of main()
+
+// *** ************ ***

@@ -1,6 +1,8 @@
 #ifndef SHADER_INTERFACE_H
 #define SHADER_INTERFACE_H
 
+// *** AI Generated ***
+
 // Cross-platform compatibility
 #ifdef __cplusplus
     #include <glm/glm.hpp>
@@ -456,3 +458,5 @@ const float PI = 3.14159265359;
 #endif // __cplusplus
 
 #endif // SHADER_INTERFACE_H
+
+// *** ************ ***

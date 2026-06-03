@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+// Asset/geometry data management
+
 struct MeshInfoUBO {
     uint32_t nbVertices;
     uint32_t nbFaces;

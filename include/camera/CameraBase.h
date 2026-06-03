@@ -3,6 +3,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+// *** AI Generated ***
+
 class Window;
 
 class CameraBase {
@@ -26,3 +28,5 @@ public:
     virtual void processInput(Window& window, float deltaTime) = 0;
     virtual void renderImGuiControls() = 0;
 };
+
+// *** ************ ***

@@ -4,6 +4,8 @@
 
 #include <cmath>
 
+// *** Michael Salton ***
+
 void PlayerController::update(Window& window, float deltaTime, float cameraYaw) {
     const auto& kb = window.keyboardMouse;
     ImGuiIO& io = ImGui::GetIO();
@@ -80,6 +82,10 @@ glm::mat4 PlayerController::getModelMatrix() const {
     return model;
 }
 
+// *** ************ ***
+
+// *** AI Generated ***
+
 float PlayerController::getAnimationSpeed() const {
     switch (animState) {
         case AnimState::Walking: return 1.0f;
@@ -87,3 +93,5 @@ float PlayerController::getAnimationSpeed() const {
         default: return 0.0f;
     }
 }
+
+// *** ************ ***

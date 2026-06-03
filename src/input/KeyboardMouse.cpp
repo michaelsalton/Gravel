@@ -1,5 +1,7 @@
 #include "input/KeyboardMouse.h"
 
+// *** Michael Salton ***
+
 void KeyboardMouse::init(GLFWwindow* win) {
     handle = win;
 }
@@ -35,3 +37,5 @@ void KeyboardMouse::onCursorPos(double xpos, double ypos) {
 void KeyboardMouse::onScroll(double yoffset) {
     scrollDelta += static_cast<float>(yoffset);
 }
+
+// *** ************ ***

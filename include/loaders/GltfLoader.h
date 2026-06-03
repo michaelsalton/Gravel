@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+// *** AI Generated ***
+
 namespace tinygltf { class Model; }
 
 // ============================================================================
@@ -92,3 +94,5 @@ public:
                                    const Skeleton& skeleton,
                                    std::vector<glm::vec2>& outUVs);
 };
+
+// *** ************ ***

@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <vector>
 
+// *** AI Generated ***
+
 class StorageBuffer {
 public:
     StorageBuffer() = default;
@@ -85,3 +87,5 @@ void copyBufferToImage(VkCommandBuffer cmd, VkBuffer buffer, VkImage image,
 
 uint32_t findMemoryType(VkPhysicalDevice physicalDevice,
                         uint32_t typeFilter, VkMemoryPropertyFlags properties);
+
+// *** ************ ***

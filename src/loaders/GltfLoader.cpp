@@ -13,6 +13,8 @@
 #include <unordered_map>
 #include <set>
 
+// *** AI Generated ***
+
 // ============================================================================
 // Helper functions for node transforms
 // ============================================================================
@@ -757,3 +759,5 @@ void GltfLoader::matchUVsToObjMesh(const tinygltf::Model& model,
     std::cout << "  UV data matched: " << matchedCount << " / " << objVertCount
               << " vertices" << std::endl;
 }
+
+// *** ************ ***

@@ -4,6 +4,8 @@
 #define ASSETS_DIR ""
 #endif
 
+// *** AI Generated ***
+
 const LevelPreset LEVEL_PRESETS[] = {
     {
         .name               = "Sphere World",
@@ -125,3 +127,5 @@ const LevelPreset LEVEL_PRESETS[] = {
 };
 
 const int LEVEL_PRESET_COUNT = sizeof(LEVEL_PRESETS) / sizeof(LEVEL_PRESETS[0]);
+
+// *** ************ ***

@@ -1,100 +1,115 @@
-#version 450
-#extension GL_EXT_mesh_shader : require
-#extension GL_GOOGLE_include_directive : require
+#version 450                                  // Use GLSL version 4.50
+#extension GL_EXT_mesh_shader : require        // Enable the mesh shader stage (gl_MeshVerticesEXT, SetMeshOutputsEXT, etc.); compilation fails if unsupported
+#extension GL_GOOGLE_include_directive : require // Enable #include so this file can pull in shaderInterface.h; required (hard error if absent)
 
-#include "shaderInterface.h"
+#include "shaderInterface.h"                   // Shared descriptor set/binding defines, buffer layouts, and HE accessor helpers (getFaceNormal, getVertexPosition, ...)
+
+// =============================================================================
+// basemesh.mesh — Base-mesh mesh shader
+//
+// Renders the original (un-resurfaced) half-edge mesh as flat-shaded triangles.
+// Dispatched one workgroup per face; each workgroup reads that face's vertices
+// from the half-edge SSBOs, optionally applies bone skinning, and emits a
+// triangle fan (N-gons up to an octagon) directly to the rasterizer. Used for
+// the wireframe/solid base-mesh overlay and as the geometry feeding
+// basemesh.frag.
+// =============================================================================
+
+// *** Michael Salton ***
 
 // One workgroup per face (no task shader)
-layout(local_size_x = 1) in;
+layout(local_size_x = 1) in;                   // Each mesh-shader workgroup is a single invocation; the draw dispatches one workgroup per face
 
 // Max 8 verts per face (quads=4, support up to octagon), fan yields max 6 tris
-layout(max_vertices = 8, max_primitives = 6, triangles) out;
+layout(max_vertices = 8, max_primitives = 6, triangles) out; // Declare the max output: up to 8 vertices, 6 triangles per workgroup, primitive type = triangles
 
 // Per-vertex output: face normal for flat shading
-layout(location = 0) out vec3 outNormal[];
-layout(location = 1) out vec2 outUV[];
-layout(location = 3) out vec3 outWorldPos[];
+layout(location = 0) out vec3 outNormal[];     // Per-vertex output array: world-space normal (flat face normal) sent to the fragment shader
+layout(location = 1) out vec2 outUV[];         // Per-vertex output array: texture coordinates
+layout(location = 3) out vec3 outWorldPos[];   // Per-vertex output array: world-space position (for lighting in the fragment shader)
 
 // Per-primitive output: face ID for debug coloring
-layout(location = 2) perprimitiveEXT out flat uint outFaceId[];
+layout(location = 2) perprimitiveEXT out flat uint outFaceId[]; // Per-primitive (one value per triangle) flat output: the source face index, used for debug coloring
 
-layout(push_constant) uniform PushConstants {
-    mat4 model;
-    uint nbFaces;
-    uint nbVertices;
-    uint elementType;
-    float userScaling;
-    float torusMajorR;
-    float torusMinorR;
-    float sphereRadius;
-    uint resolutionM;
-    uint resolutionN;
-    uint debugMode;
-    uint enableCulling;
-    float cullingThreshold;
-    uint enableLod;
-    float lodFactor;
-    uint chainmailMode;
-    float chainmailTiltAngle;
-} push;
+layout(push_constant) uniform PushConstants {  // Push constant block: small per-draw data set on the command buffer (no descriptor needed)
+    mat4 model;                                // Model (object→world) transform matrix
+    uint nbFaces;                              // Total number of faces in the mesh (bounds check)
+    uint nbVertices;                           // Total number of vertices in the mesh
+    uint elementType;                          // Resurfacing element type (unused here; shared struct with other pipelines)
+    float userScaling;                         // Global scale multiplier (unused here)
+    float torusMajorR;                         // Torus major radius (unused here)
+    float torusMinorR;                         // Torus minor radius (unused here)
+    float sphereRadius;                        // Sphere radius (unused here)
+    uint resolutionM;                          // U-direction tessellation resolution (unused here)
+    uint resolutionN;                          // V-direction tessellation resolution (unused here)
+    uint debugMode;                            // Debug visualization mode selector (unused here)
+    uint enableCulling;                        // Culling enable bitmask (unused here)
+    float cullingThreshold;                    // Backface culling dot-product threshold (unused here)
+    uint enableLod;                            // LOD enable flag (unused here)
+    float lodFactor;                           // LOD scaling factor (unused here)
+    uint chainmailMode;                        // Chainmail placement mode flag (unused here)
+    float chainmailTiltAngle;                  // Chainmail tilt angle (unused here)
+} push;                                        // Instance name of the push-constant block
 
-layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
-    mat4 view;
-    mat4 projection;
-    vec4 cameraPosition;
-    float nearPlane;
-    float farPlane;
-} viewUBO;
+layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock { // Scene-set UBO (set 0, binding 0): camera/view data, updated per frame
+    mat4 view;                                 // World→view (camera) matrix
+    mat4 projection;                           // View→clip (projection) matrix
+    vec4 cameraPosition;                       // Camera world-space position (w unused)
+    float nearPlane;                           // Camera near clip plane distance
+    float farPlane;                            // Camera far clip plane distance
+} viewUBO;                                     // Instance name of the view UBO
 
-void main() {
-    uint faceId = gl_WorkGroupID.x;
+void main() {                                  // Mesh shader entry point (runs once per workgroup = once per face)
+    uint faceId = gl_WorkGroupID.x;            // This workgroup's X index identifies which face it processes
 
-    if (faceId >= push.nbFaces) {
-        SetMeshOutputsEXT(0, 0);
-        return;
+    if (faceId >= push.nbFaces) {              // Guard: if more workgroups were dispatched than faces exist...
+        SetMeshOutputsEXT(0, 0);               // ...emit zero vertices and zero primitives (produce nothing)
+        return;                                // ...and exit early
     }
 
-    int vertCount = getFaceVertCount(faceId);
-    int offset = getFaceOffset(faceId);
+    int vertCount = getFaceVertCount(faceId);  // Look up how many vertices this face has (3=tri, 4=quad, up to 8)
+    int offset = getFaceOffset(faceId);        // Look up this face's start index into the flattened faceVertexIndices buffer
 
-    uint numVerts = uint(vertCount);
-    uint numPrims = numVerts - 2;  // fan triangulation
+    uint numVerts = uint(vertCount);           // Cast vertex count to unsigned for use as a loop bound / output count
+    uint numPrims = numVerts - 2;  // fan triangulation // A polygon fan of N verts yields N-2 triangles
 
-    SetMeshOutputsEXT(numVerts, numPrims);
+    SetMeshOutputsEXT(numVerts, numPrims);     // Declare the actual number of vertices and primitives this workgroup will emit
 
-    mat4 mvp = viewUBO.projection * viewUBO.view * push.model;
-    vec3 faceNorm = getFaceNormal(faceId);
+    mat4 mvp = viewUBO.projection * viewUBO.view * push.model; // Combined model-view-projection matrix to take object space → clip space
+    vec3 faceNorm = getFaceNormal(faceId);     // Fetch this face's flat normal (used for all its vertices = flat shading)
 
     // Emit vertices
-    for (uint i = 0; i < numVerts; i++) {
-        int vertId = getVertexFaceIndex(int(offset) + int(i));
-        vec3 pos = getVertexPosition(uint(vertId));
-        vec3 norm = faceNorm;
+    for (uint i = 0; i < numVerts; i++) {      // Loop over each vertex of the face
+        int vertId = getVertexFaceIndex(int(offset) + int(i)); // Resolve the global vertex index for this face's i-th corner
+        vec3 pos = getVertexPosition(uint(vertId)); // Fetch that vertex's object-space position
+        vec3 norm = faceNorm;                  // Start with the flat face normal (may be overwritten by skinning below)
 
         // Bone skinning
-        if (resurfacingUBO.doSkinning != 0u) {
-            vec4 j = jointIndices[uint(vertId)];
-            vec4 w = jointWeights[uint(vertId)];
-            float wSum = w.x + w.y + w.z + w.w;
-            if (wSum > 0.001) {
-                mat4 skinMat = w.x * boneMatrices[int(j.x)] + w.y * boneMatrices[int(j.y)]
-                             + w.z * boneMatrices[int(j.z)] + w.w * boneMatrices[int(j.w)];
-                pos = (skinMat * vec4(pos, 1.0)).xyz;
-                norm = normalize((skinMat * vec4(norm, 0.0)).xyz);
+        if (resurfacingUBO.doSkinning != 0u) { // If skeletal animation/skinning is enabled for this object...
+            vec4 j = jointIndices[uint(vertId)]; // ...fetch the 4 bone indices influencing this vertex
+            vec4 w = jointWeights[uint(vertId)]; // ...fetch the 4 corresponding bone weights
+            float wSum = w.x + w.y + w.z + w.w; // Sum the weights to check if this vertex is actually bound to bones
+            if (wSum > 0.001) {                // Only skin if the weights are meaningful (avoid zero-weight vertices)
+                mat4 skinMat = w.x * boneMatrices[int(j.x)] + w.y * boneMatrices[int(j.y)] // Linear-blend skinning: weighted sum of the
+                             + w.z * boneMatrices[int(j.z)] + w.w * boneMatrices[int(j.w)]; // four influencing bone transforms
+                pos = (skinMat * vec4(pos, 1.0)).xyz; // Transform the position by the blended skin matrix
+                norm = normalize((skinMat * vec4(norm, 0.0)).xyz); // Transform and re-normalize the normal (w=0 → direction only)
             }
         }
 
-        vec3 worldP = (push.model * vec4(pos, 1.0)).xyz;
-        vec3 worldN = normalize(mat3(push.model) * norm);
-        gl_MeshVerticesEXT[i].gl_Position = mvp * vec4(pos, 1.0);
-        outNormal[i] = worldN;
-        outUV[i] = getVertexTexCoord(uint(vertId));
-        outWorldPos[i] = worldP;
+        vec3 worldP = (push.model * vec4(pos, 1.0)).xyz; // Transform (possibly skinned) position into world space
+        vec3 worldN = normalize(mat3(push.model) * norm); // Transform normal by the model's rotation/scale part and normalize
+        gl_MeshVerticesEXT[i].gl_Position = mvp * vec4(pos, 1.0); // Write the clip-space position for the i-th output vertex
+        outNormal[i] = worldN;                 // Pass world-space normal to the fragment shader
+        outUV[i] = getVertexTexCoord(uint(vertId)); // Pass this vertex's texture coordinates
+        outWorldPos[i] = worldP;               // Pass world-space position (for per-pixel lighting)
     }
 
     // Fan triangulation from vertex 0
-    for (uint i = 0; i < numPrims; i++) {
-        gl_PrimitiveTriangleIndicesEXT[i] = uvec3(0, i + 1, i + 2);
-        outFaceId[i] = faceId;
+    for (uint i = 0; i < numPrims; i++) {      // Loop over each output triangle
+        gl_PrimitiveTriangleIndicesEXT[i] = uvec3(0, i + 1, i + 2); // Build a triangle fan: every tri shares vertex 0 with two consecutive verts
+        outFaceId[i] = faceId;                 // Tag this primitive with its source face ID (for debug coloring)
     }
-}
+}                                              // End of main()
+
+// *** ************ ***

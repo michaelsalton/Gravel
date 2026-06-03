@@ -1,109 +1,124 @@
-#version 460
-#extension GL_EXT_mesh_shader : require
-#extension GL_GOOGLE_include_directive : require
-#extension GL_KHR_shader_subgroup_basic : enable
-#extension GL_KHR_shader_subgroup_vote : enable
-#extension GL_KHR_shader_subgroup_arithmetic : enable
+#version 460                                    // Use GLSL version 4.60 (needed for the subgroup extensions)
+#extension GL_EXT_mesh_shader : require          // Enable the mesh shader stage (gl_MeshVerticesEXT, taskPayloadSharedEXT, ...)
+#extension GL_GOOGLE_include_directive : require // Enable #include directive
+#extension GL_KHR_shader_subgroup_basic : enable // subgroupElect
+#extension GL_KHR_shader_subgroup_vote : enable  // subgroupAll
+#extension GL_KHR_shader_subgroup_arithmetic : enable // subgroup arithmetic (parity with cage shader)
 
-#include "pebble.glsl"
-#include "noise.glsl"
+#include "pebble.glsl"                           // Task payload, face-data helpers, pebble constants
+#include "noise.glsl"                            // rand()/_seed and perlinNoise3D for surface detail
+
+// =============================================================================
+// pebble.mesh — Pebble surface mesh shader
+//
+// Second stage of the pebble pipeline. Each workgroup builds one patch (or
+// sub-patch) of a pebble: it reconstructs the 4x4 cubic B-spline control cage
+// for the relevant face edge and ring, extrudes it to give the pebble its
+// rounded dome shape, evaluates the B-spline surface over a tessellated grid
+// (with optional Perlin surface noise and bone skinning), and emits the
+// resulting triangles. Three code paths: N=0 flat prism extrusion, ring 0-2
+// edge B-spline patches, and ring >2 inner-fill vertex patches. Outputs feed
+// pebble.frag.
+// =============================================================================
+
+// *** Michael Salton ***
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-#define MESH_MAX_VERTICES 81     // (2^3 + 1)^2
-#define MESH_MAX_PRIMITIVES 128  // 2 * (4^3)
+#define MESH_MAX_VERTICES 81     // (2^3 + 1)^2   // Max vertices a tile can emit (9x9 grid at 3 subdivisions)
+#define MESH_MAX_PRIMITIVES 128  // 2 * (4^3)     // Max triangles a tile can emit
 
-layout(local_size_x = 32) in;
-layout(max_vertices = MESH_MAX_VERTICES, max_primitives = MESH_MAX_PRIMITIVES, triangles) out;
+layout(local_size_x = 32) in;                    // 32 threads per workgroup, cooperating on one patch
+layout(max_vertices = MESH_MAX_VERTICES, max_primitives = MESH_MAX_PRIMITIVES, triangles) out; // Output limits, triangle output
 
 // ============================================================================
 // Uniforms
 // ============================================================================
 
-layout(push_constant) uniform PushConstants {
-    mat4 model;
-    uint nbFaces;
-    uint nbVertices;
-    uint elementType;
-    float userScaling;
-    float torusMajorR;
-    float torusMinorR;
-    float sphereRadius;
-    uint resolutionM;
-    uint resolutionN;
-    uint debugMode;
-    uint enableCulling;
-    float cullingThreshold;
-    uint enableLod;
-    float lodFactor;
-    uint chainmailMode;
-    float chainmailTiltAngle;
-} pc;
+layout(push_constant) uniform PushConstants {    // Per-draw constants (shared layout)
+    mat4 model;                                  // Object→world transform
+    uint nbFaces;                                // Face count (unused here)
+    uint nbVertices;                             // Vertex count (unused here)
+    uint elementType;                            // Element type (unused here)
+    float userScaling;                           // Global scale (unused here)
+    float torusMajorR;                           // (unused here)
+    float torusMinorR;                           // (unused here)
+    float sphereRadius;                          // (unused here)
+    uint resolutionM;                            // (unused here)
+    uint resolutionN;                            // (unused here)
+    uint debugMode;                              // (unused here)
+    uint enableCulling;                          // (unused here)
+    float cullingThreshold;                      // (unused here)
+    uint enableLod;                              // (unused here)
+    float lodFactor;                             // (unused here)
+    uint chainmailMode;                          // (unused here)
+    float chainmailTiltAngle;                    // (unused here)
+} pc;                                            // Instance name of the push-constant block
 
-layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
-    mat4 view;
-    mat4 projection;
-    vec4 cameraPosition;
-    float nearPlane;
-    float farPlane;
-} viewUBO;
+layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock { // Scene-set UBO (set 0, binding 0): camera data
+    mat4 view;                                   // World→view matrix
+    mat4 projection;                             // View→clip matrix
+    vec4 cameraPosition;                         // Camera world position (unused here)
+    float nearPlane;                             // Near clip distance
+    float farPlane;                              // Far clip distance
+} viewUBO;                                       // Instance name of the view UBO
 
 // ============================================================================
 // Task Payload & Shared Memory
 // ============================================================================
 
-taskPayloadSharedEXT Task IN;
+taskPayloadSharedEXT Task IN;                    // Payload from the pebble task shader
 
-shared vec3 sharedVertices[16];  // 4x4 B-spline control cage
-shared vec3 sharedNormals[16];   // normals at control points
+shared vec3 sharedVertices[16];  // 4x4 B-spline control cage // Shared scratch: the 16 cage control points
+shared vec3 sharedNormals[16];   // normals at control points  // Shared scratch: normals at those control points
 
 // ============================================================================
 // Per-Vertex / Per-Primitive Outputs
 // ============================================================================
 
-layout(location = 0) out vec4 outWorldPosU[];
-layout(location = 1) out vec4 outNormalV[];
-layout(location = 2) perprimitiveEXT out flat uvec4 outPrimData[];
+layout(location = 0) out vec4 outWorldPosU[];    // Per-vertex: world position (xyz) + U coordinate (w)
+layout(location = 1) out vec4 outNormalV[];      // Per-vertex: world normal (xyz) + V coordinate (w)
+layout(location = 2) perprimitiveEXT out flat uvec4 outPrimData[]; // Per-triangle: x = base face ID (rest unused)
 
 // ============================================================================
 // Bilinear Interpolation
 // ============================================================================
 
-vec3 bilerp(vec2 uv, vec3 a, vec3 b, vec3 c, vec3 d) {
-    vec3 ab = mix(a, b, uv.x);
-    vec3 cd = mix(c, d, uv.x);
-    return mix(ab, cd, uv.y);
+vec3 bilerp(vec2 uv, vec3 a, vec3 b, vec3 c, vec3 d) { // Bilinear blend of 4 corner values
+    vec3 ab = mix(a, b, uv.x);                   // Interpolate top edge along U
+    vec3 cd = mix(c, d, uv.x);                   // Interpolate bottom edge along U
+    return mix(ab, cd, uv.y);                    // Interpolate between the two along V
 }
 
 // ============================================================================
 // B-Spline Evaluation
 // ============================================================================
 
-const mat4 BSPLINE_MATRIX_4 = mat4(
+const mat4 BSPLINE_MATRIX_4 = mat4(              // Uniform cubic B-spline basis matrix (columns = basis coefficients)
     vec4( 1/6.,  4/6.,  1/6., 0.),
     vec4(-3/6.,  0.,    3/6., 0.),
     vec4( 3/6., -6/6.,  3/6., 0.),
     vec4(-1/6.,  3/6., -3/6., 1/6.)
 );
 
-vec4 computeBSplinePoint(float t, vec4 P0, vec4 P1, vec4 P2, vec4 P3) {
-    vec4 basis = BSPLINE_MATRIX_4 * vec4(1.0, t, t * t, t * t * t);
-    return basis.x * P0 + basis.y * P1 + basis.z * P2 + basis.w * P3;
+vec4 computeBSplinePoint(float t, vec4 P0, vec4 P1, vec4 P2, vec4 P3) { // Evaluate a cubic B-spline curve at t
+    vec4 basis = BSPLINE_MATRIX_4 * vec4(1.0, t, t * t, t * t * t); // Basis weights for the 4 control points
+    return basis.x * P0 + basis.y * P1 + basis.z * P2 + basis.w * P3; // Weighted sum
 }
 
-vec4 computeBSplinePoint(float t, uint rowOffset) {
+vec4 computeBSplinePoint(float t, uint rowOffset) { // Evaluate one cage row (4 control points) at t
     return computeBSplinePoint(t,
-        vec4(sharedVertices[rowOffset * 4 + 0], 1.0),
-        vec4(sharedVertices[rowOffset * 4 + 1], 1.0),
-        vec4(sharedVertices[rowOffset * 4 + 2], 1.0),
-        vec4(sharedVertices[rowOffset * 4 + 3], 1.0));
+        vec4(sharedVertices[rowOffset * 4 + 0], 1.0), // Row control point 0
+        vec4(sharedVertices[rowOffset * 4 + 1], 1.0), // 1
+        vec4(sharedVertices[rowOffset * 4 + 2], 1.0), // 2
+        vec4(sharedVertices[rowOffset * 4 + 3], 1.0)); // 3
 }
 
-vec3 computeBSplineSurfPoint(vec2 uv) {
-    return computeBSplinePoint(uv.y,
-        computeBSplinePoint(uv.x, 0),
+vec3 computeBSplineSurfPoint(vec2 uv) {          // Evaluate the full B-spline surface (tensor product) at uv
+    return computeBSplinePoint(uv.y,             // Interpolate across rows in V...
+        computeBSplinePoint(uv.x, 0),            // ...of each row's U evaluation
         computeBSplinePoint(uv.x, 1),
         computeBSplinePoint(uv.x, 2),
         computeBSplinePoint(uv.x, 3)).xyz;
@@ -113,17 +128,17 @@ vec3 computeBSplineSurfPoint(vec2 uv) {
 // Index to UV Mapping (with hierarchical sub-patch support)
 // ============================================================================
 
-vec2 indexToUV(uint index, uint trueSubdivisionLevel, uint gridSize, uint subPatchIndex) {
-    uint x = index % gridSize;
-    uint y = index / gridSize;
-    vec2 uv = vec2(float(x) / float(gridSize - 1), float(y) / float(gridSize - 1));
+vec2 indexToUV(uint index, uint trueSubdivisionLevel, uint gridSize, uint subPatchIndex) { // Map a flat vertex index → patch UV
+    uint x = index % gridSize;                   // Grid column
+    uint y = index / gridSize;                   // Grid row
+    vec2 uv = vec2(float(x) / float(gridSize - 1), float(y) / float(gridSize - 1)); // Normalize to [0,1] within the tile
 
-    if (trueSubdivisionLevel > 3) {
-        uint groupSize = uint(pow(2, trueSubdivisionLevel - 3));
-        float scale = 1.0 / float(groupSize);
-        uint groupPosX = subPatchIndex % groupSize;
-        uint groupPosY = subPatchIndex / groupSize;
-        uv = scale * uv + vec2(scale * float(groupPosX), scale * float(groupPosY));
+    if (trueSubdivisionLevel > 3) {              // High subdivision: this tile is a sub-patch of the full patch
+        uint groupSize = uint(pow(2, trueSubdivisionLevel - 3)); // Sub-patches per side
+        float scale = 1.0 / float(groupSize);    // Size of each sub-patch in UV
+        uint groupPosX = subPatchIndex % groupSize; // Sub-patch column
+        uint groupPosY = subPatchIndex / groupSize; // Sub-patch row
+        uv = scale * uv + vec2(scale * float(groupPosX), scale * float(groupPosY)); // Offset/scale into the sub-patch region
     }
     return uv;
 }
@@ -134,21 +149,21 @@ vec2 indexToUV(uint index, uint trueSubdivisionLevel, uint gridSize, uint subPat
 
 // Adjust vertex control point so the B-spline curve passes through the actual
 // face vertex position, compensating for uniform cubic B-spline contraction.
-vec3 adjustedVertexPos(uint id) {
-    vec3 V     = getVertexPosShared(id);
-    vec3 Vprev = getVertexPosShared((id - 1u + vertCount) % vertCount);
-    vec3 Vnext = getVertexPosShared((id + 1u) % vertCount);
-    return (5.0 * V - (Vprev + Vnext) / 2.0) / 4.0;
+vec3 adjustedVertexPos(uint id) {                // Pre-warp a control point so the spline interpolates the real vertex
+    vec3 V     = getVertexPosShared(id);         // The actual vertex
+    vec3 Vprev = getVertexPosShared((id - 1u + vertCount) % vertCount); // Previous vertex (wrap)
+    vec3 Vnext = getVertexPosShared((id + 1u) % vertCount); // Next vertex (wrap)
+    return (5.0 * V - (Vprev + Vnext) / 2.0) / 4.0; // Inverse of the B-spline averaging at this knot
 }
 
 // ============================================================================
 // Normal Computation (cross-product method)
 // ============================================================================
 
-void computeNormal(uint lid) {
-    vec3 tangentU, tangentV;
+void computeNormal(uint lid) {                   // Compute a control-point normal from neighbor tangents (interior points 5,6,9,10)
+    vec3 tangentU, tangentV;                     // U/V tangents at this control point
 
-    if (lid == 5) {
+    if (lid == 5) {                              // Each interior control point uses its left/right and up/down neighbors
         tangentU = sharedVertices[6] - sharedVertices[4];
         tangentV = sharedVertices[9] - sharedVertices[1];
     } else if (lid == 6) {
@@ -162,48 +177,48 @@ void computeNormal(uint lid) {
         tangentV = sharedVertices[14] - sharedVertices[6];
     }
 
-    sharedNormals[lid] = -normalize(cross(tangentU, tangentV));
+    sharedNormals[lid] = -normalize(cross(tangentU, tangentV)); // Normal = normalized cross of tangents (negated for outward facing)
 }
 
 // ============================================================================
 // Vertex Emission
 // ============================================================================
 
-void emitVertex(vec3 pos, vec3 normal, vec2 uv, uint vertexIndex) {
-    vec3 center = getFaceCenter(IN.baseID);
-    vec3 desiredPos = (pos - center) * IN.scale + center;
-    vec3 desiredNormal = normal;
+void emitVertex(vec3 pos, vec3 normal, vec2 uv, uint vertexIndex) { // Apply scale/noise/skinning, then emit one vertex
+    vec3 center = getFaceCenter(IN.baseID);      // Pebble's base face center
+    vec3 desiredPos = (pos - center) * IN.scale + center; // Apply the pathway coverage scale about the center
+    vec3 desiredNormal = normal;                 // Start from the input normal
 
-    if (pebbleUbo.doNoise != 0) {
-        PerlinNoise3D noise = perlinNoise3D(pos * pebbleUbo.noiseFrequency);
-        desiredPos += noise.value * desiredNormal * pebbleUbo.noiseAmplitude * IN.scale;
-        desiredNormal += noise.gradient * pebbleUbo.normalOffset;
-        desiredNormal = normalize(desiredNormal);
+    if (pebbleUbo.doNoise != 0) {                // Optional Perlin surface detail
+        PerlinNoise3D noise = perlinNoise3D(pos * pebbleUbo.noiseFrequency); // Sample noise + gradient at this position
+        desiredPos += noise.value * desiredNormal * pebbleUbo.noiseAmplitude * IN.scale; // Displace along the normal
+        desiredNormal += noise.gradient * pebbleUbo.normalOffset; // Perturb the normal by the noise gradient
+        desiredNormal = normalize(desiredNormal); // Renormalize
     }
 
     // Bone skinning: transform from bind pose to current pose
-    if (pebbleUbo.doSkinning != 0u) {
-        desiredPos = (IN.skinMatrix * vec4(desiredPos, 1.0)).xyz;
-        desiredNormal = normalize((IN.skinMatrix * vec4(desiredNormal, 0.0)).xyz);
+    if (pebbleUbo.doSkinning != 0u) {            // If skinning is active...
+        desiredPos = (IN.skinMatrix * vec4(desiredPos, 1.0)).xyz; // Skin the position
+        desiredNormal = normalize((IN.skinMatrix * vec4(desiredNormal, 0.0)).xyz); // Skin and renormalize the normal
     }
 
-    outWorldPosU[vertexIndex] = vec4(desiredPos, uv.x);
-    outNormalV[vertexIndex] = vec4(desiredNormal, uv.y);
+    outWorldPosU[vertexIndex] = vec4(desiredPos, uv.x); // Output world pos + U
+    outNormalV[vertexIndex] = vec4(desiredNormal, uv.y); // Output world normal + V
 
-    mat4 MVP = viewUBO.projection * viewUBO.view * pc.model;
-    gl_MeshVerticesEXT[vertexIndex].gl_Position = MVP * vec4(desiredPos, 1.0);
+    mat4 MVP = viewUBO.projection * viewUBO.view * pc.model; // Object→clip transform
+    gl_MeshVerticesEXT[vertexIndex].gl_Position = MVP * vec4(desiredPos, 1.0); // Clip-space position for the rasterizer
 }
 
 // ============================================================================
 // Quad Emission (2 triangles per quad)
 // ============================================================================
 
-void emitSingleQuad(uint q, uvec4 indices) {
-    uint index = 2 * q;
-    gl_PrimitiveTriangleIndicesEXT[index + 0] = uvec3(indices.x, indices.y, indices.z);
-    gl_PrimitiveTriangleIndicesEXT[index + 1] = uvec3(indices.x, indices.z, indices.w);
+void emitSingleQuad(uint q, uvec4 indices) {     // Emit a quad as two triangles
+    uint index = 2 * q;                          // First triangle slot for this quad
+    gl_PrimitiveTriangleIndicesEXT[index + 0] = uvec3(indices.x, indices.y, indices.z); // Triangle 1
+    gl_PrimitiveTriangleIndicesEXT[index + 1] = uvec3(indices.x, indices.z, indices.w); // Triangle 2
 
-    outPrimData[index + 0] = uvec4(IN.baseID, 0, 0, 0);
+    outPrimData[index + 0] = uvec4(IN.baseID, 0, 0, 0); // Tag both triangles with the base face ID
     outPrimData[index + 1] = uvec4(IN.baseID, 0, 0, 0);
 }
 
@@ -211,308 +226,310 @@ void emitSingleQuad(uint q, uvec4 indices) {
 // Main
 // ============================================================================
 
-void main() {
-    uint lid = gl_LocalInvocationID.x;
-    uint groupId = gl_WorkGroupID.x;
-    uint N = IN.targetSubdivLevel;
-    uint baseID = IN.baseID;
+void main() {                                    // Mesh shader entry (one workgroup builds one patch)
+    uint lid = gl_LocalInvocationID.x;           // Thread index within the workgroup
+    uint groupId = gl_WorkGroupID.x;             // Workgroup index (which patch/sub-patch)
+    uint N = IN.targetSubdivLevel;               // Subdivision level for this pebble
+    uint baseID = IN.baseID;                     // Base-mesh face
 
-    fetchFaceData(baseID);
+    fetchFaceData(baseID);                       // Cooperatively load the face's vertex data into shared memory
 
-    vec3 center = getFaceCenter(baseID);
-    vec3 faceNormal = getFaceNormal(baseID);
+    vec3 center = getFaceCenter(baseID);         // Face center
+    vec3 faceNormal = getFaceNormal(baseID);     // Face normal (extrusion direction)
 
     // ==================== N=0: Simple Extrusion ====================
 
-    if (subgroupAll(N == 0)) {
-        float extrusionAmount = pebbleUbo.extrusionAmount;
+    if (subgroupAll(N == 0)) {                   // No subdivision: extrude the face into a flat prism
+        float extrusionAmount = pebbleUbo.extrusionAmount; // Fixed extrusion height
 
-        SetMeshOutputsEXT(vertCount * 2, vertCount * 2 + vertCount - 2);
+        SetMeshOutputsEXT(vertCount * 2, vertCount * 2 + vertCount - 2); // Verts: base+top; prims: side quads + top fan
 
-        for (uint i = 0; i < vertCount; i++) {
-            vec3 originalPosition = getVertexPosShared(i);
-            vec3 extrudedPosition = originalPosition + extrusionAmount * faceNormal;
-            vec3 normal = normalize(originalPosition - center);
-            emitVertex(originalPosition, normal, vec2(0), i);
-            emitVertex(extrudedPosition, faceNormal, vec2(0), vertCount + i);
+        for (uint i = 0; i < vertCount; i++) {   // Emit base and extruded-top vertices for each face corner
+            vec3 originalPosition = getVertexPosShared(i); // Base corner
+            vec3 extrudedPosition = originalPosition + extrusionAmount * faceNormal; // Lifted top corner
+            vec3 normal = normalize(originalPosition - center); // Outward side normal for the base ring
+            emitVertex(originalPosition, normal, vec2(0), i); // Base vertex
+            emitVertex(extrudedPosition, faceNormal, vec2(0), vertCount + i); // Top vertex
         }
 
         // Side faces
-        for (uint i = 0; i < vertCount; i++) {
-            uint i_right = (i + 1) % vertCount;
-            emitSingleQuad(i, uvec4(i, i + vertCount, i_right + vertCount, i_right));
+        for (uint i = 0; i < vertCount; i++) {   // Build the side walls as quads
+            uint i_right = (i + 1) % vertCount;  // Next corner (wrap)
+            emitSingleQuad(i, uvec4(i, i + vertCount, i_right + vertCount, i_right)); // Side quad between two corners
         }
 
         // Top face (triangle fan)
-        uint primOffset = vertCount * 2;
-        for (uint i = 0; i < vertCount - 2; i++) {
+        uint primOffset = vertCount * 2;         // Triangle slots after the side quads
+        for (uint i = 0; i < vertCount - 2; i++) {// Fan-triangulate the top cap
             gl_PrimitiveTriangleIndicesEXT[primOffset + i] =
-                uvec3(vertCount, vertCount + i + 1, vertCount + i + 2);
-            outPrimData[primOffset + i] = uvec4(IN.baseID, 0, 0, 0);
+                uvec3(vertCount, vertCount + i + 1, vertCount + i + 2); // Fan from the first top vertex
+            outPrimData[primOffset + i] = uvec4(IN.baseID, 0, 0, 0); // Tag with face ID
         }
 
-        return;
+        return;                                  // Done with the flat-extrusion path
     }
 
     // ==================== N>0: Ring-Based B-Spline Patches ====================
 
-    N -= 1;
-    uint subPatchCount = 1;
-    uint subPatchCountLine = 1;
-    if (N > MAX_SUBDIV_PER_WORKGROUP)
-        subPatchCount = uint(pow(4, N - MAX_SUBDIV_PER_WORKGROUP));
-    subPatchCountLine = uint(pow(2, N - MAX_SUBDIV_PER_WORKGROUP));
+    N -= 1;                                      // Shift to 0-based subdivision count
+    uint subPatchCount = 1;                      // Sub-patches per patch (for high subdivision)
+    uint subPatchCountLine = 1;                  // Sub-patches per edge (for T-junction stitching)
+    if (N > MAX_SUBDIV_PER_WORKGROUP)            // Beyond one workgroup's capacity...
+        subPatchCount = uint(pow(4, N - MAX_SUBDIV_PER_WORKGROUP)); // ...split into 4^extra sub-patches
+    subPatchCountLine = uint(pow(2, N - MAX_SUBDIV_PER_WORKGROUP)); // ...2^extra along each edge
 
-    uint patchID = groupId / subPatchCount;
-    uint ringID = patchID / (vertCount * 2);
+    uint patchID = groupId / subPatchCount;      // Which logical patch this workgroup belongs to
+    uint ringID = patchID / (vertCount * 2);     // Which ring (0,1,2 edge rings; >2 inner fill)
 
     // ==================== Edge Patches (ringID 0-2) ====================
 
-    if (subgroupAll(ringID <= 2)) {
-        uint subPatchIndex = groupId % subPatchCount;
-        uint edgeID = (patchID / 2) % vertCount;
+    if (subgroupAll(ringID <= 2)) {              // Edge-ring patches build the pebble's domed shell
+        uint subPatchIndex = groupId % subPatchCount; // Sub-patch within the patch
+        uint edgeID = (patchID / 2) % vertCount; // Which face edge
 
         // --- Load base vertices into row 3 (indices 12-15) ---
-        if (subgroupElect()) {
-            if ((patchID % 2) == 0) {
-                uint nextFaceID = (edgeID + 1) % vertCount;
-                uint prevFaceID = (edgeID - 1 + vertCount) % vertCount;
+        if (subgroupElect()) {                   // One thread fills the base control row
+            if ((patchID % 2) == 0) {            // Even patch: centered on a vertex
+                uint nextFaceID = (edgeID + 1) % vertCount; // Next vertex
+                uint prevFaceID = (edgeID - 1 + vertCount) % vertCount; // Previous vertex
                 // Midpoints from original positions
-                sharedVertices[12] = (getVertexPosShared(prevFaceID) + getVertexPosShared(edgeID)) / 2.0;
-                sharedVertices[14] = (getVertexPosShared(edgeID) + getVertexPosShared(nextFaceID)) / 2.0;
+                sharedVertices[12] = (getVertexPosShared(prevFaceID) + getVertexPosShared(edgeID)) / 2.0; // Midpoint toward prev
+                sharedVertices[14] = (getVertexPosShared(edgeID) + getVertexPosShared(nextFaceID)) / 2.0; // Midpoint toward next
                 // Adjusted vertex positions for B-spline interpolation
-                sharedVertices[13] = adjustedVertexPos(edgeID);
-                sharedVertices[15] = adjustedVertexPos(nextFaceID);
-            } else {
-                uint nextFaceID = (edgeID + 1) % vertCount;
-                uint nextFaceID2 = (edgeID + 2 + vertCount) % vertCount;
+                sharedVertices[13] = adjustedVertexPos(edgeID);     // Interpolation-corrected vertex
+                sharedVertices[15] = adjustedVertexPos(nextFaceID); // Interpolation-corrected next vertex
+            } else {                             // Odd patch: spans an edge
+                uint nextFaceID = (edgeID + 1) % vertCount; // Next vertex
+                uint nextFaceID2 = (edgeID + 2 + vertCount) % vertCount; // Vertex after next
                 // Midpoints from original positions
-                sharedVertices[13] = (getVertexPosShared(edgeID) + getVertexPosShared(nextFaceID)) / 2.0;
-                sharedVertices[15] = (getVertexPosShared(nextFaceID2) + getVertexPosShared(nextFaceID)) / 2.0;
+                sharedVertices[13] = (getVertexPosShared(edgeID) + getVertexPosShared(nextFaceID)) / 2.0; // Edge midpoint
+                sharedVertices[15] = (getVertexPosShared(nextFaceID2) + getVertexPosShared(nextFaceID)) / 2.0; // Next-edge midpoint
                 // Adjusted vertex positions for B-spline interpolation
-                sharedVertices[12] = adjustedVertexPos(edgeID);
-                sharedVertices[14] = adjustedVertexPos(nextFaceID);
+                sharedVertices[12] = adjustedVertexPos(edgeID);     // Corrected vertex
+                sharedVertices[14] = adjustedVertexPos(nextFaceID); // Corrected next vertex
             }
         }
-        barrier();
+        barrier();                               // Wait until the base control row is ready
 
         // --- Extrude control cage based on ring ---
-        _seed = IN.baseID;
-        float minLevel = pebbleUbo.extrusionAmount * (1.0 - pebbleUbo.extrusionVariation);
-        float maxLevel = pebbleUbo.extrusionAmount * (1.0 + pebbleUbo.extrusionVariation);
-        float randomizedExtrusion = rand(minLevel, maxLevel);
+        _seed = IN.baseID;                       // Seed RNG per pebble (stable extrusion)
+        float minLevel = pebbleUbo.extrusionAmount * (1.0 - pebbleUbo.extrusionVariation); // Min extrusion
+        float maxLevel = pebbleUbo.extrusionAmount * (1.0 + pebbleUbo.extrusionVariation); // Max extrusion
+        float randomizedExtrusion = rand(minLevel, maxLevel); // This pebble's extrusion height
 
-        float roundness = mix(0.95, 0.5, pebbleUbo.roundness);
-        float extrusionAmount = randomizedExtrusion;
+        float roundness = mix(0.95, 0.5, pebbleUbo.roundness); // Control-point pull for rounding
+        float extrusionAmount = randomizedExtrusion; // Final extrusion distance
 
-        uint offset = ringID * 4;
-        uint vertexIndex = lid % 4;
+        uint offset = ringID * 4;                // Base index for this ring's control points
+        uint vertexIndex = lid % 4;              // Which of the 4 corner control points this thread handles
 
-        if (lid < 4) {
+        if (lid < 4) {                           // Row 0: fully extruded control points
             // Row 0: fully extruded
-            sharedVertices[offset + lid] = sharedVertices[12 + vertexIndex] + extrusionAmount * faceNormal;
-            if (subgroupAll(pebbleUbo.normalCalculationMethod == 1)) {
-                sharedNormals[offset + lid] = mix(sharedVertices[12 + vertexIndex] - center, faceNormal, roundness);
+            sharedVertices[offset + lid] = sharedVertices[12 + vertexIndex] + extrusionAmount * faceNormal; // Lift by full extrusion
+            if (subgroupAll(pebbleUbo.normalCalculationMethod == 1)) { // Analytic-normal method
+                sharedNormals[offset + lid] = mix(sharedVertices[12 + vertexIndex] - center, faceNormal, roundness); // Blend radial/face normal
             }
-        } else if (lid < 8) {
-            if (subgroupAll(ringID < 2)) {
+        } else if (lid < 8) {                    // Row 1 / ring-2 inner top
+            if (subgroupAll(ringID < 2)) {       // Rings 0-1:
                 // Row 1: rounded extrusion
-                sharedVertices[offset + lid] = sharedVertices[12 + vertexIndex] + roundness * extrusionAmount * faceNormal;
+                sharedVertices[offset + lid] = sharedVertices[12 + vertexIndex] + roundness * extrusionAmount * faceNormal; // Partial lift
                 if (subgroupAll(pebbleUbo.normalCalculationMethod == 1)) {
-                    sharedNormals[offset + lid] = normalize(sharedVertices[12 + vertexIndex] - center);
+                    sharedNormals[offset + lid] = normalize(sharedVertices[12 + vertexIndex] - center); // Radial normal
                 }
-            } else if (subgroupAll(ringID == 2)) {
+            } else if (subgroupAll(ringID == 2)) {// Ring 2:
                 // Ring 2: inner fill top
-                sharedVertices[vertexIndex] = center + (2 * pebbleUbo.fillradius - 1) * (sharedVertices[12 + vertexIndex] - center) + extrusionAmount * faceNormal;
+                sharedVertices[vertexIndex] = center + (2 * pebbleUbo.fillradius - 1) * (sharedVertices[12 + vertexIndex] - center) + extrusionAmount * faceNormal; // Pull toward center + extrude
                 if (subgroupAll(pebbleUbo.normalCalculationMethod == 1)) {
-                    sharedNormals[vertexIndex] = faceNormal;
+                    sharedNormals[vertexIndex] = faceNormal; // Flat top normal
                 }
             }
-        } else if (lid < 12) {
-            if (subgroupAll(ringID == 0)) {
+        } else if (lid < 12) {                    // Row 2 fill points
+            if (subgroupAll(ringID == 0)) {      // Ring 0:
                 // Ring 0, row 2: base position
-                sharedVertices[lid] = sharedVertices[12 + vertexIndex];
+                sharedVertices[lid] = sharedVertices[12 + vertexIndex]; // Keep the base position
                 if (subgroupAll(pebbleUbo.normalCalculationMethod == 1)) {
-                    sharedNormals[lid] = normalize(sharedVertices[12 + vertexIndex] - center);
+                    sharedNormals[lid] = normalize(sharedVertices[12 + vertexIndex] - center); // Radial normal
                 }
-            } else if (subgroupAll(ringID == 1)) {
+            } else if (subgroupAll(ringID == 1)) {// Ring 1:
                 // Ring 1: fill center projection
-                sharedVertices[vertexIndex] = center + pebbleUbo.fillradius * (sharedVertices[12 + vertexIndex] - center) + extrusionAmount * faceNormal;
-            } else if (subgroupAll(ringID == 2)) {
+                sharedVertices[vertexIndex] = center + pebbleUbo.fillradius * (sharedVertices[12 + vertexIndex] - center) + extrusionAmount * faceNormal; // Project toward center + extrude
+            } else if (subgroupAll(ringID == 2)) {// Ring 2:
                 // Ring 2: fill projection
-                sharedVertices[vertexIndex + 4] = center + pebbleUbo.fillradius * (sharedVertices[12 + vertexIndex] - center) + extrusionAmount * faceNormal;
+                sharedVertices[vertexIndex + 4] = center + pebbleUbo.fillradius * (sharedVertices[12 + vertexIndex] - center) + extrusionAmount * faceNormal; // Project into the next block
                 if (subgroupAll(pebbleUbo.normalCalculationMethod == 1)) {
-                    sharedNormals[vertexIndex + 4] = faceNormal;
+                    sharedNormals[vertexIndex + 4] = faceNormal; // Flat top normal
                 }
             }
-        } else if (lid < 16) {
-            if (subgroupAll(ringID == 0)) {
+        } else if (lid < 16) {                    // Row 3 underside / top points
+            if (subgroupAll(ringID == 0)) {      // Ring 0:
                 // Ring 0, row 3: negative extrusion
-                sharedVertices[lid] = sharedVertices[12 + vertexIndex] - roundness * extrusionAmount * faceNormal;
+                sharedVertices[lid] = sharedVertices[12 + vertexIndex] - roundness * extrusionAmount * faceNormal; // Push below surface (skirt)
                 if (subgroupAll(pebbleUbo.normalCalculationMethod == 1)) {
-                    sharedNormals[offset + lid] = normalize(sharedVertices[12 + vertexIndex] - center);
+                    sharedNormals[offset + lid] = normalize(sharedVertices[12 + vertexIndex] - center); // Radial normal
                 }
-            } else if (subgroupAll(ringID == 2)) {
+            } else if (subgroupAll(ringID == 2)) {// Ring 2:
                 // Ring 2: top extrusion
-                sharedVertices[lid] = sharedVertices[12 + vertexIndex] + roundness * extrusionAmount * faceNormal;
+                sharedVertices[lid] = sharedVertices[12 + vertexIndex] + roundness * extrusionAmount * faceNormal; // Push above surface
                 if (subgroupAll(pebbleUbo.normalCalculationMethod == 1)) {
-                    sharedNormals[lid] = mix(sharedVertices[12 + vertexIndex] - center, faceNormal, roundness);
+                    sharedNormals[lid] = mix(sharedVertices[12 + vertexIndex] - center, faceNormal, roundness); // Blended normal
                 }
             }
         }
-        barrier();
+        barrier();                               // Wait until all 16 control points/normals are written
 
         // --- Cross-product normal computation ---
-        if (subgroupAll(pebbleUbo.normalCalculationMethod == 0)) {
-            if (lid == 5 || lid == 6 || lid == 9 || lid == 10) {
+        if (subgroupAll(pebbleUbo.normalCalculationMethod == 0)) { // If using the cross-product normal method...
+            if (lid == 5 || lid == 6 || lid == 9 || lid == 10) { // ...the 4 interior control points compute normals
                 computeNormal(lid);
             }
-            barrier();
+            barrier();                           // Wait until interior normals are ready
         }
 
         // ==================== B-Spline Tessellation ====================
 
-        uint resolution = uint(pow(2, min(N, 3)) + 1);
-        uint nbVerts = resolution * resolution;
-        uint gridSize = min(resolution, 9);
-        uint quadCount = gridSize - 1;
-        SetMeshOutputsEXT(min(nbVerts, MESH_MAX_VERTICES), min(quadCount * quadCount * 2, MESH_MAX_PRIMITIVES));
+        uint resolution = uint(pow(2, min(N, 3)) + 1); // Grid vertices per side (capped at this workgroup's 3 levels)
+        uint nbVerts = resolution * resolution;  // Total grid vertices
+        uint gridSize = min(resolution, 9);      // Clamp grid side to the 9x9 vertex limit
+        uint quadCount = gridSize - 1;           // Quads per side
+        SetMeshOutputsEXT(min(nbVerts, MESH_MAX_VERTICES), min(quadCount * quadCount * 2, MESH_MAX_PRIMITIVES)); // Declare outputs
 
         // --- Vertex Loop (parallel) ---
-        uint verticesPerThread = (nbVerts + 31) / 32;
-        for (uint v = 0; v < verticesPerThread; ++v) {
-            uint vi = lid * verticesPerThread + v;
-            if (vi >= nbVerts || vi >= MAX_VERTICES) continue;
+        uint verticesPerThread = (nbVerts + 31) / 32; // Vertices each of the 32 threads handles
+        for (uint v = 0; v < verticesPerThread; ++v) { // Strided over the thread's share
+            uint vi = lid * verticesPerThread + v; // Global vertex index
+            if (vi >= nbVerts || vi >= MAX_VERTICES) continue; // Skip out-of-range
 
-            vec2 uv = indexToUV(vi, N, gridSize, subPatchIndex);
+            vec2 uv = indexToUV(vi, N, gridSize, subPatchIndex); // Map index → patch UV (sub-patch aware)
 
-            vec3 vertexPosition;
-            vec3 vertexNormal;
+            vec3 vertexPosition;                 // Computed surface position
+            vec3 vertexNormal;                   // Computed surface normal
 
             // Edge stitching for subdivOffset (T-junction prevention)
-            uint span = 1 << pebbleUbo.subdivOffset;
-            uint minRequiredVertices = span + 1;
+            uint span = 1 << pebbleUbo.subdivOffset; // Stride between "kept" boundary vertices
+            uint minRequiredVertices = span + 1; // Need at least this many vertices to stitch
 
-            if (subgroupAll(ringID == 2 && subPatchIndex < subPatchCountLine)
+            if (subgroupAll(ringID == 2 && subPatchIndex < subPatchCountLine) // On the ring-2 stitching boundary...
                 && uv.y == 0.0 && resolution >= minRequiredVertices) {
-                uint localPos = vi % span;
-                if (localPos != 0) {
-                    uint prevIndex = vi - (vi % span);
-                    uint nextIndex = prevIndex + span;
+                uint localPos = vi % span;       // Position within the stitch span
+                if (localPos != 0) {             // Interior of a stitched span → linearly interpolate to avoid T-junctions
+                    uint prevIndex = vi - (vi % span); // Span start vertex
+                    uint nextIndex = prevIndex + span; // Span end vertex
                     if (nextIndex < nbVerts) {
-                        vec2 uvPrev = indexToUV(prevIndex, N, gridSize, subPatchIndex);
-                        vec2 uvNext = indexToUV(nextIndex, N, gridSize, subPatchIndex);
-                        vec3 vertexPosPrev = computeBSplineSurfPoint(uvPrev);
-                        vec3 vertexPosNext = computeBSplineSurfPoint(uvNext);
-                        vertexPosition = mix(vertexPosPrev, vertexPosNext, float(localPos) / float(span));
-                        vertexNormal = normalize(bilerp(uv, sharedNormals[5], sharedNormals[6], sharedNormals[9], sharedNormals[10]));
+                        vec2 uvPrev = indexToUV(prevIndex, N, gridSize, subPatchIndex); // UV of span start
+                        vec2 uvNext = indexToUV(nextIndex, N, gridSize, subPatchIndex); // UV of span end
+                        vec3 vertexPosPrev = computeBSplineSurfPoint(uvPrev); // Surface point at start
+                        vec3 vertexPosNext = computeBSplineSurfPoint(uvNext); // Surface point at end
+                        vertexPosition = mix(vertexPosPrev, vertexPosNext, float(localPos) / float(span)); // Lerp along the coarse edge
+                        vertexNormal = normalize(bilerp(uv, sharedNormals[5], sharedNormals[6], sharedNormals[9], sharedNormals[10])); // Interpolated normal
                     }
-                } else {
-                    vertexPosition = computeBSplineSurfPoint(uv);
-                    vertexNormal = normalize(bilerp(uv, sharedNormals[5], sharedNormals[6], sharedNormals[9], sharedNormals[10]));
+                } else {                         // Span endpoints stay on the surface
+                    vertexPosition = computeBSplineSurfPoint(uv); // Exact surface point
+                    vertexNormal = normalize(bilerp(uv, sharedNormals[5], sharedNormals[6], sharedNormals[9], sharedNormals[10])); // Interpolated normal
                 }
-            } else {
-                vertexPosition = computeBSplineSurfPoint(uv);
-                vertexNormal = normalize(bilerp(uv, sharedNormals[5], sharedNormals[6], sharedNormals[9], sharedNormals[10]));
+            } else {                             // Normal (non-stitched) vertices
+                vertexPosition = computeBSplineSurfPoint(uv); // Exact surface point
+                vertexNormal = normalize(bilerp(uv, sharedNormals[5], sharedNormals[6], sharedNormals[9], sharedNormals[10])); // Interpolated normal
             }
 
-            emitVertex(vertexPosition, vertexNormal, uv, vi);
+            emitVertex(vertexPosition, vertexNormal, uv, vi); // Emit the tessellated vertex
         }
 
         // --- Primitive Loop (parallel) ---
-        uint primitivesPerThread = (quadCount * quadCount + 31) / 32;
-        for (uint p = 0; p < primitivesPerThread; ++p) {
-            uint idx = lid * primitivesPerThread + p;
-            uint x = idx % quadCount;
-            uint y = idx / quadCount;
+        uint primitivesPerThread = (quadCount * quadCount + 31) / 32; // Quads each thread handles
+        for (uint p = 0; p < primitivesPerThread; ++p) { // Strided over the thread's share
+            uint idx = lid * primitivesPerThread + p; // Quad index
+            uint x = idx % quadCount;            // Quad column
+            uint y = idx / quadCount;            // Quad row
 
-            uint i = y * gridSize + x;
-            uint baseIndex = y * quadCount + x;
+            uint i = y * gridSize + x;           // Bottom-left vertex of the quad
+            uint baseIndex = y * quadCount + x;  // Flat quad index
 
-            if (baseIndex * 2 >= MESH_MAX_PRIMITIVES * 3) continue;
+            if (baseIndex * 2 >= MESH_MAX_PRIMITIVES * 3) continue; // Safety against exceeding primitive output
 
-            emitSingleQuad(baseIndex, uvec4(i, i + gridSize, i + gridSize + 1, i + 1));
+            emitSingleQuad(baseIndex, uvec4(i, i + gridSize, i + gridSize + 1, i + 1)); // Emit the quad (2 triangles)
         }
 
     // ==================== Vertex Patches (ringID > 2, inner fill) ====================
 
-    } else {
-        uint resolution = uint(pow(2, min(N - pebbleUbo.subdivOffset, 5)) + 1);
-        uint subdividedEdgeID = groupId % (vertCount * 2);
-        uint edgeID = subdividedEdgeID / 2;
-        uint nextEdgeID = (edgeID + 1) % vertCount;
+    } else {                                     // Inner-fill patches close the top of the pebble
+        uint resolution = uint(pow(2, min(N - pebbleUbo.subdivOffset, 5)) + 1); // Fan resolution (matched to edge stitching)
+        uint subdividedEdgeID = groupId % (vertCount * 2); // Which sub-edge this fill patch covers
+        uint edgeID = subdividedEdgeID / 2;      // The base edge
+        uint nextEdgeID = (edgeID + 1) % vertCount; // Next edge (wrap)
 
         // Match the randomized extrusion from edge patches (same seed)
-        _seed = IN.baseID;
-        float minLevel = pebbleUbo.extrusionAmount * (1.0 - pebbleUbo.extrusionVariation);
-        float maxLevel = pebbleUbo.extrusionAmount * (1.0 + pebbleUbo.extrusionVariation);
-        float extrusionAmount = rand(minLevel, maxLevel);
+        _seed = IN.baseID;                       // Reseed identically so heights line up with the edge patches
+        float minLevel = pebbleUbo.extrusionAmount * (1.0 - pebbleUbo.extrusionVariation); // Min extrusion
+        float maxLevel = pebbleUbo.extrusionAmount * (1.0 + pebbleUbo.extrusionVariation); // Max extrusion
+        float extrusionAmount = rand(minLevel, maxLevel); // Same extrusion value as the edge rings
 
         // Gather vertices for B-spline curve along edge
-        vec3 vertA = center + pebbleUbo.fillradius * (getVertexPosShared(edgeID) - center)
+        vec3 vertA = center + pebbleUbo.fillradius * (getVertexPosShared(edgeID) - center) // Inner-ring point at edge start
                      + faceNormal * extrusionAmount;
-        vec3 vertB = center + pebbleUbo.fillradius * (getVertexPosShared(nextEdgeID) - center)
+        vec3 vertB = center + pebbleUbo.fillradius * (getVertexPosShared(nextEdgeID) - center) // Inner-ring point at edge end
                      + faceNormal * extrusionAmount;
 
-        vec3 P0, P1, P2, P3;
+        vec3 P0, P1, P2, P3;                     // Control points of the fill-edge B-spline curve
 
-        if (subdividedEdgeID % 2 == 0) {
-            uint prevEdgeID = (edgeID - 1 + vertCount) % vertCount;
-            vec3 prevVert = center + pebbleUbo.fillradius * (getVertexPosShared(prevEdgeID) - center)
+        if (subdividedEdgeID % 2 == 0) {         // First half of the edge
+            uint prevEdgeID = (edgeID - 1 + vertCount) % vertCount; // Previous edge (wrap)
+            vec3 prevVert = center + pebbleUbo.fillradius * (getVertexPosShared(prevEdgeID) - center) // Previous inner point
                            + faceNormal * extrusionAmount;
-            P0 = (prevVert + vertA) * 0.5;
-            P1 = vertA;
-            P2 = (vertA + vertB) * 0.5;
-            P3 = vertB;
-        } else {
-            uint nextNextEdgeID = (nextEdgeID + 1) % vertCount;
-            vec3 nextNextVert = center + pebbleUbo.fillradius * (getVertexPosShared(nextNextEdgeID) - center)
+            P0 = (prevVert + vertA) * 0.5;       // Midpoint into previous edge
+            P1 = vertA;                          // Edge start
+            P2 = (vertA + vertB) * 0.5;          // Edge midpoint
+            P3 = vertB;                          // Edge end
+        } else {                                 // Second half of the edge
+            uint nextNextEdgeID = (nextEdgeID + 1) % vertCount; // Edge after next (wrap)
+            vec3 nextNextVert = center + pebbleUbo.fillradius * (getVertexPosShared(nextNextEdgeID) - center) // Following inner point
                                + faceNormal * extrusionAmount;
-            P0 = vertA;
-            P1 = (vertA + vertB) * 0.5;
-            P2 = vertB;
-            P3 = (vertB + nextNextVert) * 0.5;
+            P0 = vertA;                          // Edge start
+            P1 = (vertA + vertB) * 0.5;          // Edge midpoint
+            P2 = vertB;                          // Edge end
+            P3 = (vertB + nextNextVert) * 0.5;   // Midpoint into next edge
         }
 
-        uint verticesPerEdge = resolution;
-        uint nbOuterVertices = verticesPerEdge;
-        uint nbInnerVertices = verticesPerEdge;
-        uint nbCenterVertices = 1;
-        uint totalVerts = nbOuterVertices + nbInnerVertices + nbCenterVertices;
-        uint nbQuads = verticesPerEdge - 1;
-        uint nbTriangles = verticesPerEdge - 1;
-        SetMeshOutputsEXT(totalVerts, nbQuads * 2 + nbTriangles);
+        uint verticesPerEdge = resolution;       // Samples along the fill edge
+        uint nbOuterVertices = verticesPerEdge;  // Outer ring vertex count
+        uint nbInnerVertices = verticesPerEdge;  // Inner ring vertex count
+        uint nbCenterVertices = 1;               // Single center (fan apex) vertex
+        uint totalVerts = nbOuterVertices + nbInnerVertices + nbCenterVertices; // Total
+        uint nbQuads = verticesPerEdge - 1;      // Quads in the ring band
+        uint nbTriangles = verticesPerEdge - 1;  // Triangles in the fan
+        SetMeshOutputsEXT(totalVerts, nbQuads * 2 + nbTriangles); // Declare outputs
 
         // Center vertex for fan
-        vec3 fanCenter = center + faceNormal * extrusionAmount;
-        emitVertex(fanCenter, faceNormal, vec2(0), nbOuterVertices + nbInnerVertices);
+        vec3 fanCenter = center + faceNormal * extrusionAmount; // Apex at the extruded face center
+        emitVertex(fanCenter, faceNormal, vec2(0), nbOuterVertices + nbInnerVertices); // Emit the apex vertex
 
         // Outer and inner ring vertices
-        for (uint v = 0; v < verticesPerEdge; ++v) {
-            float t = float(v) / float(resolution - 1);
-            vec3 outerPos = computeBSplinePoint(t, vec4(P0, 1.0), vec4(P1, 1.0), vec4(P2, 1.0), vec4(P3, 1.0)).xyz;
-            vec3 innerPos = outerPos + (fanCenter - outerPos) * pebbleUbo.ringoffset;
+        for (uint v = 0; v < verticesPerEdge; ++v) { // Sample the fill-edge curve
+            float t = float(v) / float(resolution - 1); // Curve parameter [0,1]
+            vec3 outerPos = computeBSplinePoint(t, vec4(P0, 1.0), vec4(P1, 1.0), vec4(P2, 1.0), vec4(P3, 1.0)).xyz; // Outer ring point
+            vec3 innerPos = outerPos + (fanCenter - outerPos) * pebbleUbo.ringoffset; // Inner ring pulled toward the apex
 
-            emitVertex(outerPos, faceNormal, vec2(0), v);
-            emitVertex(innerPos, faceNormal, vec2(0), nbOuterVertices + v);
+            emitVertex(outerPos, faceNormal, vec2(0), v); // Outer ring vertex
+            emitVertex(innerPos, faceNormal, vec2(0), nbOuterVertices + v); // Inner ring vertex
         }
 
         // Quad ring between outer and inner vertices
-        for (uint v = 0; v < verticesPerEdge - 1; ++v) {
-            uint outerV0 = v;
-            uint outerV1 = v + 1;
-            uint innerV0 = nbOuterVertices + v;
-            uint innerV1 = nbOuterVertices + v + 1;
-            emitSingleQuad(v, uvec4(outerV0, outerV1, innerV1, innerV0));
+        for (uint v = 0; v < verticesPerEdge - 1; ++v) { // Band of quads between the two rings
+            uint outerV0 = v;                    // Outer ring, this index
+            uint outerV1 = v + 1;                // Outer ring, next index
+            uint innerV0 = nbOuterVertices + v;  // Inner ring, this index
+            uint innerV1 = nbOuterVertices + v + 1; // Inner ring, next index
+            emitSingleQuad(v, uvec4(outerV0, outerV1, innerV1, innerV0)); // Emit the band quad
         }
 
         // Triangle fan from inner ring to center
-        for (uint v = 0; v < verticesPerEdge - 1; ++v) {
-            uint innerV0 = nbOuterVertices + v;
-            uint innerV1 = nbOuterVertices + v + 1;
+        for (uint v = 0; v < verticesPerEdge - 1; ++v) { // Close the cap with a triangle fan
+            uint innerV0 = nbOuterVertices + v;  // Inner ring, this index
+            uint innerV1 = nbOuterVertices + v + 1; // Inner ring, next index
             gl_PrimitiveTriangleIndicesEXT[nbQuads * 2 + v] =
-                uvec3(nbOuterVertices + nbInnerVertices, innerV0, innerV1);
-            outPrimData[nbQuads * 2 + v] = uvec4(baseID, 0, 0, 0);
+                uvec3(nbOuterVertices + nbInnerVertices, innerV0, innerV1); // Triangle apex → inner edge
+            outPrimData[nbQuads * 2 + v] = uvec4(baseID, 0, 0, 0); // Tag with face ID
         }
     }
-}
+}                                                // End of main()
+
+// *** ************ ***

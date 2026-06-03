@@ -2,6 +2,8 @@
 #include "renderer/renderer.h"
 #include "imgui.h"
 
+// *** AI Generated ***
+
 void GrwmPanel::render(Renderer& r) {
     // Pipeline execution section — always visible
     if (!r.preprocessLoaded) {
@@ -75,3 +77,5 @@ void GrwmPanel::render(Renderer& r) {
         ImGui::Unindent();
     }
 }
+
+// *** ************ ***

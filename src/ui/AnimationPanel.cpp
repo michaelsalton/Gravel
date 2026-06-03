@@ -2,6 +2,8 @@
 #include "renderer/renderer.h"
 #include "imgui.h"
 
+// *** AI Generated ***
+
 void AnimationPanel::render(Renderer& r) {
     if (r.skeletonLoaded && ImGui::CollapsingHeader("Animation", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Checkbox("Enable Skinning", &r.doSkinning);
@@ -24,3 +26,5 @@ void AnimationPanel::render(Renderer& r) {
         }
     }
 }
+
+// *** ************ ***

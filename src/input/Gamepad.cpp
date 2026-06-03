@@ -1,6 +1,8 @@
 #include "input/Gamepad.h"
 #include <cmath>
 
+// *** Michael Salton ***
+
 void Gamepad::poll() {
     connected = glfwJoystickPresent(GLFW_JOYSTICK_1) &&
                 glfwJoystickIsGamepad(GLFW_JOYSTICK_1);
@@ -44,3 +46,5 @@ bool Gamepad::getButton(int button) const {
     if (!connected) return false;
     return state.buttons[button] == GLFW_PRESS;
 }
+
+// *** ************ ***

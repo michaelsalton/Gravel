@@ -2,6 +2,8 @@
 
 #include <GLFW/glfw3.h>
 
+// *** Michael Salton ***
+
 class KeyboardMouse {
 public:
     void init(GLFWwindow* win);
@@ -31,3 +33,5 @@ private:
     float mouseDeltaY = 0.0f;
     float scrollDelta = 0.0f;
 };
+
+// *** ************ ***

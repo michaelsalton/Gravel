@@ -1,50 +1,65 @@
-#version 450
-#extension GL_EXT_mesh_shader : require
-#extension GL_GOOGLE_include_directive : require
+#version 450                                    // Use GLSL version 4.50
+#extension GL_EXT_mesh_shader : require          // Enable the task/mesh shader stages (EmitMeshTasksEXT, taskPayloadSharedEXT)
+#extension GL_GOOGLE_include_directive : require // Enable #include directive
 
-#include "shaderInterface.h"
-#include "common.glsl"
-#include "culling.glsl"
-#include "lods.glsl"
+#include "shaderInterface.h"                    // Shared set/binding defines, UBO/SSBO layouts, HE accessor helpers
+#include "common.glsl"                          // read* half-edge accessors and offsetVertex / offsetVertexChainmail placement helpers
+#include "culling.glsl"                         // isInFrustum, isFrontFacing, computeBoundingRadius
+#include "lods.glsl"                            // getLodMN (adaptive resolution) and getScreenSpaceSize
+
+// =============================================================================
+// parametric.task — Resurfacing task (amplification) shader
+//
+// First stage of the parametric resurfacing pipeline. One thread per element
+// (a base-mesh face or vertex, optionally a GRWM slot). It gathers that
+// element's placement data (position/normal/area/tangent), applies skinning,
+// element-type mapping, GRWM curvature/feature density, culling (frustum,
+// backface, mask, element-type), coverage fade, and proxy flagging, chooses an
+// adaptive LOD resolution, packs everything into the task payload, and emits
+// the mesh-shader workgroup grid (tiles) that will tessellate the element —
+// or emits zero workgroups if the element is culled.
+// =============================================================================
+
+// *** Michael Salton ***
 
 // Task shader work group size: one thread per task
-layout(local_size_x = 1) in;
+layout(local_size_x = 1) in;                    // One invocation per workgroup; the draw dispatches one workgroup per element
 
 // ============================================================================
 // Task Payload
 // ============================================================================
 
-struct TaskPayload {
-    vec3 position;      // Face center or vertex position
-    vec3 normal;        // Face normal or vertex normal
-    vec3 edgeTangent;   // Tangent derived from mesh edge (for chainmail orientation)
-    float area;         // Face area (used for scaling)
-    uint taskId;        // Global element ID
-    uint isVertex;      // 1 if vertex element, 0 if face element
-    uint elementType;   // Parametric surface type
-    uint resolutionM;   // Target M resolution
-    uint resolutionN;   // Target N resolution
-    uint deltaU;        // Tile size in U direction
-    uint deltaV;        // Tile size in V direction
-    float faceColor;    // Face 2-coloring (0.0 or 1.0) for chainmail
-    vec2 baseUV;        // Base mesh UV (for AO/element type map sampling)
-    float screenAlpha;  // Coverage fade: 1.0 = fully opaque, 0.0 = sub-pixel fade-out
-    uint faceId;        // Original face ID (for heatmap lookups)
-    float curvature;    // Average face curvature (for heatmap visualization)
+struct TaskPayload {                            // Data handed from this task shader to the mesh shader it spawns
+    vec3 position;      // Face center or vertex position    // Element anchor position in object space
+    vec3 normal;        // Face normal or vertex normal      // Element anchor normal
+    vec3 edgeTangent;   // Tangent derived from mesh edge (for chainmail orientation) // Surface tangent for orienting the element
+    float area;         // Face area (used for scaling)      // Element footprint area, drives element size
+    uint taskId;        // Global element ID                 // Unique element index (for hashing/debug)
+    uint isVertex;      // 1 if vertex element, 0 if face element // Whether this element sits on a vertex or a face
+    uint elementType;   // Parametric surface type           // Which procedural surface to grow (torus, sphere, ...)
+    uint resolutionM;   // Target M resolution               // Tessellation resolution in U
+    uint resolutionN;   // Target N resolution               // Tessellation resolution in V
+    uint deltaU;        // Tile size in U direction          // U size of each mesh-shader tile
+    uint deltaV;        // Tile size in V direction          // V size of each mesh-shader tile
+    float faceColor;    // Face 2-coloring (0.0 or 1.0) for chainmail // Checkerboard color used to alternate chainmail tilt
+    vec2 baseUV;        // Base mesh UV (for AO/element type map sampling) // Base-mesh UV at this element
+    float screenAlpha;  // Coverage fade: 1.0 = fully opaque, 0.0 = sub-pixel fade-out // Alpha for coverage fade
+    uint faceId;        // Original face ID (for heatmap lookups) // Source face index (for proxy/heatmap buffers)
+    float curvature;    // Average face curvature (for heatmap visualization) // GRWM curvature value at this element
 };
 
-taskPayloadSharedEXT TaskPayload payload;
+taskPayloadSharedEXT TaskPayload payload;       // The shared payload instance (written here, read by the mesh shader)
 
 // ============================================================================
 // Push Constants
 // ============================================================================
 
-layout(push_constant) uniform PushConstants {
-    mat4 model;         // Model matrix
-    uint nbFaces;       // Number of faces in mesh
+layout(push_constant) uniform PushConstants {   // Per-draw constants (shared layout across task/mesh/frag)
+    mat4 model;         // Model matrix          // Object→world transform (includes turntable rotation)
+    uint nbFaces;       // Number of faces in mesh   // Used to distinguish face vs. vertex elements
     uint nbVertices;    // Number of vertices in mesh
-    uint elementType;   // Parametric surface type (0=torus, 1=sphere, etc.)
-    float userScaling;  // Global scale multiplier
+    uint elementType;   // Parametric surface type (0=torus, 1=sphere, etc.) // Default element type from UI
+    float userScaling;  // Global scale multiplier   // Master element-size control (0 = cull everything)
     float torusMajorR;  // Torus major radius
     float torusMinorR;  // Torus minor radius
     float sphereRadius; // Sphere radius
@@ -61,377 +76,387 @@ layout(push_constant) uniform PushConstants {
     float chainmailSurfaceOffset;   // Normal lift to avoid mesh intersection
     uint activeSlots;               // 0 = off, 1-64 = slot placement mode
     uint slotUniformSize;           // 1 = don't shrink elements with slot count
-} push;
+} push;                                         // Instance name of the push-constant block
 
 // ============================================================================
 // View UBO (for frustum culling)
 // ============================================================================
 
-layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock {
-    mat4 view;
-    mat4 projection;
-    vec4 cameraPosition;
-    float nearPlane;
-    float farPlane;
-} viewUBO;
+layout(set = SET_SCENE, binding = BINDING_VIEW_UBO) uniform ViewUBOBlock { // Scene-set UBO (set 0, binding 0): camera data
+    mat4 view;                                  // World→view matrix
+    mat4 projection;                            // View→clip matrix
+    vec4 cameraPosition;                        // Camera world position (for backface culling)
+    float nearPlane;                            // Near clip distance
+    float farPlane;                             // Far clip distance
+} viewUBO;                                      // Instance name of the view UBO
 
 // ============================================================================
 // Amplification Function K
 // ============================================================================
 
-void getDeltaUV(uint M, uint N, out uint deltaU, out uint deltaV) {
-    const uint maxVertices = 256;
-    const uint maxPrimitives = 256;
+void getDeltaUV(uint M, uint N, out uint deltaU, out uint deltaV) { // Pick a tile size that fits within mesh-shader output limits
+    const uint maxVertices = 256;               // GPU hard cap on vertices a single mesh workgroup can emit
+    const uint maxPrimitives = 256;             // GPU hard cap on primitives a single mesh workgroup can emit
 
-    deltaU = M;
-    deltaV = N;
+    deltaU = M;                                 // Start by trying to fit the whole element in one tile (U)
+    deltaV = N;                                 // ...and in V
 
     // Vertex constraint: (deltaU + 1) * (deltaV + 1) <= maxVertices
-    uint numVerts = (deltaU + 1) * (deltaV + 1);
-    if (numVerts > maxVertices) {
-        uint maxDelta = uint(sqrt(float(maxVertices))) - 1;
-        deltaU = min(deltaU, maxDelta);
-        deltaV = min(deltaV, maxDelta);
+    uint numVerts = (deltaU + 1) * (deltaV + 1); // Vertices a (deltaU x deltaV) quad grid would produce
+    if (numVerts > maxVertices) {               // If that exceeds the vertex cap...
+        uint maxDelta = uint(sqrt(float(maxVertices))) - 1; // ...derive the largest square tile that fits
+        deltaU = min(deltaU, maxDelta);         // Clamp U tile size
+        deltaV = min(deltaV, maxDelta);         // Clamp V tile size
     }
 
     // Primitive constraint: deltaU * deltaV * 2 <= maxPrimitives
-    uint numPrims = deltaU * deltaV * 2;
-    if (numPrims > maxPrimitives) {
-        uint maxDelta = uint(sqrt(float(maxPrimitives) / 2.0));
-        deltaU = min(deltaU, maxDelta);
-        deltaV = min(deltaV, maxDelta);
+    uint numPrims = deltaU * deltaV * 2;        // Triangles a (deltaU x deltaV) quad grid would produce (2 per quad)
+    if (numPrims > maxPrimitives) {             // If that exceeds the primitive cap...
+        uint maxDelta = uint(sqrt(float(maxPrimitives) / 2.0)); // ...derive the largest square tile that fits
+        deltaU = min(deltaU, maxDelta);         // Clamp U tile size
+        deltaV = min(deltaV, maxDelta);         // Clamp V tile size
     }
 
-    deltaU = max(deltaU, 2u);
-    deltaV = max(deltaV, 2u);
+    deltaU = max(deltaU, 2u);                   // Never go below a 2-wide tile
+    deltaV = max(deltaV, 2u);                   // Never go below a 2-tall tile
 }
 
 // ============================================================================
 // Element Type Map Sampling
 // ============================================================================
 
-uint getElementTypeFromTexture(vec2 uv) {
-    uv.y = 1.0 - uv.y;  // Flip V (OBJ convention)
-    vec3 c = textureLod(sampler2D(textures[ELEMENT_TYPE_TEXTURE], samplers[NEAREST_SAMPLER]), uv, 0.0).rgb;
+uint getElementTypeFromTexture(vec2 uv) {       // Choose an element type per-texel from the element-type map
+    uv.y = 1.0 - uv.y;  // Flip V (OBJ convention) // OBJ textures are bottom-left origin; flip to match
+    vec3 c = textureLod(sampler2D(textures[ELEMENT_TYPE_TEXTURE], samplers[NEAREST_SAMPLER]), uv, 0.0).rgb; // Sample map (no filtering)
 
     if (c.b >= 0.9 && c.r <= 0.1 && c.g <= 0.1) return 2u;           // blue  -> cone/spike
     if (c.r >= 0.9 && c.b >= 0.9 && c.g <= 0.1) return 1u;           // violet -> sphere
-    if (c.g >= 0.9 && c.r <= 0.1 && c.b <= 0.1) return 0xFFFFFFFFu;  // green  -> empty (cull)
+    if (c.g >= 0.9 && c.r <= 0.1 && c.b <= 0.1) return 0xFFFFFFFFu;  // green  -> empty (cull this element)
 
-    return resurfacingUBO.elementType;  // default from UI
+    return resurfacingUBO.elementType;  // default from UI // No recognized color → fall back to the UI element type
 }
 
 // ============================================================================
 // Main: Mapping Function F with Amplification K and Culling
 // ============================================================================
 
-void main() {
+void main() {                                   // Task shader entry point (runs once per element)
     // Secondary mesh dispatches use direct index (no pre-cull list); primary uses visibleIndices.
-    uint globalId = (push.useDirectIndex != 0u)
-        ? gl_WorkGroupID.x
-        : visibleIndices[gl_WorkGroupID.x];
+    uint globalId = (push.useDirectIndex != 0u) // If this is a secondary-mesh draw...
+        ? gl_WorkGroupID.x                      // ...use the raw workgroup index directly
+        : visibleIndices[gl_WorkGroupID.x];     // ...else map through the CPU pre-cull visible-index list
 
     // Slot placement: decode compound index into (faceId, slotIdx)
-    uint slotIdx = 0u;
-    bool useSlots = (push.activeSlots > 0u);
-    if (useSlots) {
-        slotIdx = globalId % push.activeSlots;
-        globalId = globalId / push.activeSlots;
+    uint slotIdx = 0u;                          // Which GRWM slot within the face (0 if not using slots)
+    bool useSlots = (push.activeSlots > 0u);    // Slot placement mode active?
+    if (useSlots) {                             // If multiple elements per face are placed via GRWM slots...
+        slotIdx = globalId % push.activeSlots;  // ...low part of the index selects the slot
+        globalId = globalId / push.activeSlots; // ...high part selects the face
     }
 
-    bool isVertex = (!useSlots) && (globalId >= push.nbFaces);
+    bool isVertex = (!useSlots) && (globalId >= push.nbFaces); // Indices beyond face count are vertex elements (non-slot mode)
 
-    uint faceId = 0;
-    uint vertId = 0;
+    uint faceId = 0;                            // Source face for this element
+    uint vertId = 0;                            // Source vertex (only for vertex elements)
 
-    if (isVertex) {
-        vertId = globalId - push.nbFaces;
+    if (isVertex) {                             // ---- Vertex-element branch ----
+        vertId = globalId - push.nbFaces;       // Recover the vertex index
 
-        int edge = readVertexEdge(vertId);
-        if (edge >= 0) {
-            faceId = uint(readHalfEdgeFace(uint(edge)));
-        } else {
-            faceId = 0;
+        int edge = readVertexEdge(vertId);      // One outgoing half-edge of this vertex
+        if (edge >= 0) {                        // If the vertex has an incident edge...
+            faceId = uint(readHalfEdgeFace(uint(edge))); // ...use that edge's face as the reference face
+        } else {                                // Otherwise (isolated vertex)...
+            faceId = 0;                          // ...fall back to face 0
         }
 
-        payload.position = readVertexPosition(vertId);
-        payload.normal = readVertexNormal(vertId);
-        payload.area = readFaceArea(faceId);
+        payload.position = readVertexPosition(vertId); // Anchor element at the vertex position
+        payload.normal = readVertexNormal(vertId);     // Use the vertex normal
+        payload.area = readFaceArea(faceId);            // Borrow the adjacent face's area for sizing
         // Vertex elements tilt opposite to their adjacent face
-        payload.faceColor = 1.0 - readFaceColor(faceId);
-        payload.baseUV = getVertexTexCoord(vertId);
+        payload.faceColor = 1.0 - readFaceColor(faceId); // Invert checkerboard so vertex rings interlock with face rings
+        payload.baseUV = getVertexTexCoord(vertId);      // Base-mesh UV at the vertex
 
         // Edge tangent: use the adjacent face's first edge direction (matches face elements)
-        if (edge >= 0) {
-            int faceEdge = readFaceEdge(faceId);
-            int v0id = getHalfEdgeVertex(uint(faceEdge));
-            int nextHE = getHalfEdgeNext(uint(faceEdge));
-            int v1id = getHalfEdgeVertex(uint(nextHE));
-            vec3 edgeDir = readVertexPosition(uint(v1id)) - readVertexPosition(uint(v0id));
+        if (edge >= 0) {                        // If we have a valid reference face...
+            int faceEdge = readFaceEdge(faceId);            // First half-edge of that face
+            int v0id = getHalfEdgeVertex(uint(faceEdge));   // Its start vertex
+            int nextHE = getHalfEdgeNext(uint(faceEdge));   // Next half-edge around the face
+            int v1id = getHalfEdgeVertex(uint(nextHE));     // Its end vertex
+            vec3 edgeDir = readVertexPosition(uint(v1id)) - readVertexPosition(uint(v0id)); // Edge direction vector
             // Project onto tangent plane (remove normal component)
-            payload.edgeTangent = normalize(edgeDir - dot(edgeDir, payload.normal) * payload.normal);
-        } else {
-            payload.edgeTangent = vec3(1, 0, 0);
+            payload.edgeTangent = normalize(edgeDir - dot(edgeDir, payload.normal) * payload.normal); // Make tangent ⟂ normal
+        } else {                                // No reference face...
+            payload.edgeTangent = vec3(1, 0, 0); // ...use an arbitrary tangent
         }
-    } else {
-        faceId = globalId;
+    } else {                                    // ---- Face-element branch ----
+        faceId = globalId;                      // The element sits on this face
 
-        payload.position = readFaceCenter(faceId);
-        payload.normal = readFaceNormal(faceId);
-        payload.area = readFaceArea(faceId);
-        payload.faceColor = readFaceColor(faceId);
+        payload.position = readFaceCenter(faceId); // Anchor at the face center
+        payload.normal = readFaceNormal(faceId);    // Use the face normal
+        payload.area = readFaceArea(faceId);        // Use the face area for sizing
+        payload.faceColor = readFaceColor(faceId);  // Face checkerboard color (for chainmail tilt)
 
         // Base UV: use the face's first vertex texcoord
-        int edge = readFaceEdge(faceId);
-        uint firstVert = uint(getHalfEdgeVertex(uint(edge)));
-        payload.baseUV = getVertexTexCoord(firstVert);
+        int edge = readFaceEdge(faceId);            // First half-edge of the face
+        uint firstVert = uint(getHalfEdgeVertex(uint(edge))); // Its start vertex
+        payload.baseUV = getVertexTexCoord(firstVert); // Base-mesh UV from that vertex
 
         // Edge tangent: use the face's first edge direction
-        int v0id = getHalfEdgeVertex(uint(edge));
-        int nextHE = getHalfEdgeNext(uint(edge));
-        int v1id = getHalfEdgeVertex(uint(nextHE));
-        vec3 edgeDir = readVertexPosition(uint(v1id)) - readVertexPosition(uint(v0id));
+        int v0id = getHalfEdgeVertex(uint(edge));   // Edge start vertex
+        int nextHE = getHalfEdgeNext(uint(edge));   // Next half-edge
+        int v1id = getHalfEdgeVertex(uint(nextHE)); // Edge end vertex
+        vec3 edgeDir = readVertexPosition(uint(v1id)) - readVertexPosition(uint(v0id)); // Edge direction vector
         // Project onto tangent plane (remove normal component)
-        payload.edgeTangent = normalize(edgeDir - dot(edgeDir, payload.normal) * payload.normal);
+        payload.edgeTangent = normalize(edgeDir - dot(edgeDir, payload.normal) * payload.normal); // Tangent ⟂ normal
 
         // Slot placement: override position/normal with interpolated slot location
         // Slot 0 stays at face center (matches regular pipeline); slots 1+ use GRWM positions
-        if (useSlots && slotIdx > 0u) {
-            SlotEntry slot = getSlotEntry(faceId, slotIdx, resurfacingUBO.preprocessSlotsPerFace);
-            float su = slot.u;
-            float sv = slot.v;
+        if (useSlots && slotIdx > 0u) {         // Non-center slot: place element at the GRWM slot's barycentric spot
+            SlotEntry slot = getSlotEntry(faceId, slotIdx, resurfacingUBO.preprocessSlotsPerFace); // Fetch slot UV/priority
+            float su = slot.u;                  // Slot U coordinate within the face
+            float sv = slot.v;                  // Slot V coordinate within the face
             // Fold into triangle if out of bounds
-            if (su + sv > 1.0) { su = 1.0 - su; sv = 1.0 - sv; }
+            if (su + sv > 1.0) { su = 1.0 - su; sv = 1.0 - sv; } // Reflect into the valid triangle region
 
             // Gather face vertices via half-edge traversal
-            int he0 = readFaceEdge(faceId);
-            int he1 = getHalfEdgeNext(uint(he0));
-            int he2 = getHalfEdgeNext(uint(he1));
+            int he0 = readFaceEdge(faceId);     // First half-edge
+            int he1 = getHalfEdgeNext(uint(he0)); // Second
+            int he2 = getHalfEdgeNext(uint(he1)); // Third
 
-            vec3 p0 = readVertexPosition(uint(getHalfEdgeVertex(uint(he0))));
-            vec3 p1 = readVertexPosition(uint(getHalfEdgeVertex(uint(he1))));
-            vec3 p2 = readVertexPosition(uint(getHalfEdgeVertex(uint(he2))));
+            vec3 p0 = readVertexPosition(uint(getHalfEdgeVertex(uint(he0)))); // Corner 0 position
+            vec3 p1 = readVertexPosition(uint(getHalfEdgeVertex(uint(he1)))); // Corner 1 position
+            vec3 p2 = readVertexPosition(uint(getHalfEdgeVertex(uint(he2)))); // Corner 2 position
 
-            vec3 n0 = readVertexNormal(uint(getHalfEdgeVertex(uint(he0))));
-            vec3 n1 = readVertexNormal(uint(getHalfEdgeVertex(uint(he1))));
-            vec3 n2 = readVertexNormal(uint(getHalfEdgeVertex(uint(he2))));
+            vec3 n0 = readVertexNormal(uint(getHalfEdgeVertex(uint(he0)))); // Corner 0 normal
+            vec3 n1 = readVertexNormal(uint(getHalfEdgeVertex(uint(he1)))); // Corner 1 normal
+            vec3 n2 = readVertexNormal(uint(getHalfEdgeVertex(uint(he2)))); // Corner 2 normal
 
             // Check if quad (4th half-edge doesn't loop back)
-            int he3 = getHalfEdgeNext(uint(he2));
-            if (he3 != he0) {
+            int he3 = getHalfEdgeNext(uint(he2)); // Fourth half-edge
+            if (he3 != he0) {                   // If the loop hasn't closed, the face is a quad...
                 // Bilinear interpolation for quads
-                vec3 p3 = readVertexPosition(uint(getHalfEdgeVertex(uint(he3))));
-                vec3 n3 = readVertexNormal(uint(getHalfEdgeVertex(uint(he3))));
-                payload.position = (1.0-su)*(1.0-sv)*p0 + su*(1.0-sv)*p1 + su*sv*p2 + (1.0-su)*sv*p3;
-                payload.normal = normalize((1.0-su)*(1.0-sv)*n0 + su*(1.0-sv)*n1 + su*sv*n2 + (1.0-su)*sv*n3);
-            } else {
+                vec3 p3 = readVertexPosition(uint(getHalfEdgeVertex(uint(he3)))); // Corner 3 position
+                vec3 n3 = readVertexNormal(uint(getHalfEdgeVertex(uint(he3))));   // Corner 3 normal
+                payload.position = (1.0-su)*(1.0-sv)*p0 + su*(1.0-sv)*p1 + su*sv*p2 + (1.0-su)*sv*p3; // Bilinear position
+                payload.normal = normalize((1.0-su)*(1.0-sv)*n0 + su*(1.0-sv)*n1 + su*sv*n2 + (1.0-su)*sv*n3); // Bilinear normal
+            } else {                            // Otherwise it's a triangle...
                 // Barycentric interpolation for triangles
-                payload.position = (1.0 - su - sv) * p0 + su * p1 + sv * p2;
-                payload.normal = normalize((1.0 - su - sv) * n0 + su * n1 + sv * n2);
+                payload.position = (1.0 - su - sv) * p0 + su * p1 + sv * p2; // Barycentric position
+                payload.normal = normalize((1.0 - su - sv) * n0 + su * n1 + sv * n2); // Barycentric normal
             }
 
             // Each slot element occupies 1/K of the face area
-            payload.area = (push.slotUniformSize != 0u)
-                ? readFaceArea(faceId)
-                : readFaceArea(faceId) / float(push.activeSlots);
-        } else if (useSlots) {
+            payload.area = (push.slotUniformSize != 0u) // If uniform-size requested...
+                ? readFaceArea(faceId)          // ...keep full face area
+                : readFaceArea(faceId) / float(push.activeSlots); // ...else split area across slots
+        } else if (useSlots) {                  // Slot 0 (center slot)
             // Slot 0: keep face center position but still scale area
-            payload.area = (push.slotUniformSize != 0u)
+            payload.area = (push.slotUniformSize != 0u) // Same area handling as above
                 ? readFaceArea(faceId)
                 : readFaceArea(faceId) / float(push.activeSlots);
         }
     }
+
+    // *** ************ ***
+
+    // *** AI Generated ***
 
     // Bone skinning: transform position and normal by weighted bone matrices
-    if (resurfacingUBO.doSkinning != 0u) {
-        uint skinVertId = isVertex ? vertId : uint(getHalfEdgeVertex(uint(readFaceEdge(faceId))));
-        vec4 j = jointIndices[skinVertId];
-        vec4 w = jointWeights[skinVertId];
-        float wSum = w.x + w.y + w.z + w.w;
-        if (wSum > 0.001) {
-            mat4 skinMat = w.x * boneMatrices[int(j.x)] + w.y * boneMatrices[int(j.y)]
-                         + w.z * boneMatrices[int(j.z)] + w.w * boneMatrices[int(j.w)];
-            payload.position = (skinMat * vec4(payload.position, 1.0)).xyz;
-            payload.normal = normalize((skinMat * vec4(payload.normal, 0.0)).xyz);
+    if (resurfacingUBO.doSkinning != 0u) {      // If skeletal animation is active...
+        uint skinVertId = isVertex ? vertId : uint(getHalfEdgeVertex(uint(readFaceEdge(faceId)))); // Drive skinning from the relevant vertex
+        vec4 j = jointIndices[skinVertId];      // 4 influencing bone indices
+        vec4 w = jointWeights[skinVertId];      // 4 corresponding weights
+        float wSum = w.x + w.y + w.z + w.w;     // Total weight (skip if ~0)
+        if (wSum > 0.001) {                     // Only skin meaningfully-weighted elements
+            mat4 skinMat = w.x * boneMatrices[int(j.x)] + w.y * boneMatrices[int(j.y)] // Linear-blend skinning matrix:
+                         + w.z * boneMatrices[int(j.z)] + w.w * boneMatrices[int(j.w)]; // weighted sum of bone transforms
+            payload.position = (skinMat * vec4(payload.position, 1.0)).xyz; // Skin the anchor position
+            payload.normal = normalize((skinMat * vec4(payload.normal, 0.0)).xyz); // Skin and renormalize the normal
         }
     }
 
-    payload.taskId = useSlots ? (faceId * push.activeSlots + slotIdx) : globalId;
-    payload.faceId = faceId;
-    payload.isVertex = isVertex ? 1u : 0u;
-    payload.elementType = push.elementType;
+    // *** ************ ***
+
+    // *** Michael Salton ***
+
+    payload.taskId = useSlots ? (faceId * push.activeSlots + slotIdx) : globalId; // Unique element ID (compound in slot mode)
+    payload.faceId = faceId;                    // Record source face for proxy/heatmap lookups
+    payload.isVertex = isVertex ? 1u : 0u;      // Record element kind
+    payload.elementType = push.elementType;     // Start from the UI-selected element type
 
     // Override element type from texture map if enabled
-    bool elementTypeCulled = false;
-    if (resurfacingUBO.hasElementTypeTexture != 0u) {
-        uint mappedType = getElementTypeFromTexture(payload.baseUV);
-        if (mappedType == 0xFFFFFFFFu) {
-            elementTypeCulled = true;  // green region
-        } else {
-            payload.elementType = mappedType;
+    bool elementTypeCulled = false;             // Set if the element-type map marks this region empty
+    if (resurfacingUBO.hasElementTypeTexture != 0u) { // If an element-type map is bound...
+        uint mappedType = getElementTypeFromTexture(payload.baseUV); // ...look up the type at this UV
+        if (mappedType == 0xFFFFFFFFu) {        // Sentinel = "empty" region
+            elementTypeCulled = true;  // green region // Cull this element
+        } else {                                // Otherwise...
+            payload.elementType = mappedType;   // ...use the mapped type
         }
     }
 
     // Stud surface: faces only (skip vertex elements)
-    if (isVertex && payload.elementType == 7u) return;
+    if (isVertex && payload.elementType == 7u) return; // Studs don't grow on vertices → emit nothing
 
     // Per-element random orientation twist for dragon scale
-    if (payload.elementType == 5u && resurfacingUBO.normalPerturbation > 0.0) {
-        float angle = fract(float(globalId) * 0.618033988749895)
-                      * 2.0 * PI * resurfacingUBO.normalPerturbation;
-        float c = cos(angle), s = sin(angle);
-        vec3 n = payload.normal;
-        payload.edgeTangent = payload.edgeTangent * c
-            + cross(n, payload.edgeTangent) * s
-            + n * dot(n, payload.edgeTangent) * (1.0 - c);
+    if (payload.elementType == 5u && resurfacingUBO.normalPerturbation > 0.0) { // Dragon-scale type with random twist enabled
+        float angle = fract(float(globalId) * 0.618033988749895) // Golden-ratio hash → pseudo-random per element
+                      * 2.0 * PI * resurfacingUBO.normalPerturbation; // Scaled by perturbation strength
+        float c = cos(angle), s = sin(angle);   // Rotation sin/cos
+        vec3 n = payload.normal;                // Axis of rotation = element normal
+        payload.edgeTangent = payload.edgeTangent * c          // Rodrigues' rotation of the tangent around the normal:
+            + cross(n, payload.edgeTangent) * s                // ...rotate tangent by `angle` about n
+            + n * dot(n, payload.edgeTangent) * (1.0 - c);     // (parallel component preserved)
     }
 
     // Mask texture culling (via push constant bit 2)
-    bool maskCulled = false;
-    if ((push.enableCulling & 4u) != 0u) {
-        float maskVal = textureLod(
+    bool maskCulled = false;                    // Set if the mask texture blacks out this element
+    if ((push.enableCulling & 4u) != 0u) {      // If mask-texture culling is enabled...
+        float maskVal = textureLod(             // ...sample the mask (nearest, no mip)
             sampler2D(textures[MASK_TEXTURE], samplers[NEAREST_SAMPLER]),
             payload.baseUV, 0.0
-        ).r;
-        if (maskVal < 0.5) {
-            maskCulled = true;  // black region (skin)
+        ).r;                                    // Red channel = mask value
+        if (maskVal < 0.5) {                    // Below threshold = masked-out region
+            maskCulled = true;  // black region (skin) // Cull here (e.g. exposed skin)
         }
     }
 
     // MVP needed for both frustum culling and LOD
-    mat4 mvp = viewUBO.projection * viewUBO.view * push.model;
+    mat4 mvp = viewUBO.projection * viewUBO.view * push.model; // Object→clip transform reused below
 
     // Culling (frustum + backface)
-    bool isVisible = true;
+    bool isVisible = true;                      // Assume visible until a test fails
 
     // Transform to world space for culling (model matrix includes turntable rotation)
-    vec3 cullPos = (push.model * vec4(payload.position, 1.0)).xyz;
-    vec3 cullNormal = normalize(mat3(push.model) * payload.normal);
+    vec3 cullPos = (push.model * vec4(payload.position, 1.0)).xyz; // World-space element position
+    vec3 cullNormal = normalize(mat3(push.model) * payload.normal); // World-space element normal
 
-    if ((push.enableCulling & 1u) != 0) {
+    if ((push.enableCulling & 1u) != 0) {       // Bit 0: frustum culling enabled?
         // Frustum culling
-        float boundingRadius = computeBoundingRadius(payload.area, push.userScaling, 2.0);
-        isVisible = isInFrustum(payload.position, boundingRadius, mvp, 0.1);
+        float boundingRadius = computeBoundingRadius(payload.area, push.userScaling, 2.0); // Element bounding sphere radius
+        isVisible = isInFrustum(payload.position, boundingRadius, mvp, 0.1); // Test sphere against the view frustum
     }
 
-    if (isVisible && (push.enableCulling & 2u) != 0) {
+    if (isVisible && (push.enableCulling & 2u) != 0) { // Bit 1: backface culling (only if still visible)
         // Back-face culling (in world space)
-        isVisible = isFrontFacing(cullPos, cullNormal,
+        isVisible = isFrontFacing(cullPos, cullNormal, // Keep only elements facing the camera enough
                                    viewUBO.cameraPosition.xyz, push.cullingThreshold);
     }
 
     // GRWM: curvature-aware density (bit 0) and feature edge enforcement (bit 1)
     // Applied before LOD so LOD accounts for the scaled element size.
-    uint grwmFlags = resurfacingUBO.hasPreprocessData;
+    uint grwmFlags = resurfacingUBO.hasPreprocessData; // Bitmask: bit0 = curvature data, bit1 = feature edges
 
     // Compute per-element curvature (shared by both curvature density and features)
-    float grwmCurvature = 0.0;
-    if (grwmFlags != 0u) {
-        if (isVertex) {
+    float grwmCurvature = 0.0;                  // Curvature accumulator for this element
+    if (grwmFlags != 0u) {                      // Only if GRWM data is present
+        if (isVertex) {                         // Vertex element: read the vertex's curvature directly
             grwmCurvature = abs(getVertexCurvature(vertId));
-        } else {
-            int edge = readFaceEdge(faceId);
-            int he = edge;
-            float sum = 0.0;
-            int count = 0;
-            for (int i = 0; i < 4; i++) {
-                uint vid = uint(getHalfEdgeVertex(uint(he)));
-                sum += abs(getVertexCurvature(vid));
-                count++;
-                he = getHalfEdgeNext(uint(he));
-                if (he == edge) break;
+        } else {                                // Face element: average curvature over the face's corners
+            int edge = readFaceEdge(faceId);    // Starting half-edge
+            int he = edge;                      // Traversal cursor
+            float sum = 0.0;                    // Curvature sum
+            int count = 0;                      // Corner counter
+            for (int i = 0; i < 4; i++) {       // Walk up to 4 corners (tri or quad)
+                uint vid = uint(getHalfEdgeVertex(uint(he))); // Corner vertex
+                sum += abs(getVertexCurvature(vid)); // Add its curvature magnitude
+                count++;                        // Count it
+                he = getHalfEdgeNext(uint(he)); // Advance around the face
+                if (he == edge) break;          // Stop when the loop closes
             }
-            grwmCurvature = sum / float(max(count, 1));
+            grwmCurvature = sum / float(max(count, 1)); // Average curvature
         }
     }
 
-    float grwmAreaScale = 1.0;
-    float intensity = resurfacingUBO.grwmIntensityUBO;
+    float grwmAreaScale = 1.0;                  // Multiplier applied to element area from GRWM rules
+    float intensity = resurfacingUBO.grwmIntensityUBO; // Global GRWM effect strength [0,1]
 
-    if ((grwmFlags & 1u) != 0u) {
+    if ((grwmFlags & 1u) != 0u) {               // Curvature-density rule enabled
         // Curvature-aware scaling: modulate element size by curvature.
-        float normalized = grwmCurvature * resurfacingUBO.preprocessCurvatureScale;
-        float scaleFactor = clamp(
+        float normalized = grwmCurvature * resurfacingUBO.preprocessCurvatureScale; // Normalize curvature (~[0,1])
+        float scaleFactor = clamp(              // Lerp 1→curvature by the boost, clamped to a sane range
             mix(1.0, normalized, resurfacingUBO.preprocessCurvatureBoost * 0.5),
             0.3, 2.0);
-        grwmAreaScale *= scaleFactor * scaleFactor;
+        grwmAreaScale *= scaleFactor * scaleFactor; // Square (area ∝ radius²)
     }
 
-    if ((grwmFlags & 2u) != 0u) {
+    if ((grwmFlags & 2u) != 0u) {               // Feature-edge rule enabled
         // Feature edge boost: scale up on feature faces, shrink non-feature.
-        float featureBoost = resurfacingUBO.featureEdgeBoostUBO;
-        if (!isVertex && getFaceFeatureFlag(faceId) != 0u) {
-            grwmAreaScale *= featureBoost * featureBoost;
-        } else {
-            float shrink = 1.0 / max(featureBoost, 1.0);
-            grwmAreaScale *= shrink * shrink;
+        float featureBoost = resurfacingUBO.featureEdgeBoostUBO; // How strongly to emphasize feature edges
+        if (!isVertex && getFaceFeatureFlag(faceId) != 0u) { // Face on a feature edge?
+            grwmAreaScale *= featureBoost * featureBoost; // Enlarge it (squared for area)
+        } else {                                // Non-feature element...
+            float shrink = 1.0 / max(featureBoost, 1.0); // ...shrink inversely
+            grwmAreaScale *= shrink * shrink;   // Squared for area
         }
     }
 
     // Apply with global intensity: lerp between 1.0 (no effect) and full effect
-    payload.area *= mix(1.0, grwmAreaScale, intensity);
-    payload.curvature = grwmCurvature;
+    payload.area *= mix(1.0, grwmAreaScale, intensity); // Blend the GRWM area scale by global intensity
+    payload.curvature = grwmCurvature;          // Pass curvature to the frag (heatmap mode 6)
 
     // Resolution: adaptive LOD or fixed (uses GRWM-scaled area for correct screen-space sizing)
-    uint M, N;
-    if (push.enableLod != 0u) {
-        getLodMN(payload.position, payload.normal, payload.area, push.userScaling,
-                 push.elementType, push.torusMajorR, push.torusMinorR, push.sphereRadius,
+    uint M, N;                                  // Chosen tessellation resolution
+    if (push.enableLod != 0u) {                 // Adaptive LOD on?
+        getLodMN(payload.position, payload.normal, payload.area, push.userScaling, // Compute M,N from screen-space size,
+                 push.elementType, push.torusMajorR, push.torusMinorR, push.sphereRadius, // clamped to [2,64]
                  mvp, push.resolutionM, push.lodFactor, 2u, 64u, M, N);
-    } else {
-        M = push.resolutionM;
-        N = push.resolutionN;
+    } else {                                    // Fixed resolution...
+        M = push.resolutionM;                   // ...use UI M
+        N = push.resolutionN;                   // ...use UI N
     }
 
-    payload.resolutionM = M;
+    payload.resolutionM = M;                    // Store resolution for the mesh shader
     payload.resolutionN = N;
 
     // Coverage fade: compute screen-space size and fade to transparent when sub-pixel
-    if (resurfacingUBO.enableCoverageFade != 0u) {
-        float screenSize = getScreenSpaceSize(payload.position, payload.normal,
+    if (resurfacingUBO.enableCoverageFade != 0u) { // Coverage fade enabled?
+        float screenSize = getScreenSpaceSize(payload.position, payload.normal, // Estimate element size in NDC
             payload.area, push.userScaling, push.elementType,
             push.torusMajorR, push.torusMinorR, push.sphereRadius, mvp);
-        float fadeStart = resurfacingUBO.coverageFadeStartUBO;
-        float fadeEnd   = resurfacingUBO.coverageFadeEndUBO;
-        payload.screenAlpha = clamp((screenSize - fadeEnd) / max(fadeStart - fadeEnd, 0.0001), 0.0, 1.0);
-    } else {
-        payload.screenAlpha = 1.0;
+        float fadeStart = resurfacingUBO.coverageFadeStartUBO; // Size where fading begins
+        float fadeEnd   = resurfacingUBO.coverageFadeEndUBO;   // Size where fully transparent
+        payload.screenAlpha = clamp((screenSize - fadeEnd) / max(fadeStart - fadeEnd, 0.0001), 0.0, 1.0); // Remap size→alpha
+    } else {                                    // No coverage fade...
+        payload.screenAlpha = 1.0;              // ...fully opaque
     }
 
-    uint deltaU, deltaV;
-    getDeltaUV(M, N, deltaU, deltaV);
+    uint deltaU, deltaV;                        // Tile size for amplification
+    getDeltaUV(M, N, deltaU, deltaV);           // Fit the M×N grid into mesh-shader output limits
 
-    payload.deltaU = deltaU;
+    payload.deltaU = deltaU;                    // Pass tile size to the mesh shader
     payload.deltaV = deltaV;
 
-    uint numTilesU = (M + deltaU - 1) / deltaU;
-    uint numTilesV = (N + deltaV - 1) / deltaV;
+    uint numTilesU = (M + deltaU - 1) / deltaU; // Number of tiles needed in U (ceil division)
+    uint numTilesV = (N + deltaV - 1) / deltaV; // Number of tiles needed in V
 
     // Proxy shading: flag face for proxy when element is sub-pixel
-    float proxyBlend = 0.0;
-    bool useProxy = false;
-    if (resurfacingUBO.enableProxy != 0u && !isVertex) {
-        float proxyStart = resurfacingUBO.proxyStartThreshold;
-        float proxyEnd   = resurfacingUBO.proxyEndThreshold;
-        float screenSize = getScreenSpaceSize(payload.position, payload.normal,
+    float proxyBlend = 0.0;                     // How much to replace geometry with proxy [0,1]
+    bool useProxy = false;                      // True when geometry is fully replaced by proxy
+    if (resurfacingUBO.enableProxy != 0u && !isVertex) { // Proxy mode, face elements only
+        float proxyStart = resurfacingUBO.proxyStartThreshold; // Size where proxy blending starts
+        float proxyEnd   = resurfacingUBO.proxyEndThreshold;   // Size where geometry fully replaced
+        float screenSize = getScreenSpaceSize(payload.position, payload.normal, // Element NDC size
             payload.area, push.userScaling, push.elementType,
             push.torusMajorR, push.torusMinorR, push.sphereRadius, mvp);
-        proxyBlend = 1.0 - clamp((screenSize - proxyEnd) / max(proxyStart - proxyEnd, 0.0001), 0.0, 1.0);
-        useProxy = (proxyBlend >= 1.0);
+        proxyBlend = 1.0 - clamp((screenSize - proxyEnd) / max(proxyStart - proxyEnd, 0.0001), 0.0, 1.0); // Map size→blend
+        useProxy = (proxyBlend >= 1.0);         // Fully proxy when blend saturates
 
         // Write proxy data for this face
-        heProxyBuffer[0].data[faceId].blend = proxyBlend;
-        heProxyBuffer[0].data[faceId].flags = useProxy ? 1u : 0u;
+        heProxyBuffer[0].data[faceId].blend = proxyBlend;       // Frag reads this to blend proxy appearance
+        heProxyBuffer[0].data[faceId].flags = useProxy ? 1u : 0u; // Bit 0 = proxy fully active
 
         // In blend zone: reduce geometry alpha
-        if (proxyBlend > 0.0 && !useProxy) {
+        if (proxyBlend > 0.0 && !useProxy) {    // Partial proxy: fade the real geometry out as proxy fades in
             payload.screenAlpha = min(payload.screenAlpha, 1.0 - proxyBlend);
         }
     }
 
     // Single EmitMeshTasksEXT: fold all culling into visible flag
-    bool culled = !isVisible || elementTypeCulled || maskCulled || (push.userScaling == 0.0) || useProxy;
-    uint visible = culled ? 0u : 1u;
-    if (visible == 1u) atomicAdd(renderedElementCount, 1u);
-    EmitMeshTasksEXT(numTilesU * visible, numTilesV * visible, 1);
-}
+    bool culled = !isVisible || elementTypeCulled || maskCulled || (push.userScaling == 0.0) || useProxy; // Any reason to skip?
+    uint visible = culled ? 0u : 1u;            // 1 = emit tiles, 0 = emit nothing
+    if (visible == 1u) atomicAdd(renderedElementCount, 1u); // Count rendered elements for the on-screen stats
+    EmitMeshTasksEXT(numTilesU * visible, numTilesV * visible, 1); // Launch the mesh-shader tile grid (0×0 if culled)
+}                                               // End of main()
+
+// *** ************ ***
